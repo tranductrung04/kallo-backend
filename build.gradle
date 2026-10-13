@@ -1,3 +1,5 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
 plugins {
 	id 'java'
 	id 'org.springframework.boot' version '4.1.1'
@@ -50,4 +52,10 @@ dependencies {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+processResources {
+	filesMatching('application*.yml') {
+		filter(ReplaceTokens, tokens: [projectName: rootProject.name])
+	}
 }

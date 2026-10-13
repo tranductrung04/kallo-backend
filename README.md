@@ -132,7 +132,7 @@ kallo-backend/
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/<your-org>/kallo-backend.git
+git clone https://github.com/tranductrung04/kallo-backend.git
 cd kallo-backend
 ```
 
@@ -173,7 +173,7 @@ Các biến môi trường chính:
 |---------------------------|----------------------------------------|-----------------------------------------|
 | `SERVER_PORT`             | Cổng ứng dụng                          | `8080`                                  |
 | `SPRING_PROFILES_ACTIVE`  | Profile đang chạy                      | `dev`                                   |
-| `DB_URL`                  | JDBC URL                               | `jdbc:postgresql://localhost:5432/kallo`|
+| `DB_URL`                  | JDBC URL                               | `jdbc:postgresql://localhost:5432/<db_name>`|
 | `DB_USERNAME`             | Tài khoản database                     | `postgres`                              |
 | `DB_PASSWORD`             | Mật khẩu database                      | _(bắt buộc)_                            |
 | `JWT_SECRET`              | Khoá ký JWT                            | _(bắt buộc)_                            |
@@ -184,7 +184,7 @@ Các biến môi trường chính:
 | `AI_SERVICE_URL`          | URL của AI service (FastAPI)           | `http://localhost:8000`                 |
 | `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM     | _(bắt buộc nếu bật push)_               |
 | `STORAGE_ENDPOINT`        | Endpoint Object Storage                | _(bắt buộc)_                            |
-| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                     | `kallo-media`                           |
+| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                     | `<app_name>-media`                           |
 | `STORAGE_ACCESS_KEY`      | Access key                             | _(bắt buộc)_                            |
 | `STORAGE_SECRET_KEY`      | Secret key                             | _(bắt buộc)_                            |
 | `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | SMTP gửi mail khôi phục mật khẩu | _(bắt buộc)_            |
@@ -262,13 +262,13 @@ Integration test dùng **Testcontainers** (PostgreSQL) nên cần Docker đang c
 
 ```bash
 # Build image
-docker build -t kallo-backend:latest .
+docker compose build
 
 # Chạy toàn bộ stack (backend + PostgreSQL)
 docker compose up -d
 
 # Xem log
-docker compose logs -f backend
+docker compose logs -f app
 
 # Dừng
 docker compose down
