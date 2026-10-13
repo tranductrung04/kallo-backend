@@ -1,4 +1,4 @@
-package com.healthcare.kaloo.common;
+package com.healthcare.kallo.common;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 

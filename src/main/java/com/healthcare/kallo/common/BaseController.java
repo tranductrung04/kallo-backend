@@ -1,4 +1,4 @@
-package com.healthcare.kaloo.common;
+package com.healthcare.kallo.common;
 
 public abstract class BaseController {
     protected <T> ApiResponse<T> createSuccessResponse(T data) {

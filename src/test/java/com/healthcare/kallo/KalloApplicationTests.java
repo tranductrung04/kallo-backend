@@ -1,10 +1,10 @@
-package com.healthcare.kaloo;
+package com.healthcare.kallo;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class KalooApplicationTests {
+class KalloApplicationTests {
 
 	@Test
 	void contextLoads() {

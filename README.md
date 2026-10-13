@@ -1,6 +1,6 @@
-# Kaloo – Backend API
+# Kallo – Backend API
 
-> Backend RESTful API (Spring Boot) cho **Kaloo** – ứng dụng di động hỗ trợ chăm sóc sức khỏe và dinh dưỡng tích hợp AI: theo dõi bữa ăn, cân nặng, vận động; nhận diện món ăn Việt Nam qua ảnh và ước lượng calo.
+> Backend RESTful API (Spring Boot) cho **Kallo** – ứng dụng di động hỗ trợ chăm sóc sức khỏe và dinh dưỡng tích hợp AI: theo dõi bữa ăn, cân nặng, vận động; nhận diện món ăn Việt Nam qua ảnh và ước lượng calo.
 
 ![Java](https://img.shields.io/badge/Java-21%2B-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen)
@@ -22,12 +22,11 @@
 - [API Documentation](#api-documentation)
 - [Testing](#testing)
 - [Docker](#docker)
-- [Nhóm thực hiện](#nhóm-thực-hiện)
 - [License](#license)
 
 ## Giới thiệu
 
-Kaloo đóng vai trò như một trợ lý sức khỏe cá nhân, giúp người dùng theo dõi dinh dưỡng, kiểm soát cân nặng và vận động thể chất một cách tiện lợi, tự động hoá. Hệ thống tích hợp pipeline nhận diện món ăn Việt Nam (YOLO, tập dữ liệu VietFood68) và ước lượng calo, được xây dựng và triển khai độc lập, không phụ thuộc API AI bên thứ ba.
+Kallo đóng vai trò như một trợ lý sức khỏe cá nhân, giúp người dùng theo dõi dinh dưỡng, kiểm soát cân nặng và vận động thể chất một cách tiện lợi, tự động hoá. Hệ thống tích hợp pipeline nhận diện món ăn Việt Nam (YOLO, tập dữ liệu VietFood68) và ước lượng calo, được xây dựng và triển khai độc lập, không phụ thuộc API AI bên thứ ba.
 
 Repository này chứa **Backend chính** (Spring Boot). Các thành phần khác của hệ thống:
 
@@ -82,11 +81,11 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 ## Cấu trúc thư mục
 
 ```
-kaloo-backend/
+kallo-backend/
 ├── src/
 │   ├── main/
-│   │   ├── java/com/healthcare/kaloo/
-│   │   │   ├── KalooBackendApplication.java
+│   │   ├── java/com/healthcare/kallo/
+│   │   │   ├── KalloBackendApplication.java
 │   │   │   ├── common/            # Hằng số, response wrapper, tiện ích dùng chung
 │   │   │   ├── config/            # Security, CORS, WebSocket, OpenAPI, Storage, FCM
 │   │   │   ├── controller/        # REST controllers
@@ -105,7 +104,7 @@ kaloo-backend/
 │   │       ├── application-dev.yml
 │   │       └── application-prod.yml
 │   └── test/
-│       └── java/com/healthcare/kaloo/
+│       └── java/com/healthcare/kallo/
 ├── gradle/wrapper/
 ├── .gitattributes
 ├── .gitignore
@@ -133,8 +132,8 @@ kaloo-backend/
 ### 1. Clone repository
 
 ```bash
-git clone https://github.com/<your-org>/kaloo-backend.git
-cd kaloo-backend
+git clone https://github.com/<your-org>/kallo-backend.git
+cd kallo-backend
 ```
 
 ### 2. Cấu hình môi trường
@@ -174,7 +173,7 @@ Các biến môi trường chính:
 |---------------------------|----------------------------------------|-----------------------------------------|
 | `SERVER_PORT`             | Cổng ứng dụng                          | `8080`                                  |
 | `SPRING_PROFILES_ACTIVE`  | Profile đang chạy                      | `dev`                                   |
-| `DB_URL`                  | JDBC URL                               | `jdbc:postgresql://localhost:5432/kaloo`|
+| `DB_URL`                  | JDBC URL                               | `jdbc:postgresql://localhost:5432/kallo`|
 | `DB_USERNAME`             | Tài khoản database                     | `postgres`                              |
 | `DB_PASSWORD`             | Mật khẩu database                      | _(bắt buộc)_                            |
 | `JWT_SECRET`              | Khoá ký JWT                            | _(bắt buộc)_                            |
@@ -185,7 +184,7 @@ Các biến môi trường chính:
 | `AI_SERVICE_URL`          | URL của AI service (FastAPI)           | `http://localhost:8000`                 |
 | `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM     | _(bắt buộc nếu bật push)_               |
 | `STORAGE_ENDPOINT`        | Endpoint Object Storage                | _(bắt buộc)_                            |
-| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                     | `kaloo-media`                           |
+| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                     | `kallo-media`                           |
 | `STORAGE_ACCESS_KEY`      | Access key                             | _(bắt buộc)_                            |
 | `STORAGE_SECRET_KEY`      | Secret key                             | _(bắt buộc)_                            |
 | `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | SMTP gửi mail khôi phục mật khẩu | _(bắt buộc)_            |
@@ -263,7 +262,7 @@ Integration test dùng **Testcontainers** (PostgreSQL) nên cần Docker đang c
 
 ```bash
 # Build image
-docker build -t kaloo-backend:latest .
+docker build -t kallo-backend:latest .
 
 # Chạy toàn bộ stack (backend + PostgreSQL)
 docker compose up -d

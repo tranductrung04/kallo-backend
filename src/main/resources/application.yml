@@ -1,6 +1,6 @@
 spring:
   application:
-    name: kaloo-backend
+    name: kallo-backend
   profiles:
     default: dev
   jpa:
