@@ -1,5 +1,5 @@
 # ---------- Stage 1: build ----------
-FROM eclipse-temurin:17-jdk AS build
+FROM eclipse-temurin:21-jdk AS build
 WORKDIR /workspace
 
 # Copy wrapper + build files trước để cache dependency
@@ -14,7 +14,7 @@ RUN ./gradlew bootJar -x test --no-daemon \
     && cp "$(ls build/libs/*.jar | grep -v plain | head -n 1)" app.jar
 
 # ---------- Stage 2: runtime ----------
-FROM eclipse-temurin:17-jre
+FROM eclipse-temurin:21-jre
 WORKDIR /app
 
 RUN groupadd --system spring && useradd --system --gid spring spring

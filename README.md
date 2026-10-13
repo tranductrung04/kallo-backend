@@ -2,7 +2,7 @@
 
 > Backend RESTful API (Spring Boot) cho **Kaloo** – ứng dụng di động hỗ trợ chăm sóc sức khỏe và dinh dưỡng tích hợp AI: theo dõi bữa ăn, cân nặng, vận động; nhận diện món ăn Việt Nam qua ảnh và ước lượng calo.
 
-![Java](https://img.shields.io/badge/Java-17%2B-orange)
+![Java](https://img.shields.io/badge/Java-21%2B-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen)
 ![Gradle](https://img.shields.io/badge/build-Gradle-02303A)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791)
@@ -65,7 +65,7 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 
 | Thành phần      | Công nghệ                                              |
 |-----------------|--------------------------------------------------------|
-| Ngôn ngữ        | Java 17+                                               |
+| Ngôn ngữ        | Java 21+                                               |
 | Framework       | Spring Boot 4.x                                        |
 | Bảo mật         | Spring Security, JWT, Google OAuth2                    |
 | ORM             | Spring Data JPA / Hibernate                            |
@@ -123,7 +123,7 @@ kaloo-backend/
 
 ## Yêu cầu hệ thống
 
-- JDK 17 trở lên
+- JDK 21 trở lên
 - PostgreSQL 15+ (hoặc chạy qua Docker)
 - Docker & Docker Compose (tuỳ chọn)
 - Không cần cài Gradle riêng – dùng `./gradlew`
