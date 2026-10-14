@@ -169,26 +169,38 @@ Flyway sẽ tự động chạy migration khi ứng dụng khởi động.
 
 Các biến môi trường chính:
 
-| Biến                      | Mô tả                                  | Mặc định / Ví dụ                        |
-|---------------------------|----------------------------------------|-----------------------------------------|
-| `SERVER_PORT`             | Cổng ứng dụng                          | `8080`                                  |
-| `SPRING_PROFILES_ACTIVE`  | Profile đang chạy                      | `dev`                                   |
-| `DB_URL`                  | JDBC URL                               | `jdbc:postgresql://localhost:5432/<db_name>`|
-| `DB_USERNAME`             | Tài khoản database                     | `postgres`                              |
-| `DB_PASSWORD`             | Mật khẩu database                      | _(bắt buộc)_                            |
-| `JWT_SECRET`              | Khoá ký JWT                            | _(bắt buộc)_                            |
-| `JWT_ACCESS_EXPIRATION`   | Thời hạn access token (ms)             | `900000`                                |
-| `JWT_REFRESH_EXPIRATION`  | Thời hạn refresh token (ms)            | `604800000`                             |
-| `GOOGLE_CLIENT_ID`        | Google OAuth2 client id                | _(bắt buộc)_                            |
-| `GOOGLE_CLIENT_SECRET`    | Google OAuth2 client secret            | _(bắt buộc)_                            |
-| `AI_SERVICE_URL`          | URL của AI service (FastAPI)           | `http://localhost:8000`                 |
-| `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM     | _(bắt buộc nếu bật push)_               |
-| `STORAGE_ENDPOINT`        | Endpoint Object Storage                | _(bắt buộc)_                            |
-| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                     | `<app_name>-media`                           |
-| `STORAGE_ACCESS_KEY`      | Access key                             | _(bắt buộc)_                            |
-| `STORAGE_SECRET_KEY`      | Secret key                             | _(bắt buộc)_                            |
-| `MAIL_HOST` / `MAIL_USERNAME` / `MAIL_PASSWORD` | SMTP gửi mail khôi phục mật khẩu | _(bắt buộc)_            |
+| Biến                      | Mô tả                                              | Mặc định / Ví dụ                                  |
+|---------------------------|----------------------------------------------------|---------------------------------------------------|
+| `APP_NAME`                | Tên project, dùng đặt tên container (Docker)       | `kallo-backend`                                   |
+| `SPRING_PROFILES_ACTIVE`  | Profile đang chạy                                  | `dev` (Docker Compose đặt `prod`)                 |
+| `SERVER_PORT`             | Cổng ứng dụng (profile dev)                        | `8080`                                            |
+| `PROD_SERVER_PORT`        | Cổng ứng dụng (profile prod)                       | `8080`                                            |
+| `DB_NAME`                 | Tên database                                       | _(bắt buộc)_                                        |
+| `DB_URL`                  | JDBC URL, chỉ dùng khi chạy local (tuỳ chọn)       | `jdbc:postgresql://localhost:5432/<db_name>`      |
+| `DB_USERNAME`             | Tài khoản database                                 | _(bắt buộc)_                                        |
+| `DB_PASSWORD`             | Mật khẩu database (bắt buộc với Docker)            | _(bắt buộc)_                                         |
+| `PROD_REDIS_PASSWORD`     | Mật khẩu Redis (để trống nếu không đặt)            | _(trống)_                                         |
+| `JWT_SECRET`              | Khoá ký JWT                                        | _(bắt buộc)_                                      |
+| `JWT_ACCESS_EXPIRATION`   | Thời hạn access token (ms)                         | `900000`                                          |
+| `JWT_REFRESH_EXPIRATION`  | Thời hạn refresh token (ms)                        | `604800000`                                       |
+| `GOOGLE_CLIENT_ID`        | Google OAuth2 client id                            | _(bắt buộc)_                                      |
+| `GOOGLE_CLIENT_SECRET`    | Google OAuth2 client secret                        | _(bắt buộc)_                                      |
+| `AI_SERVICE_URL`          | URL của AI service (FastAPI)                       | `http://localhost:8000`                           |
+| `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM                 | _(bắt buộc nếu bật push)_                         |
+| `STORAGE_ENDPOINT`        | Endpoint Object Storage (MinIO)                    | `http://localhost:9000`                           |
+| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                                 | _(bắt buộc)_                                |
+| `STORAGE_ACCESS_KEY`      | Access key                                         | _(bắt buộc)_                                      |
+| `STORAGE_SECRET_KEY`      | Secret key                                         | _(bắt buộc)_                                      |
+| `MAIL_HOST`               | SMTP host gửi mail khôi phục mật khẩu              | _(bắt buộc)_                                      |
+| `MAIL_USERNAME`           | Tài khoản SMTP                                     | _(bắt buộc)_                                      |
+| `MAIL_PASSWORD`           | Mật khẩu SMTP                                      | _(bắt buộc)_                                      |
 
+> Khi chạy bằng Docker Compose, các biến `PROD_DB_URL`, `PROD_DB_USERNAME`, `PROD_DB_PASSWORD`,
+> `PROD_REDIS_HOST`, `PROD_ES_URIS`... đã được `docker-compose.yml` thiết lập sẵn, không cần khai trong `.env`.
+>
+> Spring Boot không tự đọc file `.env`: khi chạy `./gradlew bootRun`, hãy export biến vào shell
+> hoặc dùng plugin EnvFile của IntelliJ.
+> 
 > **Lưu ý:** Không commit `.env`, file service account FCM hay bất kỳ thông tin nhạy cảm nào lên Git.
 
 ## Database & Migration
