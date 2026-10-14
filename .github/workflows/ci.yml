@@ -59,12 +59,10 @@ jobs:
           --health-retries 20
 
     env:
-      SPRING_PROFILES_ACTIVE: dev
+      SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/kallo_test
+      SPRING_DATASOURCE_USERNAME: kallo
+      SPRING_DATASOURCE_PASSWORD: kallo_ci_password
       APP_NAME: kallo-backend
-      DB_NAME: kallo_test
-      DB_URL: jdbc:postgresql://localhost:5432/kallo_test
-      DB_USERNAME: kallo
-      DB_PASSWORD: kallo_ci_password
       JWT_SECRET: ci_only_jwt_secret_ci_only_jwt_secret_ci_only_jwt_secret
       JWT_ACCESS_EXPIRATION: "900000"
       JWT_REFRESH_EXPIRATION: "604800000"
