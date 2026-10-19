@@ -1,19 +1,18 @@
 package com.healthcare.kallo.common;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
+public record ApiResponse<T>(boolean success, T data, Error error) {
 
-@JsonInclude(JsonInclude.Include.NON_NULL)
-public record ApiResponse<T>(int code, String message, T result) {
+  public static <T> ApiResponse<T> success(T result) {
+    return new ApiResponse<>(true, result, null);
+  }
 
-    public static <T> ApiResponse<T> success(T result) {
-        return new ApiResponse<>(200, "success", result);
-    }
+  public static <T> ApiResponse<T> errorListDataMessages(String code, String message, T result) {
+    return new ApiResponse<>(false, null, new Error(code, message, result));
+  }
 
-    public static <T> ApiResponse<T> errorListDataMessages(int code, String message, T result) {
-        return new ApiResponse<>(code, message, result);
-    }
+  public static <T> ApiResponse<T> error(String code, String message) {
+    return new ApiResponse<>(false, null, new Error(code, message, null));
+  }
 
-    public static <T> ApiResponse<T> error(int code, String message) {
-        return new ApiResponse<>(code, message, null);
-    }
+  public record Error(String code, String message, Object details) {}
 }

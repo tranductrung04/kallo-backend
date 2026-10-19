@@ -1,0 +1,12 @@
+app:
+  jwt:
+    secret: test-secret-with-at-least-32-bytes-for-tests
+    access-expiration: 900000
+    refresh-expiration: 604800000
+  auth:
+    max-login-attempts: 5
+    lock-duration: 15m
+    otp-expiration: 15m
+    max-otp-attempts: 5
+  google:
+    client-ids: ""
