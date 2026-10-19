@@ -2,10 +2,10 @@
 
 > Backend RESTful API (Spring Boot) cho **Kallo** – ứng dụng di động hỗ trợ chăm sóc sức khỏe và dinh dưỡng tích hợp AI: theo dõi bữa ăn, cân nặng, vận động; nhận diện món ăn Việt Nam qua ảnh và ước lượng calo.
 
-![Java](https://img.shields.io/badge/Java-21%2B-orange)
+![Java](https://img.shields.io/badge/Java-21-orange)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen)
 ![Gradle](https://img.shields.io/badge/build-Gradle-02303A)
-![PostgreSQL](https://img.shields.io/badge/PostgreSQL-15%2B-336791)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
 ![Flyway](https://img.shields.io/badge/migration-Flyway-CC0200)
 
 ## Mục lục
@@ -64,7 +64,7 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 
 | Thành phần      | Công nghệ                                              |
 |-----------------|--------------------------------------------------------|
-| Ngôn ngữ        | Java 21+                                               |
+| Ngôn ngữ        | Java 21                                               |
 | Framework       | Spring Boot 4.x                                        |
 | Bảo mật         | Spring Security, JWT, Google OAuth2                    |
 | ORM             | Spring Data JPA / Hibernate                            |
@@ -90,7 +90,7 @@ kallo-backend/
 │   │   │   ├── config/            # Security, CORS, WebSocket, OpenAPI, Storage, FCM
 │   │   │   ├── controller/        # REST controllers
 │   │   │   ├── dto/               # Request / Response DTO
-│   │   │   ├── entity/            # JPA entities
+│   │   │   ├── model/            # JPA entities
 │   │   │   ├── exception/         # Custom exception & global exception handler
 │   │   │   ├── mapper/            # Chuyển đổi Entity <-> DTO
 │   │   │   ├── repository/        # Spring Data JPA repositories
@@ -122,8 +122,8 @@ kallo-backend/
 
 ## Yêu cầu hệ thống
 
-- JDK 21 trở lên
-- PostgreSQL 15+ (hoặc chạy qua Docker)
+- JDK 21
+- PostgreSQL 17 (hoặc chạy qua Docker)
 - Docker & Docker Compose (tuỳ chọn)
 - Không cần cài Gradle riêng – dùng `./gradlew`
 
@@ -183,6 +183,7 @@ Các biến môi trường chính:
 | `JWT_SECRET`              | Khoá ký JWT                                        | _(bắt buộc)_                                      |
 | `JWT_ACCESS_EXPIRATION`   | Thời hạn access token (ms)                         | `900000`                                          |
 | `JWT_REFRESH_EXPIRATION`  | Thời hạn refresh token (ms)                        | `604800000`                                       |
+| `JWT_REFRESH_REUSE_GRACE` | Cửa sổ ân hạn khi refresh token bị gửi đồng thời (ms) | `3000`                                         |
 | `GOOGLE_CLIENT_ID`        | Google OAuth2 client id                            | _(bắt buộc)_                                      |
 | `GOOGLE_CLIENT_SECRET`    | Google OAuth2 client secret                        | _(bắt buộc)_                                      |
 | `AI_SERVICE_URL`          | URL của AI service (FastAPI)                       | `http://localhost:8000`                           |

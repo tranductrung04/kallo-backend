@@ -20,6 +20,7 @@ app:
     secret: ${JWT_SECRET}
     access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
     refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+    refresh-reuse-grace: ${JWT_REFRESH_REUSE_GRACE:3000}
   auth:
     max-login-attempts: ${APP_AUTH_MAX_LOGIN_ATTEMPTS:5}
     lock-duration: ${APP_AUTH_LOCK_DURATION:15m}
