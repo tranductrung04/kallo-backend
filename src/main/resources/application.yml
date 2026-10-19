@@ -15,5 +15,15 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: false
 
-server:
-  port: 8080
+app:
+  jwt:
+    secret: ${JWT_SECRET}
+    access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
+    refresh-expiration: ${JWT_REFRESH_EXPIRATION:604800000}
+  auth:
+    max-login-attempts: ${APP_AUTH_MAX_LOGIN_ATTEMPTS:5}
+    lock-duration: ${APP_AUTH_LOCK_DURATION:15m}
+    otp-expiration: ${APP_AUTH_OTP_EXPIRATION:15m}
+    max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
+  google:
+    client-ids: ${GOOGLE_CLIENT_ID:}
