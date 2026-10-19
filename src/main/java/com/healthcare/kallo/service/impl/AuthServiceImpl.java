@@ -10,8 +10,10 @@ import com.healthcare.kallo.model.enums.AuthProvider;
 import com.healthcare.kallo.model.enums.UserStatus;
 import com.healthcare.kallo.repository.UserRepository;
 import com.healthcare.kallo.service.*;
+import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class AuthServiceImpl implements AuthService {
@@ -22,28 +24,40 @@ public class AuthServiceImpl implements AuthService {
   private final TokenService tokens;
   private final UserMapper mapper;
   private final ProfileStatusProvider profileStatus;
+  private final TransactionTemplate txTemplate;
 
   public AuthServiceImpl(
-      UserRepository u, PasswordEncoder e, TokenService t, UserMapper m, ProfileStatusProvider p) {
+      UserRepository u,
+      PasswordEncoder e,
+      TokenService t,
+      UserMapper m,
+      ProfileStatusProvider p,
+      TransactionTemplate txTemplate) {
     users = u;
     encoder = e;
     tokens = t;
     mapper = m;
     profileStatus = p;
+    this.txTemplate = txTemplate;
   }
 
   public AuthResponse register(RegisterRequest r) {
     String email = EmailNormalizer.normalize(r.email());
     if (users.existsByNormalizedEmail(email))
       throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
-    User u = new User();
-    u.setEmail(email);
-    u.setPasswordHash(encoder.encode(r.password()));
-    u.setDisplayName(r.displayName());
-    u.setAuthProvider(AuthProvider.LOCAL);
-    u.setEmailVerified(false);
-    u = users.save(u);
-    return response(u);
+    String encodedPassword = encoder.encode(r.password());
+    return txTemplate.execute(
+        status -> {
+          if (users.existsByNormalizedEmail(email))
+            throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
+          User u = new User();
+          u.setEmail(email);
+          u.setPasswordHash(encodedPassword);
+          u.setDisplayName(r.displayName());
+          u.setAuthProvider(AuthProvider.LOCAL);
+          u.setEmailVerified(false);
+          return response(users.save(u));
+        });
   }
 
   public AuthResponse login(LoginRequest r) {
@@ -56,16 +70,59 @@ public class AuthServiceImpl implements AuthService {
     if (u == null) throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
     if (u.getStatus() == UserStatus.DISABLED)
       throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
-    return response(u);
+    User authenticatedUser = u;
+    return txTemplate.execute(status -> response(authenticatedUser));
+  }
+
+  public AuthResponse refresh(String refreshToken) {
+    TokenService.TokenPair pair = tokens.rotate(refreshToken);
+    User user =
+        users.findById(pair.userId()).orElseThrow(() -> new BusinessException(ErrorCode.REFRESH_TOKEN_INVALID));
+    return response(user, pair);
+  }
+
+  public void logout(String refreshToken, boolean allDevices) {
+    if (refreshToken == null || refreshToken.isBlank()) {
+      return;
+    }
+    if (allDevices) {
+      tokens.revokeAllByToken(refreshToken);
+    } else {
+      tokens.revoke(refreshToken);
+    }
+  }
+
+  public AuthResponse changePassword(UUID userId, String currentPassword, String newPassword) {
+    User u = users.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    if (u.getPasswordHash() == null) throw new BusinessException(ErrorCode.PASSWORD_NOT_SET);
+    if (!encoder.matches(currentPassword, u.getPasswordHash()))
+      throw new BusinessException(ErrorCode.INVALID_CURRENT_PASSWORD);
+    if (encoder.matches(newPassword, u.getPasswordHash()))
+      throw new BusinessException(ErrorCode.PASSWORD_UNCHANGED);
+    String encoded = encoder.encode(newPassword);
+    return txTemplate.execute(
+        status -> {
+          User managed =
+              users.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+          managed.setPasswordHash(encoded);
+          users.save(managed);
+          tokens.revokeAll(managed);
+          return response(managed);
+        });
   }
 
   private AuthResponse response(User u) {
+    return response(u, tokens.issue(u));
+  }
+
+  private AuthResponse response(User u, TokenService.TokenPair pair) {
     return new AuthResponse(
-        tokens.accessToken(u),
-        tokens.refreshToken(u),
+        pair.accessToken(),
+        pair.refreshToken(),
         "Bearer",
         tokens.accessTokenLifetimeSeconds(),
         mapper.toSummary(u),
         profileStatus.isCompleted(u));
   }
+
 }

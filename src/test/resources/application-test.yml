@@ -3,6 +3,7 @@ app:
     secret: test-secret-with-at-least-32-bytes-for-tests
     access-expiration: 900000
     refresh-expiration: 604800000
+    refresh-reuse-grace: 3000
   auth:
     max-login-attempts: 5
     lock-duration: 15m

@@ -75,4 +75,20 @@ class AuthControllerTest {
         .andExpect(jsonPath("$.data.accessToken").value("access"))
         .andExpect(jsonPath("$.data.user.email").value("user@example.com"));
   }
+
+  @Test
+  void changePasswordValidationUsesRequestFieldNames() throws Exception {
+    String oversized = "A".repeat(73);
+    mockMvc
+        .perform(
+            post("/api/auth/change-password")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"currentPassword\":\""
+                        + oversized
+                        + "\",\"newPassword\":\"NewPassword1\"}"))
+        .andExpect(status().isBadRequest())
+        .andExpect(jsonPath("$.error.details.currentPassword").exists())
+        .andExpect(jsonPath("$.error.details.currentPasswordWithinBcryptLimit").doesNotExist());
+  }
 }

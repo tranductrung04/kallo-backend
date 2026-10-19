@@ -165,6 +165,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   }
 
   private String validationField(String field) {
-    return field.equals("passwordWithinBcryptLimit") ? "password" : field;
+    return field.replaceFirst("WithinBcryptLimit$", "");
   }
 }

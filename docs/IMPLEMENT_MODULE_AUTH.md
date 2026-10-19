@@ -175,13 +175,13 @@ Mục tiêu: đăng ký và đăng nhập bằng email chạy được, mọi AP
 
 Mục tiêu: phiên đăng nhập kéo dài 7 ngày mà vẫn thu hồi được từ phía server. Xong phase này là cột mốc M2 — mobile có luồng email trọn vòng. Phase này bao phủ FR-AUTH-05 và FR-AUTH-06.
 
-- [ ] `TokenService.rotate`: tìm token theo SHA-256; không có hoặc hết hạn → 401 `REFRESH_TOKEN_INVALID`; đã thu hồi → thu hồi cả `family_id` rồi trả 401; hợp lệ → thu hồi token cũ và cấp token mới cùng `family_id`, tất cả trong một transaction.
+- [ ] `TokenService.rotate`: tìm token theo SHA-256; không có hoặc hết hạn → 401 `REFRESH_TOKEN_INVALID`; đã thu hồi ngoài cửa sổ ân hạn refresh đồng thời thì thu hồi cả `family_id` rồi trả 401; hợp lệ → thu hồi token cũ và cấp token mới cùng `family_id`, tất cả trong một transaction.
 - [ ] Chặn đua khi hai lần refresh đồng thời dùng cùng một token: khoá bản ghi (`PESSIMISTIC_WRITE`) hoặc `UPDATE ... WHERE revoked_at IS NULL` rồi kiểm tra số dòng bị ảnh hưởng.
-- [ ] `POST /api/auth/refresh` và `POST /api/auth/logout`. Logout thu hồi token được gửi lên, hoặc mọi token của user khi `allDevices = true`; luôn trả 204 dù token không tồn tại.
+- [ ] `POST /api/auth/refresh` và `POST /api/auth/logout`. Logout thu hồi token được gửi lên, hoặc mọi token của user khi `allDevices = true`; luôn trả 204 dù token không tồn tại hoặc client không gửi refresh token.
 - [ ] `POST /api/auth/change-password`: kiểm tra `currentPassword`, mật khẩu mới theo cùng quy tắc và phải khác mật khẩu cũ. Sau khi đổi, thu hồi mọi refresh token rồi cấp cặp token mới cho thiết bị đang dùng.
 - [ ] Tài khoản chỉ dùng Google (không có `password_hash`) gọi đổi mật khẩu → 400 `PASSWORD_NOT_SET`; họ đặt mật khẩu qua luồng quên mật khẩu ở Phase 5.
-- [ ] Báo nhóm mobile: lưu refresh token bằng `expo-secure-store`, và gộp các lần refresh đồng thời (nhiều request cùng gặp 401) thành đúng một lần gọi.
-- [ ] Test: dùng lại token đã xoay vòng làm thu hồi cả family; refresh hết hạn bị từ chối; đăng xuất rồi refresh → 401; đổi mật khẩu làm token cũ vô hiệu; tích hợp đăng nhập → refresh → đăng xuất → refresh thất bại.
+- [ ] Báo nhóm mobile: lưu refresh token bằng `expo-secure-store`, và gộp các lần refresh đồng thời (nhiều request cùng gặp 401) thành đúng một lần gọi. Trong cửa sổ ân hạn `JWT_REFRESH_REUSE_GRACE`, request refresh thua vẫn có thể nhận 401; mobile không được xoá phiên chỉ vì một 401 đơn lẻ ngay sau refresh thành công.
+- [ ] Test: dùng lại token đã xoay vòng làm thu hồi cả family; refresh hết hạn bị từ chối; đăng xuất rồi refresh → 401; đổi mật khẩu làm token cũ vô hiệu; tài khoản bị khóa và tài khoản Google chưa đặt mật khẩu bị từ chối; hai request refresh đồng thời chỉ chấp nhận một request; tích hợp đăng nhập → refresh → đăng xuất → refresh thất bại.
 
 **Hoàn thành khi:** AC2 và quy tắc token của mục 4.1 SRS có test xanh; mỗi lần refresh trả refresh token khác lần trước; refresh token cũ gửi lại bị từ chối.
 
