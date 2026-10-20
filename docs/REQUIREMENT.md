@@ -6,7 +6,7 @@
 |---|---|
 | Loại tài liệu | Software Requirements Specification (SRS) |
 | Tên ứng dụng | **Kallo** (theo đề cương) / **Kallo** (theo README, tên repo và package của backend) — cần thống nhất, xem Q11 |
-| Phiên bản tài liệu | 1.1 (bản nháp, đã đối chiếu README của repository backend) |
+| Phiên bản tài liệu | 1.2 (bản nháp, đã đối chiếu README của repository backend; đã chốt Q2 — tra cứu mã vạch theo cách lai; bổ sung xác minh email bằng OTP ở module AUTH) |
 
 > **Quy ước đọc tài liệu**
 > - Nội dung **không** có dấu `(*)` được lấy trực tiếp từ Đề cương đồ án.
@@ -58,6 +58,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 3. Dịch vụ AI (Python FastAPI) chạy mô hình YOLO định dạng ONNX.
 4. Cơ sở dữ liệu PostgreSQL và lưu trữ tệp đối tượng (Object Storage — MinIO).
 5. Quy trình thu thập dữ liệu, huấn luyện, đánh giá mô hình nhận diện món ăn trên tập VietFood68.
+6. Tài khoản và xác thực (module AUTH): đăng ký bằng Email hoặc Google, **xác minh email bắt buộc bằng mã OTP ngay sau khi đăng ký bằng Email** `(*)`, khôi phục mật khẩu, quản lý phiên bằng JWT.
 
 **Ngoài phạm vi (W) `(*)`:**
 
@@ -66,6 +67,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 - Phiên bản web hoặc trang quản trị đầy đủ (chỉ xem xét một công cụ quản trị tối thiểu, xem mục 4.10).
 - Nhận diện món ăn ngoài 68 lớp của VietFood68 trong phiên bản đầu tiên.
 - Thiết bị đeo chuyên dụng không đi qua Health Connect / HealthKit.
+- Đổi địa chỉ email của tài khoản; nếu bổ sung về sau, email mới phải được xác minh lại bằng OTP. `(*)`
 
 ### 1.4. Định nghĩa và từ viết tắt
 
@@ -79,6 +81,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 | MET | Metabolic Equivalent of Task — đương lượng chuyển hoá của hoạt động |
 | JWT | JSON Web Token |
 | OAuth2 | Giao thức uỷ quyền, dùng cho đăng nhập Google |
+| OTP | One-Time Password — mã dùng một lần gồm 6 chữ số, gửi qua email để xác minh email hoặc đặt lại mật khẩu |
 | YOLO | You Only Look Once — họ mô hình phát hiện đối tượng |
 | ONNX | Open Neural Network Exchange — định dạng mô hình trung gian |
 | FCM | Firebase Cloud Messaging |
@@ -91,7 +94,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 - Hướng dẫn chẩn đoán và điều trị thừa cân, béo phì — Bộ Y tế.
 - FAO/INFOODS Food Composition Databases.
 - Bảng thành phần thực phẩm Việt Nam (Vietnamese Food Composition Table) — Viện Dinh dưỡng Quốc gia (NIN).
-- Open Food Facts (dữ liệu Việt Nam).
+- Open Food Facts (dữ liệu Việt Nam) — dữ liệu theo giấy phép ODbL, yêu cầu ghi nguồn (xem FR-SYS-09).
 - Ứng dụng tham khảo: WAO.
 - README.md của repository `kallo-backend` (Backend Spring Boot): công nghệ, cấu trúc mã nguồn, cấu hình, migration, API, kiểm thử, Docker. `[README]`
 
@@ -144,10 +147,10 @@ Người dùng Việt Nam muốn kiểm soát cân nặng và ăn uống lành m
 │ Spring Data JPA / Hibernate              │        ┌────────────────────┐
 │                                          │───────▶│ Google OAuth2      │
 └───────┬───────────────┬──────────────────┘        └────────────────────┘
-        │               │ HTTP nội bộ (JSON)
-        │               ▼
-        │      ┌───────────────────────────┐
-        │      │ AI Service — Python FastAPI│
+        │               │ HTTP nội bộ (JSON)        ┌────────────────────┐
+        │               ▼                           │ Open Food Facts    │
+        │      ┌───────────────────────────┐        │ (mã vạch, dự phòng)│
+        │      │ AI Service — Python FastAPI│       └────────────────────┘
         │      │ YOLOv11m (ONNX Runtime)    │
         │      │ Tính khẩu phần + tra dinh  │
         │      │ dưỡng → trả JSON           │
@@ -159,7 +162,7 @@ Người dùng Việt Nam muốn kiểm soát cân nặng và ăn uống lành m
 └───────────────────┘   └──────────────────────────┘
 ```
 
-Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều phối, lưu dữ liệu và gọi AI Service khi cần nhận diện. `(*)` Mobile **không** gọi trực tiếp AI Service để tập trung xác thực và kiểm soát tải tại một cổng.
+Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều phối, lưu dữ liệu và gọi AI Service khi cần nhận diện. `(*)` Mobile **không** gọi trực tiếp AI Service để tập trung xác thực và kiểm soát tải tại một cổng. Tương tự, mobile **không** gọi trực tiếp Open Food Facts: khi quét mã vạch, Backend chính tra CSDL nội bộ trước, chỉ gọi Open Food Facts (HTTPS, có timeout) nếu chưa có và lưu đệm kết quả (xem FR-FD-07a/07b). `(*)`
 
 ### 3.2. Công nghệ sử dụng
 
@@ -172,7 +175,7 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | Đồng bộ sức khoẻ | react-native-health-connect (Android), react-native-health (iOS) |
 | **Backend chính** | Java 21+, Spring Boot 4.x, Spring Security + JWT + Google OAuth2, Spring Data JPA/Hibernate, Spring WebSocket, SpringDoc OpenAPI (Swagger UI) `[README]` |
 | Build & migration | Gradle (dùng Gradle Wrapper `./gradlew`), Flyway `[README]` |
-| Gửi email | SMTP (`MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`) cho email khôi phục mật khẩu `[README]` |
+| Gửi email | SMTP (`MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`) cho email khôi phục mật khẩu `[README]` và email xác minh email `(*)` |
 | Kiểm thử & đóng gói | JUnit 5, Mockito, Testcontainers; Docker, Docker Compose `[README]` |
 | **CSDL & lưu trữ** | PostgreSQL 15+; Object Storage tương thích S3 cho ảnh món ăn và ảnh đại diện, triển khai bằng **MinIO** (đề cương ghi chung là “Cloud Object Storage”) `[README]` |
 | **AI** | YOLO (YOLOv11m) huấn luyện trên VietFood68; ONNX / ONNX Runtime; Python + FastAPI |
@@ -231,10 +234,15 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | `JWT_REFRESH_EXPIRATION` | Thời hạn refresh token (ms) | `604800000` (7 ngày) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth2 | bắt buộc |
 | `AI_SERVICE_URL` | URL của AI Service (FastAPI) | `http://localhost:8000` |
+| `OFF_API_BASE_URL` | Địa chỉ API Open Food Facts `(*)` | `https://world.openfoodfacts.org` |
+| `OFF_TIMEOUT_MS` | Timeout khi gọi Open Food Facts (ms) `(*)` | `2000` |
+| `OFF_USER_AGENT` | User-Agent khai báo khi gọi Open Food Facts `(*)` | `Kallo/1.0 (<email liên hệ>)` |
+| `OFF_MISS_TTL_HOURS` | Thời gian lưu đệm kết quả "không tìm thấy" (giờ) `(*)` | `24` |
 | `FCM_CREDENTIALS_PATH` | Đường dẫn file service account FCM | bắt buộc nếu bật push |
 | `STORAGE_ENDPOINT` | Endpoint Object Storage (MinIO) | `http://localhost:9000` |
 | `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Bucket và khoá truy cập | bắt buộc |
-| `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` | SMTP gửi email khôi phục mật khẩu | bắt buộc |
+| `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` | SMTP gửi email OTP (xác minh email, khôi phục mật khẩu) | bắt buộc |
+| `OTP_HMAC_SECRET` `(*)` | Khoá HMAC dùng để băm mã OTP trước khi lưu | bắt buộc, ≥ 32 byte |
 | `PROD_REDIS_PASSWORD` | Mật khẩu Redis (nếu dùng) | trống — xem Q12 |
 
 **Quy tắc cấu hình:**
@@ -251,11 +259,11 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 
 ### 4.1. Module AUTH — Tài khoản và xác thực
 
-**Mô tả:** Đăng ký, đăng nhập bằng Email hoặc Google OAuth2, khôi phục mật khẩu.
+**Mô tả:** Đăng ký, xác minh email bằng OTP, đăng nhập bằng Email hoặc Google OAuth2, khôi phục mật khẩu.
 
 | Mã | Yêu cầu | Ưu tiên |
 |---|---|---|
-| FR-AUTH-01 | Cho phép đăng ký tài khoản bằng Email + mật khẩu. | M |
+| FR-AUTH-01 | Cho phép đăng ký tài khoản bằng Email + mật khẩu; sau khi đăng ký thành công, hệ thống gửi mã OTP xác minh email (FR-AUTH-09). | M |
 | FR-AUTH-02 | Cho phép đăng nhập bằng Email + mật khẩu và nhận access token + refresh token (JWT). | M |
 | FR-AUTH-03 | Cho phép đăng nhập/đăng ký bằng Google OAuth2; nếu email đã tồn tại thì liên kết vào tài khoản hiện có. | M |
 | FR-AUTH-04 | Khôi phục mật khẩu: gửi liên kết/mã OTP đặt lại mật khẩu qua email. | M |
@@ -263,12 +271,16 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 | FR-AUTH-06 | Làm mới token bằng refresh token; đăng xuất vô hiệu hoá refresh token. | M |
 | FR-AUTH-07 | Xoá tài khoản và toàn bộ dữ liệu cá nhân theo yêu cầu người dùng. `(*)` | S |
 | FR-AUTH-08 | Cập nhật tên hiển thị, ảnh đại diện (lưu Object Storage). | M |
+| FR-AUTH-09 | **Xác minh email bằng OTP (bắt buộc)** `(*)`: ngay sau khi đăng ký bằng Email, hệ thống gửi mã OTP 6 chữ số tới email đã đăng ký; người dùng phải nhập đúng mã để chứng minh quyền sở hữu email trước khi dùng các chức năng của ứng dụng, và có thể yêu cầu gửi lại mã. | M |
 
 **Quy tắc nghiệp vụ `(*)`:**
 
 - Email duy nhất, kiểm tra định dạng hợp lệ; mật khẩu tối thiểu 8 ký tự gồm chữ và số; lưu dạng băm (BCrypt).
 - Access token hiệu lực mặc định **15 phút** (`JWT_ACCESS_EXPIRATION=900000` ms), refresh token **7 ngày** (`JWT_REFRESH_EXPIRATION=604800000` ms) `[README]`; cả hai cấu hình được. Refresh token lưu và có thể thu hồi phía server. `(*)`
 - Mã OTP/liên kết đặt lại mật khẩu có hiệu lực tối đa 15 phút và chỉ dùng một lần. Email gửi qua SMTP cấu hình bằng `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` `[README]`.
+- **Xác minh email `(*)`:** tài khoản đăng ký bằng Email có `email_verified = false` cho tới khi người dùng nhập đúng mã OTP gửi tới email đó. Mã gồm 6 chữ số sinh ngẫu nhiên an toàn, hiệu lực 15 phút, chỉ dùng một lần, lưu dạng băm (không lưu mã gốc); nhập sai quá 5 lần thì mã bị vô hiệu và phải gửi mã mới. Gửi lại mã cách nhau ≥ 60 giây, tối đa 3 mã/giờ cho mỗi tài khoản; mỗi mã mới vô hiệu mã cũ. Các ngưỡng này cấu hình được.
+- **Trạng thái xác minh `(*)`:** xác minh email là **bắt buộc** (Q13). Tài khoản chưa xác minh vẫn đăng nhập và nhận token, nhưng mọi API nghiệp vụ trả 403 `EMAIL_NOT_VERIFIED` cho tới khi xác minh xong; chỉ nhóm `auth` và `GET /users/me` được phép. Trạng thái nằm trong access token (claim `email_verified`) và trong cờ `emailVerified` của API; sau khi xác minh, ứng dụng dùng access token mới do `verify-email` trả về. Ứng dụng di động chuyển thẳng tới màn nhập mã. `email_verified` chuyển thành `true` khi: nhập đúng mã xác minh; đăng ký hoặc đăng nhập bằng Google (Google đã xác minh email); hoặc đặt lại mật khẩu bằng OTP thành công. API xác minh chỉ tác động lên tài khoản trong token, không nhận email hoặc id từ client. Tài khoản `ADMIN` do cấu hình tạo có `email_verified = true`.
+- **Liên kết Google an toàn `(*)`:** khi đăng nhập Google trùng email với tài khoản Email có `email_verified = false`, hệ thống xoá mật khẩu cũ và thu hồi mọi refresh token trước khi liên kết, vì mật khẩu đó có thể do người khác đặt bằng email không thuộc về họ; tài khoản đã xác minh được liên kết bình thường.
 - Giới hạn đăng nhập sai (ví dụ 5 lần/15 phút) để chống dò mật khẩu.
 
 **Tiêu chí chấp nhận:**
@@ -277,6 +289,9 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 - AC2: Đăng nhập thành công trả token; gọi API bảo vệ không có/ sai token trả 401.
 - AC3: Đăng nhập Google lần đầu tạo User mới và chuyển sang màn thiết lập hồ sơ sức khoẻ.
 - AC4: Liên kết đặt lại mật khẩu hết hạn hoặc đã dùng bị từ chối.
+- AC5: Đăng ký bằng Email thành công thì có thư chứa mã OTP gửi tới địa chỉ đó; nhập đúng mã trong 15 phút thì `email_verified` chuyển thành `true`; tài khoản tạo bằng Google có `email_verified = true` ngay từ đầu.
+- AC6: Mã xác minh sai, hết hạn, đã bị thay bằng mã mới hoặc đã bị khoá sau 5 lần nhập sai đều bị từ chối với cùng một lỗi; gửi lại mã quá giới hạn bị từ chối (429).
+- AC7: Tài khoản chưa xác minh gọi API nghiệp vụ nhận 403 `EMAIL_NOT_VERIFIED`; sau khi nhập đúng mã và dùng access token mới thì gọi được bình thường.
 
 ### 4.2. Module PROFILE — Hồ sơ sức khoẻ
 
@@ -332,14 +347,16 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 - Calo/macro của log = giá trị trên 100 g (hoặc trên khẩu phần chuẩn) × lượng ăn; **lưu snapshot** giá trị dinh dưỡng tại thời điểm ghi để thay đổi dữ liệu món về sau không làm sai lịch sử. `(*)`
 - Khi ghi/sửa/xoá log, hệ thống cập nhật `DailySummary` của ngày tương ứng.
 - Ảnh vượt dung lượng giới hạn được nén phía client trước khi tải lên (ví dụ cạnh dài ≤ 1280 px, ≤ 2 MB). `(*)`
-- Mã vạch không có trong cơ sở dữ liệu → cho phép người dùng tạo món mới từ mã vạch đó (liên kết với FR-NUT-06).
+- Quét mã vạch tra theo thứ tự: **CSDL nội bộ → Open Food Facts (do Backend gọi) →** nếu cả hai không có (hoặc thiếu calo/macro) thì cho phép người dùng tạo món mới từ mã vạch đó (liên kết với FR-NUT-06, FR-FD-07a/07b). Log tạo từ mã vạch có nguồn `BARCODE`. `(*)`
 
 **Tiêu chí chấp nhận:**
 
 - AC1: Chụp ảnh một món thuộc 68 lớp → nhận kết quả đề xuất; người dùng lưu được log chỉ với tối đa 3 thao tác chạm sau khi chụp. `(*)`
 - AC2: Ảnh không nhận diện được món nào → hiển thị thông báo và cho phép tìm kiếm thủ công.
 - AC3: Tổng calo/macro trên màn nhật ký khớp tổng các mục log của ngày.
-- AC4: Quét mã vạch hợp lệ có trong CSDL trả kết quả trong ≤ 3 giây. `(*)`
+- AC4: Quét mã vạch hợp lệ **có trong CSDL nội bộ** trả kết quả trong ≤ 1 giây. `(*)`
+- AC5: Mã vạch chưa có ở CSDL nội bộ nhưng có ở Open Food Facts trả kết quả trong ≤ 3 giây (timeout gọi OFF mặc định 2 giây); lần quét sau cùng mã đó lấy từ CSDL nội bộ. `(*)`
+- AC6: Open Food Facts lỗi, quá thời gian hoặc không có sản phẩm → ứng dụng không bị treo, hiển thị thông báo và nút "Tạo món từ mã vạch này". `(*)`
 
 ### 4.4. Module PLAN — Lập kế hoạch bữa ăn và trợ lý AI
 
@@ -473,6 +490,7 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 | FR-SYS-06 | Giải quyết xung đột đồng bộ: dùng khoá UUID phía client và quy tắc “bản ghi mới nhất theo `updated_at` thắng” cho dữ liệu chỉnh sửa. `(*)` | S |
 | FR-SYS-07 | Hỗ trợ ngôn ngữ Tiếng Việt (mặc định); chuẩn bị i18n cho Tiếng Anh. `(*)` | C |
 | FR-SYS-08 | Giao diện sáng/tối. `(*)` | C |
+| FR-SYS-09 | Hiển thị ghi nguồn và giấy phép dữ liệu bên thứ ba (Open Food Facts — ODbL) trong màn Giới thiệu/Cài đặt; món có `source = OFF` hiển thị nhãn nguồn. `(*)` | M |
 
 **Quy tắc nghiệp vụ `(*)`:**
 
@@ -496,7 +514,19 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 | FR-FD-04 | Truy xuất chất gây dị ứng/nhãn dị ứng của món để lọc thực đơn và cảnh báo. `(*)` | M |
 | FR-FD-05 | Giá tham khảo (VNĐ/khẩu phần) phục vụ gợi ý thực đơn theo ngân sách. `(*)` | S |
 | FR-FD-06 | Quy trình nhập/ cập nhật dữ liệu dinh dưỡng hàng loạt (CSV/JSON) cho nhóm phát triển. `(*)` | S |
-| FR-FD-07 | Truy vấn nhanh mã vạch: ưu tiên CSDL nội bộ; nếu chưa có thì tra Open Food Facts rồi lưu đệm (xem Q2). `(*)` | S |
+| FR-FD-07a | Tra cứu mã vạch trong CSDL nội bộ (món hệ thống và món người dùng có mã vạch); trả `source` của món. `(*)` | M |
+| FR-FD-07b | Nếu CSDL nội bộ chưa có, Backend gọi Open Food Facts theo mã vạch, chuẩn hoá dữ liệu và lưu đệm vào `Food` (`source = OFF`); nếu vẫn không có thì trả 404 để mobile gợi ý tạo món từ mã vạch. `(*)` | S |
+
+**Quy tắc nghiệp vụ cho FR-FD-07a/07b `(*)`** (quyết định Q2, cách C — lai):
+
+- Thứ tự tra: CSDL nội bộ → Open Food Facts → 404.
+- Chỉ Backend gọi Open Food Facts; có timeout (`OFF_TIMEOUT_MS`, mặc định 2000 ms), khai báo User-Agent riêng (`OFF_USER_AGENT`) và giới hạn tần suất gọi ra ngoài.
+- Kiểm tra định dạng mã vạch (chỉ chữ số, độ dài hợp lệ EAN-8/UPC-A/EAN-13/GTIN-14) trước khi tra.
+- Kết quả từ Open Food Facts lưu với `source = OFF` và không bị người dùng sửa đè; muốn chỉnh thì tạo món tuỳ chỉnh riêng.
+- Nếu Open Food Facts thiếu calo hoặc macro thì không lưu như món hoàn chỉnh; yêu cầu người dùng bổ sung rồi lưu thành món tuỳ chỉnh.
+- Lưu đệm cả kết quả "không tìm thấy" trong `OFF_MISS_TTL_HOURS` (mặc định 24 giờ) để không gọi lặp lại cho cùng một mã.
+- Khi Open Food Facts không khả dụng, chức năng quét vẫn chạy với dữ liệu nội bộ và tạo món tay (không phụ thuộc dịch vụ ngoài).
+- Tuân thủ giấy phép ODbL: ghi nguồn dữ liệu (FR-SYS-09).
 
 ### 4.10. Quản trị tối thiểu `(*)`
 
@@ -613,11 +643,15 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 
 | Nhóm | Thực thể | Thuộc tính chính `(*)` |
 |---|---|---|
-| Tài khoản | **User** | id, email (unique), password_hash, auth_provider, display_name, avatar_url, role, timezone, created_at, status |
+| Tài khoản | **User** | id, email (unique), email_verified, password_hash, google_sub, auth_provider, display_name, avatar_url, role, timezone, created_at, updated_at, status |
+| | **RefreshToken** `(*)` | id, user_id, family_id, token_hash, device_info, expires_at, revoked_at, created_at |
+| | **PasswordResetToken** `(*)` | id, user_id, code_hash, attempts, expires_at, used_at, created_at |
+| | **EmailVerificationToken** `(*)` | id, user_id, code_hash, attempts, expires_at, used_at, created_at |
 | | **UserHealthProfile** | user_id, gender, birth_date, height_cm, weight_kg, activity_level, goal_type, target_weight_kg, weekly_rate_kg, bmi, bmr, tdee, daily_calorie_goal, protein/carbs/fat goal, water_goal_ml, allergies[] |
 | Theo dõi | **WeightLog** | id, user_id, weight_kg, logged_at, note, client_uuid |
 | | **WaterLog** | id, user_id, amount_ml, logged_at, client_uuid |
-| Dinh dưỡng | **Food** | id, name, name_unaccented, category, serving_desc, serving_grams, calories, protein_g, carbs_g, fat_g, barcode, image_url, price_vnd, allergens[], source, owner_user_id (null nếu món hệ thống), vietfood_class_id |
+| Dinh dưỡng | **Food** | id, name, name_unaccented, category, serving_desc, serving_grams, calories, protein_g, carbs_g, fat_g, barcode (unique, có chỉ mục), image_url, price_vnd, allergens[], source (`SYSTEM`/`NIN`/`OFF`/`USER`), off_synced_at, verified, owner_user_id (null nếu món hệ thống), vietfood_class_id |
+| | **BarcodeMiss** `(*)` | barcode (PK), checked_at, expires_at — đệm kết quả "không tìm thấy" từ Open Food Facts |
 | | **UserFoodLog** | id, user_id, food_id, meal_type, quantity/grams, calories, protein_g, carbs_g, fat_g (snapshot), source, image_url, ai_confidence, logged_at, client_uuid |
 | Thực đơn | **MealPlan** | id, user_id, plan_date, target_calories, budget_vnd, total_calories, total_cost, status |
 | | **MealPlanFood** | id, meal_plan_id, food_id, meal_type, grams, calories |
@@ -639,7 +673,7 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 
 ### 6.2. Quan hệ chính
 
-- User 1–1 UserHealthProfile; User 1–N WeightLog, WaterLog, UserFoodLog, ActivityLog, HealthSyncLog, Notification, MealPlan, Conversation, UserChallenge, UserBadge.
+- User 1–1 UserHealthProfile; User 1–N RefreshToken, PasswordResetToken, EmailVerificationToken, WeightLog, WaterLog, UserFoodLog, ActivityLog, HealthSyncLog, Notification, MealPlan, Conversation, UserChallenge, UserBadge.
 - Food 1–N UserFoodLog; Food 1–N MealPlanFood; MealPlan 1–N MealPlanFood.
 - Conversation 1–N ChatMessage.
 - User N–N User qua Friendship; User N–N Badge qua UserBadge; User N–N Challenge qua UserChallenge.
@@ -650,7 +684,7 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 - Khoá chính UUID hoặc bigint; các bảng log có `client_uuid` duy nhất theo user để đồng bộ idempotent.
 - Thời gian lưu UTC; ngày thống kê tính theo múi giờ người dùng.
 - Xoá mềm (soft delete) cho log để phục vụ đồng bộ; xoá cứng khi người dùng xoá tài khoản.
-- Chỉ mục: (user_id, logged_at) cho các bảng log; (user_id, date) cho DailySummary; chỉ mục tìm kiếm không dấu cho Food (ví dụ `pg_trgm`).
+- Chỉ mục: (user_id, logged_at) cho các bảng log; (user_id, date) cho DailySummary; chỉ mục tìm kiếm không dấu cho Food (ví dụ `pg_trgm`); chỉ mục duy nhất cho `Food.barcode` và khoá chính `barcode` của `BarcodeMiss`.
 - Lược đồ quản lý bằng **Flyway** (`classpath:db/migration`, tên tệp `V<số phiên bản>__<mô_tả>.sql`); Hibernate đặt `ddl-auto: validate` (chỉ kiểm tra, không tự sinh bảng); **không sửa** migration đã chạy, chỉ tạo phiên bản mới `[README]`.
 - Ràng buộc kiểm tra: lượng calo/macro không âm; cân nặng, chiều cao nằm trong miền hợp lý.
 
@@ -664,6 +698,7 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 - 68 món VietFood68 kèm calo, Protein, Carbs, Fat, khẩu phần chuẩn, nhóm món.
 - Danh mục hoạt động và hệ số MET `(*)`.
 - Danh mục chất dị ứng chuẩn `(*)`.
+- (Tuỳ chọn, mức C) Tập con Open Food Facts Việt Nam nhập sẵn: chỉ sản phẩm có mã vạch và đủ calo/macro; ghi `source = OFF`. `(*)`
 - Bộ huy hiệu và thử thách mẫu `(*)`.
 
 ---
@@ -674,7 +709,7 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 
 | Nhóm | Màn hình |
 |---|---|
-| Khởi đầu | Splash, Giới thiệu (onboarding), Đăng nhập, Đăng ký, Quên mật khẩu |
+| Khởi đầu | Splash, Giới thiệu (onboarding), Đăng nhập, Đăng ký, Xác minh email (nhập mã OTP, gửi lại mã), Quên mật khẩu |
 | Thiết lập | Nhập thông tin thể trạng, Mục tiêu cân nặng, Dị ứng, Kết quả BMI/TDEE/mục tiêu calo |
 | Trang chủ | Dashboard (calo, macro, nước, bước chân, streak) |
 | Dinh dưỡng | Nhật ký ngày, Chụp ảnh nhận diện, Kết quả nhận diện (xác nhận/sửa), Tìm món, Quét mã vạch, Chi tiết món, Tạo/sửa món tuỳ chỉnh, Ghi nước |
@@ -709,21 +744,21 @@ Thanh tab dưới gồm: **Trang chủ — Nhật ký — (nút chụp ảnh n�
 | Health Connect / HealthKit | Bước chân, nhịp tim | Xin quyền theo từng loại dữ liệu |
 | Google OAuth2 | Đăng nhập Google | Xác minh ID token phía server |
 | FCM + Expo Notifications | Thông báo đẩy | Quản lý token thiết bị; Backend dùng service account qua `FCM_CREDENTIALS_PATH` `[README]` |
-| Open Food Facts `(*)` | Dữ liệu mã vạch (tuỳ Q2) | Nên nhập/đệm cục bộ để độc lập |
+| Open Food Facts `(*)` | Nguồn dự phòng cho tra cứu mã vạch (Q2, cách C) | **Chỉ Backend gọi** (mobile không gọi); có timeout, giới hạn tần suất, lưu đệm kết quả vào `Food`; chỉ gửi mã vạch; ghi nguồn theo ODbL; cấu hình `OFF_*` |
 | Object Storage (MinIO) | Lưu ảnh | URL ký có thời hạn; cấu hình `STORAGE_ENDPOINT/BUCKET/ACCESS_KEY/SECRET_KEY` `[README]` |
-| SMTP | Gửi email khôi phục mật khẩu | `MAIL_HOST/USERNAME/PASSWORD` `[README]` |
+| SMTP | Gửi email OTP (xác minh email, khôi phục mật khẩu) | `MAIL_HOST/USERNAME/PASSWORD` `[README]` |
 
 ### 8.2. API Backend chính (tổng quan)
 
-Tiền tố `/api` `[README]`; xác thực `Authorization: Bearer <JWT>` cho mọi API trừ nhóm `auth`. Tài liệu API: Swagger UI `/swagger-ui.html`, OpenAPI JSON `/v3/api-docs` `[README]`.
+Tiền tố `/api` `[README]`; xác thực `Authorization: Bearer <JWT>` cho mọi API trừ nhóm `auth` (riêng `change-password`, `verify-email`, `resend-verification` trong nhóm này vẫn cần Bearer). Tài liệu API: Swagger UI `/swagger-ui.html`, OpenAPI JSON `/v3/api-docs` `[README]`.
 
 Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính thức, đầy đủ prefix `/api`); không có ký hiệu = đề xuất `(*)`, cần cập nhật khi cài đặt thực tế.
 
 | Nhóm | Endpoint (sau tiền tố `/api`) |
 |---|---|
-| auth | `POST /auth/register` ✔, `POST /auth/login` ✔, `POST /auth/google` ✔, `POST /auth/forgot-password` ✔, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password`, `POST /auth/change-password` |
+| auth | `POST /auth/register` ✔, `POST /auth/login` ✔, `POST /auth/google` ✔, `POST /auth/forgot-password` ✔, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password`, `POST /auth/change-password`, `POST /auth/verify-email`, `POST /auth/resend-verification` |
 | users / profile | `GET /users/me/profile` ✔ (BMI, TDEE, mục tiêu calo), `PUT /users/me/profile`, `GET/PUT /users/me`, `POST /users/me/avatar`, `DELETE /users/me` |
-| foods | `GET /foods/barcode/{code}` ✔, `GET /foods?query=&category=&page=`, `GET /foods/{id}`, `POST/PUT/DELETE /foods/custom` |
+| foods | `GET /foods/barcode/{code}` ✔ (tra CSDL nội bộ → Open Food Facts → 404; response có `source`; 404 thì mobile hiện nút "Tạo món từ mã vạch này"), `GET /foods?query=&category=&page=`, `GET /foods/{id}`, `POST/PUT/DELETE /foods/custom` |
 | food-logs | `POST /food-logs` ✔, `POST /food-logs/recognize` ✔ (ảnh → AI), `GET /food-logs?date=`, `PUT/DELETE /food-logs/{id}` |
 | water | `GET /water-logs?date=`, `POST /water-logs`, `DELETE /water-logs/{id}` |
 | weight | `GET /weight-logs?from=&to=`, `POST /weight-logs`, `PUT/DELETE /weight-logs/{id}` |
@@ -765,15 +800,17 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 | NFR-SEC-03 | JWT ký bằng khoá bí mật cấu hình ngoài mã nguồn; refresh token có thể thu hồi. |
 | NFR-SEC-04 | Phân quyền theo vai trò; mỗi API chỉ truy cập dữ liệu của chính người dùng (kiểm tra quyền sở hữu tài nguyên, chống IDOR). |
 | NFR-SEC-05 | Kiểm tra và làm sạch dữ liệu đầu vào; tham số hoá truy vấn (JPA) chống SQL injection; giới hạn kích thước và kiểm tra loại tệp tải lên. |
-| NFR-SEC-06 | Giới hạn tần suất (rate limit) cho đăng nhập, quên mật khẩu, nhận diện ảnh và chatbot. |
+| NFR-SEC-06 | Giới hạn tần suất (rate limit) cho đăng nhập, đăng ký, quên mật khẩu, gửi lại mã xác minh email, nhận diện ảnh và chatbot. |
 | NFR-SEC-07 | AI Service chỉ truy cập được từ mạng nội bộ/Backend. |
 | NFR-SEC-08 | Bí mật (khoá Google, FCM, Object Storage, DB, JWT, SMTP) quản lý bằng biến môi trường/secret manager; **không** commit `.env`, file service account FCM hay thông tin nhạy cảm lên Git `[README]`. |
+| NFR-SEC-09 | Mã vạch được kiểm tra định dạng trước khi gọi ra ngoài; lời gọi Open Food Facts chỉ do Backend thực hiện, có timeout và giới hạn tần suất; không gửi dữ liệu định danh người dùng. `(*)` |
 
 ### 9.3. Quyền riêng tư và dữ liệu sức khoẻ `(*)`
 
 - Thu thập tối thiểu cần thiết; hiển thị rõ mục đích khi xin quyền (camera, vị trí, sức khoẻ, thông báo).
 - Người dùng có thể xuất và xoá toàn bộ dữ liệu của mình.
 - Dữ liệu sức khoẻ không chia sẻ cho bên thứ ba; dữ liệu bạn bè chỉ hiển thị theo thiết lập quyền riêng tư.
+- Khi tra Open Food Facts, Backend chỉ gửi mã vạch (cùng User-Agent của ứng dụng); không gửi định danh hay dữ liệu cá nhân của người dùng. `(*)`
 - Ảnh người dùng chỉ dùng để cải thiện mô hình khi có sự đồng ý rõ ràng (FR-NUT-13).
 - Có điều khoản sử dụng và miễn trừ: ứng dụng không thay thế tư vấn y khoa.
 
@@ -866,10 +903,11 @@ Sản phẩm được coi là đạt khi:
 | R4 | Thiếu thiết bị iOS để kiểm thử HealthKit | Trung bình | Ưu tiên Android; iOS ở mức “cố gắng hỗ trợ” nếu không có thiết bị |
 | R5 | Thay đổi chính sách/API Google (Google Fit, Health Connect) | Trung bình | Dùng Health Connect; tách lớp trừu tượng cho nguồn dữ liệu sức khoẻ |
 | R6 | Phạm vi lớn so với nhóm 3 người, 3 tháng | Cao | Ưu tiên MoSCoW, làm song song AI–Backend–Mobile, cắt phạm vi theo mục 11 |
-| R7 | Phụ thuộc dịch vụ ngoài (Open Food Facts, nguồn LLM) không ổn định | Trung bình | Bộ nhớ đệm, dữ liệu dự phòng, thông báo lỗi nhã nhặn |
+| R7 | Phụ thuộc dịch vụ ngoài (Open Food Facts, nguồn LLM) không ổn định; Open Food Facts có thể thiếu hoặc thiếu calo/macro với sản phẩm Việt Nam | Trung bình | Bộ nhớ đệm (kể cả "không tìm thấy"), timeout, dữ liệu dự phòng, thông báo lỗi nhã nhặn, cho phép tạo món từ mã vạch |
 | R8 | Chi phí/tài nguyên hạ tầng hạn chế khi suy luận AI, chatbot | Trung bình | Dùng ONNX Runtime CPU, mô hình nhỏ/tối ưu, giới hạn tần suất |
 | R9 | Rủi ro an toàn sức khoẻ khi gợi ý calo cực đoan | Trung bình | Ngưỡng calo tối thiểu, giới hạn tốc độ giảm cân, lời miễn trừ |
 | R10 | Lộ dữ liệu cá nhân/sức khoẻ | Cao | Mục 9.2 và 9.3 |
+| R11 | Chiếm email: kẻ xấu đăng ký trước bằng email của người khác (chưa xác minh), rồi chờ nạn nhân dùng Google hoặc khiến nạn nhân gặp lỗi “email đã tồn tại” | Trung bình | Xác minh email bằng OTP (FR-AUTH-09); liên kết Google vào tài khoản chưa xác minh thì xoá mật khẩu cũ và thu hồi token; nạn nhân lấy lại tài khoản bằng Google hoặc quên mật khẩu |
 
 ### 12.2. Giả định `(*)`
 
@@ -892,7 +930,7 @@ Sản phẩm được coi là đạt khi:
 | # | Câu hỏi | Vì sao cần chốt |
 |---|---|---|
 | Q1 | Chatbot dùng mô hình ngôn ngữ nào (tự lưu trữ mô hình mã nguồn mở hay gọi dịch vụ LLM ngoài)? | Mục tiêu nêu “không phụ thuộc API bên thứ ba” cho nhận diện món ăn; chưa rõ có áp dụng cho chatbot không. Ảnh hưởng chi phí, độ trễ, quyền riêng tư. |
-| Q2 | Quét mã vạch dùng dữ liệu Open Food Facts bằng cách nhập sẵn vào CSDL (offline) hay gọi API khi chạy? | Ảnh hưởng tính độc lập và độ khả dụng; độ phủ dữ liệu Việt Nam có thể hạn chế. |
+| Q2 | ~~Quét mã vạch dùng dữ liệu Open Food Facts bằng cách nhập sẵn vào CSDL (offline) hay gọi API khi chạy?~~ | **Đã chốt (20/10/2026): cách C — lai.** Tra CSDL nội bộ trước; chưa có thì Backend gọi Open Food Facts rồi lưu đệm; vẫn không có thì người dùng tạo món từ mã vạch. Xem FR-FD-07a/07b, FR-SYS-09, mục 8.1–8.2. Chờ giảng viên hướng dẫn xác nhận. |
 | Q3 | Thực đơn AI sinh bằng thuật toán ràng buộc/tối ưu hoá, mô hình học máy, hay LLM? | Quyết định thiết kế, dữ liệu cần có (giá, nhãn dị ứng, nhóm món) và cách đánh giá. |
 | Q4 | Định nghĩa chính xác “hoàn thành mục tiêu ngày” cho streak? | Ảnh hưởng logic streak, huy hiệu, xếp hạng. |
 | Q5 | Bảng xếp hạng dựa trên tiêu chí nào (streak, bước chân, điểm thử thách)? Có chu kỳ đặt lại không? | Ảnh hưởng thiết kế dữ liệu và WebSocket. |
@@ -903,7 +941,7 @@ Sản phẩm được coi là đạt khi:
 | Q10 | Đề cương ghi ngày giao “09/20226”; xác nhận là **09/2026**? | Sai sót đánh máy trong đề cương gốc. |
 | Q11 | Tên ứng dụng là **Kallo** (đề cương) hay **Kallo** (README, repo `kallo-backend`, package `com.healthcare.kallo`)? | Cần một tên duy nhất trong tài liệu, mã nguồn và giao diện. |
 | Q12 | README nhắc `PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD`, `PROD_ES_URIS` (Redis, Elasticsearch) nhưng bảng công nghệ không có hai thành phần này. Có dùng không? | Nếu có (ví dụ Redis cho cache/rate limit/thu hồi token, Elasticsearch cho tìm món không dấu) thì phải bổ sung vào kiến trúc và yêu cầu; nếu không thì bỏ khỏi cấu hình/README. |
-| Q13 | README liên kết `LICENSE` nhưng cây thư mục có `LICENSE.txt`; giấy phép MIT có phù hợp với đồ án (dữ liệu và mô hình có dùng chung giấy phép không)? | Tránh lỗi liên kết và rõ ràng về bản quyền, đặc biệt với tập VietFood68. |
+| Q13 | ~~Có bắt buộc xác minh email (chặn dùng ứng dụng hoặc một số tính năng) cho tới khi nhập đúng OTP không?~~ | **Đã chốt (20/10/2026): bắt buộc.** Chưa xác minh thì mọi API nghiệp vụ trả 403 `EMAIL_NOT_VERIFIED` (trừ nhóm `auth` và `GET /users/me`). Xem FR-AUTH-09, AC7. |
 
 ---
 
@@ -983,13 +1021,13 @@ mục_tiêu_nước_ml ≈ 30–35 × cân_nặng_kg  (cấu hình được)
 
 | Chức năng chính trong đề cương | Yêu cầu tương ứng |
 |---|---|
-| Quản lý tài khoản & hồ sơ sức khoẻ | FR-AUTH-01…08, FR-PRO-01…08 |
-| Quản lý dinh dưỡng & bữa ăn | FR-NUT-01…13, FR-FD-01…07 |
+| Quản lý tài khoản & hồ sơ sức khoẻ | FR-AUTH-01…09, FR-PRO-01…08 |
+| Quản lý dinh dưỡng & bữa ăn | FR-NUT-01…13, FR-FD-01…07b |
 | Lập kế hoạch bữa ăn & Trợ lý AI | FR-PLAN-01…06, FR-CHAT-01…06 |
 | Theo dõi vận động & chỉ số cơ thể | FR-ACT-01…08, FR-NUT-11 |
 | Báo cáo & thống kê | FR-REP-01…08 |
 | Streak & tạo động lực | FR-GAM-01…07 |
-| Tiện ích & hệ thống | FR-SYS-01…08 |
+| Tiện ích & hệ thống | FR-SYS-01…09 |
 | Mô hình nhận diện món Việt (mục tiêu 2.1) | Mục 5; FR-NUT-02, FR-NUT-03 |
 
 ### Phụ lục C — Danh sách 68 lớp món ăn VietFood68
@@ -1005,4 +1043,5 @@ Danh sách lớp (nhãn) sẽ được điền theo tệp `data.yaml` của tậ
 | Phiên bản | Ngày | Tác giả | Nội dung |
 |---|---|---|---|
 | 1.0 | 15/10/2026 | Nhóm Kallo | Bản nháp đầu tiên, dựng từ Đề cương đồ án tốt nghiệp |
-| 1.1 | 15/10/2026 | Nhóm Kallo | Đối chiếu README repository backend: chốt Java 21+/Spring Boot 4.x/Gradle/Flyway/MinIO, thêm mục 3.4 (cấu trúc mã nguồn, biến môi trường), đổi tiền tố API sang `/api` và căn chỉnh endpoint, đặt thời hạn token mặc định 15 phút / 7 ngày, thêm Q11–Q13 |
+| 1.1 | 15/10/2026 | Nhóm Kallo | Đối chiếu README repository backend: chốt Java 21+/Spring Boot 4.x/Gradle/Flyway/MinIO, thêm mục 3.4 (cấu trúc mã nguồn, biến môi trường), đổi tiền tố API sang `/api` và căn chỉnh endpoint, đặt thời hạn token mặc định 15 phút / 7 ngày, thêm Q11–Q12 |
+| 1.2 | 20/10/2026 | Nhóm Kallo | Chốt Q2 = cách C (tra mã vạch lai: CSDL nội bộ → Open Food Facts → tạo món tay): tách FR-FD-07 thành 07a/07b; thêm FR-SYS-09 (ghi nguồn ODbL), NFR-SEC-09; cập nhật 3.1, 3.4 (biến `OFF_*`), 4.3 (quy tắc, AC4–AC6), 6.1 (`Food.source`, `BarcodeMiss`), 6.5, 8.1, 8.2, R7 và Q2; sửa ghi chú v1.1 (Q11–Q12). Module AUTH: bổ sung xác minh email bằng OTP ngay sau đăng ký (FR-AUTH-09, AC5–AC6, quy tắc `email_verified` và liên kết Google an toàn); cập nhật phạm vi (1.3), thuật ngữ OTP, biến `OTP_HMAC_SECRET`, dữ liệu (6.1–6.2: `email_verified`, `google_sub`, bảng token), màn hình (7.1), API (8.2), NFR-SEC-06, rủi ro R11, câu hỏi Q13 (đã chốt: bắt buộc xác minh, AC7, lỗi 403 `EMAIL_NOT_VERIFIED`) |
