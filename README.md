@@ -184,8 +184,8 @@ Các biến môi trường chính:
 | `JWT_ACCESS_EXPIRATION`   | Thời hạn access token (ms)                         | `900000`                                          |
 | `JWT_REFRESH_EXPIRATION`  | Thời hạn refresh token (ms)                        | `604800000`                                       |
 | `JWT_REFRESH_REUSE_GRACE` | Cửa sổ ân hạn khi refresh token bị gửi đồng thời (ms) | `3000`                                         |
-| `GOOGLE_CLIENT_ID`        | Google OAuth2 client id                            | _(bắt buộc)_                                      |
-| `GOOGLE_CLIENT_SECRET`    | Google OAuth2 client secret                        | _(bắt buộc)_                                      |
+| `GOOGLE_CLIENT_ID`        | Danh sách client ID Google, phân cách bằng dấu phẩy (Web/Android/iOS) | Bắt buộc khi khởi động ứng dụng |
+| `GOOGLE_JWKS_URI`         | URL JWKS dùng để xác minh Google ID token          | _(bắt buộc)_   |
 | `AI_SERVICE_URL`          | URL của AI service (FastAPI)                       | `http://localhost:8000`                           |
 | `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM                 | _(bắt buộc nếu bật push)_                         |
 | `STORAGE_ENDPOINT`        | Endpoint Object Storage (MinIO)                    | `http://localhost:9000`                           |
@@ -239,25 +239,9 @@ Các nhóm thực thể chính:
 
 ## API Documentation
 
-- Swagger UI: http://localhost:8080/swagger-ui.html
+- Đặc tả API (OpenAPI): [docs/api-specs](docs/api-specs)
+- Swagger UI: http://localhost:8080/swagger-ui/index.html
 - OpenAPI JSON: http://localhost:8080/v3/api-docs
-
-Một số endpoint tiêu biểu:
-
-| Method | Endpoint                       | Mô tả                                   | Auth |
-|--------|--------------------------------|-----------------------------------------|------|
-| POST   | `/api/auth/register`           | Đăng ký tài khoản                       | ❌   |
-| POST   | `/api/auth/login`              | Đăng nhập Email/mật khẩu                | ❌   |
-| POST   | `/api/auth/google`             | Đăng nhập bằng Google OAuth2            | ❌   |
-| POST   | `/api/auth/forgot-password`    | Yêu cầu khôi phục mật khẩu              | ❌   |
-| GET    | `/api/users/me/profile`        | Hồ sơ sức khoẻ (BMI, TDEE, mục tiêu calo)| ✅  |
-| POST   | `/api/food-logs`               | Ghi nhật ký bữa ăn                      | ✅   |
-| POST   | `/api/food-logs/recognize`     | Nhận diện món ăn từ ảnh                 | ✅   |
-| GET    | `/api/foods/barcode/{code}`    | Tra cứu thực phẩm theo mã vạch          | ✅   |
-| GET    | `/api/reports/daily`           | Tổng hợp dinh dưỡng theo ngày           | ✅   |
-| POST   | `/api/chat/messages`           | Gửi tin nhắn tới chatbot dinh dưỡng     | ✅   |
-
-> Danh sách trên là ví dụ – cập nhật theo API thực tế của dự án.
 
 ## Testing
 

@@ -77,6 +77,29 @@ class AuthControllerTest {
   }
 
   @Test
+  void googleLoginReturnsAuthResponse() throws Exception {
+    AuthResponse response =
+        new AuthResponse(
+            "access",
+            "refresh",
+            "Bearer",
+            900,
+            new UserSummary(UUID.randomUUID(), "user@example.com", "User", "USER"),
+            false,
+            true);
+    when(authService.loginWithGoogle("google-id-token")).thenReturn(response);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"idToken\":\"google-id-token\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.isNewUser").value(true))
+        .andExpect(jsonPath("$.data.user.email").value("user@example.com"));
+  }
+
+  @Test
   void changePasswordValidationUsesRequestFieldNames() throws Exception {
     String oversized = "A".repeat(73);
     mockMvc

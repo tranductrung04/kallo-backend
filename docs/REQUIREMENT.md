@@ -232,7 +232,7 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | `JWT_SECRET` | Khoá ký JWT | bắt buộc |
 | `JWT_ACCESS_EXPIRATION` | Thời hạn access token (ms) | `900000` (15 phút) |
 | `JWT_REFRESH_EXPIRATION` | Thời hạn refresh token (ms) | `604800000` (7 ngày) |
-| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google OAuth2 | bắt buộc |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_JWKS_URI` | Google ID token/JWKS | bắt buộc |
 | `AI_SERVICE_URL` | URL của AI Service (FastAPI) | `http://localhost:8000` |
 | `OFF_API_BASE_URL` | Địa chỉ API Open Food Facts `(*)` | `https://world.openfoodfacts.org` |
 | `OFF_TIMEOUT_MS` | Timeout khi gọi Open Food Facts (ms) `(*)` | `2000` |

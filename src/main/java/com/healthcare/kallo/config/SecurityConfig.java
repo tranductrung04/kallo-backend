@@ -5,10 +5,13 @@ import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.context.annotation.*;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.*;
+import com.healthcare.kallo.service.GoogleTokenVerifier;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
@@ -47,11 +50,26 @@ public class SecurityConfig {
   }
 
   @Bean
+  @Primary
   JwtDecoder jwtDecoder(JwtProperties p) {
     return NimbusJwtDecoder.withSecretKey(
             new SecretKeySpec(p.secret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"))
         .macAlgorithm(org.springframework.security.oauth2.jose.jws.MacAlgorithm.HS256)
         .build();
+  }
+
+  @Bean("googleJwtDecoder")
+  JwtDecoder googleJwtDecoder(GoogleProperties p) {
+    SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+    requestFactory.setConnectTimeout(2000);
+    requestFactory.setReadTimeout(3000);
+    RestTemplate restTemplate = new RestTemplate(requestFactory);
+    NimbusJwtDecoder decoder =
+        NimbusJwtDecoder.withJwkSetUri(p.jwksUri())
+            .restOperations(restTemplate)
+            .build();
+    decoder.setJwtValidator(GoogleTokenVerifier.validator(p.clientIdList()));
+    return decoder;
   }
 
   @Bean

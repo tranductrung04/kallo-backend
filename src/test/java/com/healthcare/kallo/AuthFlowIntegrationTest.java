@@ -13,16 +13,19 @@ import com.healthcare.kallo.model.enums.AuthProvider;
 import com.healthcare.kallo.model.enums.UserStatus;
 import com.healthcare.kallo.repository.RefreshTokenRepository;
 import com.healthcare.kallo.service.TokenService;
+import com.healthcare.kallo.service.GoogleTokenVerifier;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -55,6 +58,202 @@ class AuthFlowIntegrationTest {
   @Autowired RefreshTokenRepository refreshTokens;
 
   @Autowired TokenService tokenService;
+
+  @Autowired PasswordEncoder passwordEncoder;
+
+  @MockitoBean GoogleTokenVerifier googleTokenVerifier;
+
+  private final GoogleTokenVerifier.GoogleClaims googleClaims =
+      new GoogleTokenVerifier.GoogleClaims(
+          "google-sub-" + System.nanoTime(), "google@example.com", "Google User", null);
+
+  @Test
+  void firstGoogleLoginCreatesUserAndSecondLoginReusesIt() throws Exception {
+    org.mockito.Mockito.when(googleTokenVerifier.verify("google-token")).thenReturn(googleClaims);
+
+    String first =
+        mockMvc
+            .perform(
+                post("/api/auth/google")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"idToken\":\"google-token\"}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(objectMapper.readTree(first).at("/data/isNewUser").asBoolean()).isTrue();
+
+    String second =
+        mockMvc
+            .perform(
+                post("/api/auth/google")
+                    .contentType(APPLICATION_JSON)
+                    .content("{\"idToken\":\"google-token\"}"))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    assertThat(objectMapper.readTree(second).at("/data/isNewUser").asBoolean()).isFalse();
+    assertThat(users.findByGoogleSub(googleClaims.subject())).isPresent();
+  }
+
+  @Test
+  void matchingEmailIsLinkedToGoogleAccount() throws Exception {
+    String email = "google-" + System.nanoTime() + "@example.com";
+    GoogleTokenVerifier.GoogleClaims claims =
+        new GoogleTokenVerifier.GoogleClaims(
+            "link-google-sub-" + System.nanoTime(), email, "Local", null);
+    mockMvc
+        .perform(
+            post("/api/auth/register")
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"password\":\"Password1\",\"displayName\":\"Local\"}"))
+        .andExpect(status().isCreated());
+    org.mockito.Mockito.when(googleTokenVerifier.verify("link-token")).thenReturn(claims);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"link-token\"}"))
+        .andExpect(status().isOk());
+
+    assertThat(users.findByNormalizedEmail(email).orElseThrow().getGoogleSub())
+        .isEqualTo(claims.subject());
+  }
+
+  @Test
+  void verifiedLocalAccountKeepsPasswordWhenLinked() throws Exception {
+    String email = "verified-" + System.nanoTime() + "@example.com";
+    User local = new User();
+    local.setEmail(email);
+    local.setPasswordHash(passwordEncoder.encode("Password1"));
+    local.setDisplayName("Verified Local");
+    local.setAuthProvider(AuthProvider.LOCAL);
+    local.setEmailVerified(true);
+    local = users.saveAndFlush(local);
+    String subject = "verified-google-sub-" + System.nanoTime();
+    GoogleTokenVerifier.GoogleClaims claims =
+        new GoogleTokenVerifier.GoogleClaims(subject, email, "Verified", null);
+    org.mockito.Mockito.when(googleTokenVerifier.verify("verified-token")).thenReturn(claims);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"verified-token\"}"))
+        .andExpect(status().isOk());
+
+    assertThat(users.findById(local.getId()).orElseThrow().getPasswordHash()).isNotNull();
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(APPLICATION_JSON)
+                .content("{\"email\":\"" + email + "\",\"password\":\"Password1\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void existingGoogleLinkCannotBeReboundToAnotherGoogleIdentity() throws Exception {
+    String email = "conflict-" + System.nanoTime() + "@example.com";
+    User linked = new User();
+    linked.setEmail(email);
+    linked.setGoogleSub("original-google-sub-" + System.nanoTime());
+    linked.setDisplayName("Linked");
+    linked.setAuthProvider(AuthProvider.GOOGLE);
+    linked.setEmailVerified(true);
+    users.saveAndFlush(linked);
+    GoogleTokenVerifier.GoogleClaims claims =
+        new GoogleTokenVerifier.GoogleClaims(
+            "replacement-google-sub-" + System.nanoTime(), email, "Replacement", null);
+    org.mockito.Mockito.when(googleTokenVerifier.verify("conflict-token")).thenReturn(claims);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"conflict-token\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(
+            result ->
+                assertThat(objectMapper.readTree(result.getResponse().getContentAsString())
+                        .at("/error/code").asText())
+                    .isEqualTo("GOOGLE_ACCOUNT_CONFLICT"));
+  }
+
+  @Test
+  void disabledGoogleUserCannotLoginBySub() throws Exception {
+    User disabled = new User();
+    disabled.setEmail("disabled-" + System.nanoTime() + "@example.com");
+    disabled.setGoogleSub("disabled-google-sub-" + System.nanoTime());
+    disabled.setDisplayName("Disabled");
+    disabled.setAuthProvider(AuthProvider.GOOGLE);
+    disabled.setEmailVerified(true);
+    disabled.setStatus(UserStatus.DISABLED);
+    users.saveAndFlush(disabled);
+    GoogleTokenVerifier.GoogleClaims claims =
+        new GoogleTokenVerifier.GoogleClaims(
+            disabled.getGoogleSub(), disabled.getEmail(), "Disabled", null);
+    org.mockito.Mockito.when(googleTokenVerifier.verify("disabled-token")).thenReturn(claims);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"disabled-token\"}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void unverifiedLocalAccountLosesPasswordAndRefreshTokensWhenLinked() throws Exception {
+    String email = "takeover-" + System.nanoTime() + "@example.com";
+    String registered =
+        mockMvc
+            .perform(
+                post("/api/auth/register")
+                    .contentType(APPLICATION_JSON)
+                    .content(
+                        """
+                        {"email":"PLACEHOLDER","password":"Password1","displayName":"Local"}
+                        """.replace("PLACEHOLDER", email)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+    String refresh = objectMapper.readTree(registered).at("/data/refreshToken").asText();
+    User local = users.findByNormalizedEmail(email).orElseThrow();
+    GoogleTokenVerifier.GoogleClaims claims =
+        new GoogleTokenVerifier.GoogleClaims(
+            "takeover-google-sub-" + System.nanoTime(), email, "Takeover", null);
+    org.mockito.Mockito.when(googleTokenVerifier.verify("takeover-token")).thenReturn(claims);
+
+    mockMvc
+        .perform(
+            post("/api/auth/google")
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"takeover-token\"}"))
+        .andExpect(status().isOk());
+
+    assertThat(users.findById(local.getId()).orElseThrow().getPasswordHash()).isNull();
+    mockMvc
+        .perform(
+            post("/api/auth/refresh")
+                .contentType(APPLICATION_JSON)
+                .content("{\"refreshToken\":\"" + refresh + "\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(APPLICATION_JSON)
+                .content(
+                    "{\"email\":\""
+                        + email
+                        + "\",\"password\":\"Password1\"}"))
+        .andExpect(status().isUnauthorized());
+  }
 
   @Test
   void registerThenLoginAndProtectApi() throws Exception {

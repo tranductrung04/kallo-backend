@@ -27,4 +27,5 @@ app:
     otp-expiration: ${APP_AUTH_OTP_EXPIRATION:15m}
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
   google:
-    client-ids: ${GOOGLE_CLIENT_ID:}
+    client-ids: ${GOOGLE_CLIENT_ID}
+    jwks-uri: ${GOOGLE_JWKS_URI}

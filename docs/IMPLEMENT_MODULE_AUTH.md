@@ -51,7 +51,7 @@ Access token là JWT sống 15 phút; refresh token là chuỗi ngẫu nhiên, c
 - **Khi nào thu hồi.** Đăng xuất, đổi mật khẩu, đặt lại mật khẩu và xoá tài khoản đều thu hồi refresh token. Access token đã phát vẫn dùng được tối đa 15 phút vì bộ lọc không truy vấn DB mỗi request; chấp nhận độ trễ này và ghi vào tài liệu.
 - **Mật khẩu.** BCrypt; tối thiểu 8 ký tự gồm chữ và số (SRS §4.1); không ghi mật khẩu hay token vào log.
 - **Đăng nhập sai.** Một mã lỗi `INVALID_CREDENTIALS` chung cho email không tồn tại và sai mật khẩu; khoá tạm sau 5 lần sai trong 15 phút (Phase 7).
-- **Google.** Server kiểm tra chữ ký bằng JWKS, `iss` là `accounts.google.com` hoặc `https://accounts.google.com`, `aud` thuộc danh sách client ID cấu hình, chưa hết hạn và `email_verified = true`. Email đã có trong DB thì liên kết vào tài khoản đó (FR-AUTH-03).
+- **Google.** Server kiểm tra chữ ký bằng JWKS, `iss` là `accounts.google.com` hoặc `https://accounts.google.com`, `aud` thuộc danh sách client ID cấu hình, chưa hết hạn và `email_verified = true`. `google_sub` là định danh ổn định; nếu email Google đổi thì vẫn đăng nhập vào user đã liên kết. `GOOGLE_CLIENT_ID` phải được cấu hình khi khởi động ứng dụng.
 - **OTP đặt lại mật khẩu.** 6 chữ số sinh bằng `SecureRandom`, lưu HMAC-SHA256, hạn 15 phút, dùng một lần, nhập sai quá 5 lần thì vô hiệu. `forgot-password` luôn trả 200 dù email có tồn tại hay không.
 - **OTP xác minh email.** Cùng đặc tính với OTP đặt lại mật khẩu (6 chữ số `SecureRandom`, HMAC-SHA256 gắn với mục đích và user id, hạn 15 phút, dùng một lần, sai quá 5 lần thì vô hiệu) nhưng nằm ở bảng riêng. Hai endpoint xác minh dùng Bearer và chỉ tác động lên user trong token, không nhận email hay id từ client. Chưa xác minh thì vẫn đăng nhập được nhưng bị chặn 403 ở mọi API nghiệp vụ (D10); `email_verified` cũng là căn cứ để liên kết Google an toàn (Phase 4).
 - **Phân quyền.** Role `USER` hoặc `ADMIN` nằm trong claim. API tài khoản chỉ dùng đường dẫn `/users/me`, không nhận id từ client, để chống IDOR (NFR-SEC-04).
@@ -66,7 +66,7 @@ CREATE TABLE users (
     email          VARCHAR(255) NOT NULL,
     email_verified BOOLEAN      NOT NULL DEFAULT FALSE,
     password_hash  VARCHAR(100),                  -- NULL nếu chỉ đăng nhập bằng Google
-    google_sub     VARCHAR(64),
+    google_sub     VARCHAR(255),
     auth_provider  VARCHAR(20)  NOT NULL,         -- LOCAL | GOOGLE (nguồn đăng ký ban đầu)
     display_name   VARCHAR(100) NOT NULL,
     avatar_url     VARCHAR(500),                  -- khoá object trong MinIO
@@ -105,7 +105,7 @@ CREATE TABLE password_reset_tokens (
 CREATE INDEX idx_password_reset_user ON password_reset_tokens (user_id, created_at DESC);
 ```
 
-Migration mới cho xác minh email. V1 đã chạy nên không sửa (SRS mục 6.3: không sửa migration đã chạy); dùng số phiên bản kế tiếp còn trống, ví dụ `V2__email_verification_tokens.sql`:
+Migration mới cho xác minh email. V1 đã chạy nên không sửa (SRS mục 6.3: không sửa migration đã chạy); migration mở rộng `google_sub` dùng V2, vì vậy bảng xác minh email dùng `V3__email_verification_tokens.sql`:
 
 ```sql
 CREATE TABLE email_verification_tokens (
@@ -278,7 +278,7 @@ Mục tiêu: người dùng xem và sửa thông tin tài khoản, đổi ảnh 
 
 Mục tiêu: AUTH chịu được dò mật khẩu, spam và lỗi vận hành, đáp ứng NFR-SEC-02 đến 06, NFR-SEC-08 và mục 9.7 của SRS.
 
-- [ ] `RateLimiter` (interface; cài đặt Redis bằng `INCR` + `EXPIRE`, hoặc Caffeine nếu D6 chọn khác). Đăng nhập: 5 lần sai trong 15 phút theo cặp email + IP, trả 429 kèm `Retry-After`, đăng nhập đúng thì xoá bộ đếm. Quên mật khẩu: 3 mã/giờ/email và 10 yêu cầu/giờ/IP, áp dụng cả email không tồn tại. Đăng ký: tối đa 10/giờ/IP. Gửi lại mã xác minh email: 3 mã/giờ/user và cách nhau ≥ 60 giây (thay bộ đếm theo bảng của Phase 5), thêm 10 yêu cầu/giờ/IP.
+- [ ] `RateLimiter` (interface; cài đặt Redis bằng `INCR` + `EXPIRE`, hoặc Caffeine nếu D6 chọn khác). Đăng nhập (bao gồm `/api/auth/google`): 5 lần sai trong 15 phút theo cặp email + IP, trả 429 kèm `Retry-After`, đăng nhập đúng thì xoá bộ đếm. Quên mật khẩu: 3 mã/giờ/email và 10 yêu cầu/giờ/IP, áp dụng cả email không tồn tại. Đăng ký: tối đa 10/giờ/IP. Gửi lại mã xác minh email: 3 mã/giờ/user và cách nhau ≥ 60 giây (thay bộ đếm theo bảng của Phase 5), thêm 10 yêu cầu/giờ/IP.
 - [ ] Đếm theo email + IP chứ không chỉ theo email, vì chỉ theo email cho phép kẻ xấu khoá tài khoản của người khác bằng cách cố tình đăng nhập sai.
 - [ ] Lấy đúng IP phía sau reverse proxy: đặt `server.forward-headers-strategy` và chỉ tin `X-Forwarded-For` từ proxy của mình.
 - [ ] Che độ trễ khi đăng nhập bằng email không tồn tại: so sánh với một bản băm BCrypt giả để thời gian phản hồi không lộ email có hay không.

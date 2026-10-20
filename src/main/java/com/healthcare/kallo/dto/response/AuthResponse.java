@@ -6,4 +6,15 @@ public record AuthResponse(
     String tokenType,
     long expiresIn,
     UserSummary user,
-    boolean profileCompleted) {}
+    boolean profileCompleted,
+    boolean isNewUser) {
+  public AuthResponse(
+      String accessToken,
+      String refreshToken,
+      String tokenType,
+      long expiresIn,
+      UserSummary user,
+      boolean profileCompleted) {
+    this(accessToken, refreshToken, tokenType, expiresIn, user, profileCompleted, false);
+  }
+}

@@ -29,6 +29,7 @@ public class User {
   private boolean emailVerified;
 
   private String passwordHash;
+  @Column(length = 255)
   private String googleSub;
 
   @Enumerated(EnumType.STRING)
