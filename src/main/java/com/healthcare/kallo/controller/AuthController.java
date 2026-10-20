@@ -6,6 +6,7 @@ import com.healthcare.kallo.dto.request.ChangePasswordRequest;
 import com.healthcare.kallo.dto.request.LogoutRequest;
 import com.healthcare.kallo.dto.request.RefreshTokenRequest;
 import com.healthcare.kallo.dto.request.RegisterRequest;
+import com.healthcare.kallo.dto.request.GoogleLoginRequest;
 import com.healthcare.kallo.dto.response.AuthResponse;
 import com.healthcare.kallo.security.CurrentUser;
 import com.healthcare.kallo.service.AuthService;
@@ -24,13 +25,19 @@ public class AuthController {
   }
 
   @PostMapping("/register")
-  public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest r) {
-    return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(service.register(r)));
+  @ResponseStatus(HttpStatus.CREATED)
+  public ApiResponse<AuthResponse> register(@Valid @RequestBody RegisterRequest r) {
+    return ApiResponse.success(service.register(r));
   }
 
   @PostMapping("/login")
   public ApiResponse<AuthResponse> login(@Valid @RequestBody LoginRequest r) {
     return ApiResponse.success(service.login(r));
+  }
+
+  @PostMapping("/google")
+  public ApiResponse<AuthResponse> loginWithGoogle(@Valid @RequestBody GoogleLoginRequest r) {
+    return ApiResponse.success(service.loginWithGoogle(r.idToken()));
   }
 
   @PostMapping("/refresh")

@@ -10,6 +10,8 @@ public interface AuthService {
 
   AuthResponse login(LoginRequest request);
 
+  AuthResponse loginWithGoogle(String idToken);
+
   AuthResponse refresh(String refreshToken);
 
   void logout(String refreshToken, boolean allDevices);

@@ -11,6 +11,7 @@ import com.healthcare.kallo.model.enums.UserStatus;
 import com.healthcare.kallo.repository.UserRepository;
 import com.healthcare.kallo.service.*;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -25,6 +26,7 @@ public class AuthServiceImpl implements AuthService {
   private final UserMapper mapper;
   private final ProfileStatusProvider profileStatus;
   private final TransactionTemplate txTemplate;
+  private final GoogleTokenVerifier googleTokenVerifier;
 
   public AuthServiceImpl(
       UserRepository u,
@@ -32,13 +34,15 @@ public class AuthServiceImpl implements AuthService {
       TokenService t,
       UserMapper m,
       ProfileStatusProvider p,
-      TransactionTemplate txTemplate) {
+      TransactionTemplate txTemplate,
+      GoogleTokenVerifier googleTokenVerifier) {
     users = u;
     encoder = e;
     tokens = t;
     mapper = m;
     profileStatus = p;
     this.txTemplate = txTemplate;
+    this.googleTokenVerifier = googleTokenVerifier;
   }
 
   public AuthResponse register(RegisterRequest r) {
@@ -72,6 +76,55 @@ public class AuthServiceImpl implements AuthService {
       throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
     User authenticatedUser = u;
     return txTemplate.execute(status -> response(authenticatedUser));
+  }
+
+  @Override
+  public AuthResponse loginWithGoogle(String idToken) {
+    GoogleTokenVerifier.GoogleClaims claims = googleTokenVerifier.verify(idToken);
+    String email = EmailNormalizer.normalize(claims.email());
+    try {
+      return googleLoginTx(claims, email);
+    } catch (DataIntegrityViolationException e) {
+      return googleLoginTx(claims, email);
+    }
+  }
+
+  private AuthResponse googleLoginTx(
+      GoogleTokenVerifier.GoogleClaims claims, String email) {
+    return txTemplate.execute(
+        status -> {
+          User user = users.findByGoogleSub(claims.subject()).orElse(null);
+          boolean isNewUser = false;
+          if (user == null) {
+            user = users.findByNormalizedEmail(email).orElse(null);
+            if (user == null) {
+              user = new User();
+              user.setEmail(email);
+              user.setDisplayName(displayName(claims));
+              user.setAuthProvider(AuthProvider.GOOGLE);
+              isNewUser = true;
+            } else {
+              if (user.getGoogleSub() != null) {
+                throw new BusinessException(ErrorCode.GOOGLE_ACCOUNT_CONFLICT);
+              }
+              if (!user.isEmailVerified()) {
+                user.setPasswordHash(null);
+                tokens.revokeAll(user);
+              }
+            }
+            user.setGoogleSub(claims.subject());
+            user.setEmailVerified(true);
+          } else {
+            if (user.getStatus() == UserStatus.DISABLED) {
+              throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
+            }
+          }
+          if (user.getStatus() == UserStatus.DISABLED) {
+            throw new BusinessException(ErrorCode.ACCOUNT_DISABLED);
+          }
+          user = users.save(user);
+          return response(user, tokens.issue(user), isNewUser);
+        });
   }
 
   public AuthResponse refresh(String refreshToken) {
@@ -112,17 +165,35 @@ public class AuthServiceImpl implements AuthService {
   }
 
   private AuthResponse response(User u) {
-    return response(u, tokens.issue(u));
+    return response(u, tokens.issue(u), false);
   }
 
   private AuthResponse response(User u, TokenService.TokenPair pair) {
+    return response(u, pair, false);
+  }
+
+  private AuthResponse response(User u, TokenService.TokenPair pair, boolean isNewUser) {
     return new AuthResponse(
         pair.accessToken(),
         pair.refreshToken(),
         "Bearer",
         tokens.accessTokenLifetimeSeconds(),
         mapper.toSummary(u),
-        profileStatus.isCompleted(u));
+        profileStatus.isCompleted(u),
+        isNewUser);
+  }
+
+  private String displayName(GoogleTokenVerifier.GoogleClaims claims) {
+    String name =
+        claims.name() != null && !claims.name().isBlank()
+            ? claims.name().trim()
+            : fallbackDisplayName(claims.email());
+    return name.length() <= 100 ? name : name.substring(0, 100);
+  }
+
+  private String fallbackDisplayName(String email) {
+    int at = email.indexOf('@');
+    return at > 0 ? email.substring(0, at) : email;
   }
 
 }

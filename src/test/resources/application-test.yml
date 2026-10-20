@@ -10,4 +10,5 @@ app:
     otp-expiration: 15m
     max-otp-attempts: 5
   google:
-    client-ids: ""
+    client-ids: test-google-client-id
+    jwks-uri: https://www.googleapis.com/oauth2/v3/certs
