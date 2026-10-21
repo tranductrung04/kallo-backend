@@ -5,9 +5,9 @@ info:
   version: 0.1.0-draft
   summary: Hợp đồng API cho module AUTH (xác thực, tài khoản) của Kallo Backend.
   description: |
-    Bản nháp OpenAPI dựng từ `IMPLEMENT_MODULE_AUTH.md` (mục "Hợp đồng API", Phase 0–6) và
-    `REQUIREMENT.md` (SRS 1.2, FR-AUTH-01…09). Đây là **hợp đồng thiết kế**, chưa đối chiếu với mã
-    nguồn thực tế; khi `springdoc` sinh `/v3/api-docs`, hãy so sánh hai bản và sửa chỗ lệch.
+    Hợp đồng OpenAPI của module AUTH, đối chiếu với mã hiện tại đến Phase 6 và
+    `REQUIREMENT.md` (SRS 1.2, FR-AUTH-01…09). Khi `springdoc` sinh `/v3/api-docs`, tiếp tục so sánh
+    hai bản khi endpoint hoặc mã lỗi thay đổi.
 
     ## Quy ước chung
     - Tiền tố đường dẫn `/api`. Mọi phản hồi (trừ 204) theo `ApiResponse`:
@@ -112,7 +112,7 @@ paths:
                 error:
                   code: EMAIL_ALREADY_EXISTS
                   message: Email này đã được đăng ký.
-                  details: []
+                  details: null
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -156,7 +156,7 @@ paths:
                 error:
                   code: INVALID_CREDENTIALS
                   message: Email hoặc mật khẩu không đúng.
-                  details: []
+                  details: null
         '403':
           description: Tài khoản bị khoá (`ACCOUNT_DISABLED`).
           content:
@@ -169,7 +169,7 @@ paths:
                 error:
                   code: ACCOUNT_DISABLED
                   message: Tài khoản đã bị vô hiệu hoá.
-                  details: []
+                  details: null
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -211,7 +211,7 @@ paths:
                 error:
                   code: REFRESH_TOKEN_INVALID
                   message: Phiên đăng nhập không còn hiệu lực.
-                  details: []
+                  details: null
 
   /api/auth/logout:
     post:
@@ -284,7 +284,7 @@ paths:
                     error:
                       code: INVALID_CURRENT_PASSWORD
                       message: Mật khẩu hiện tại không đúng.
-                      details: []
+                      details: null
                 passwordNotSet:
                   summary: Tài khoản chỉ dùng Google
                   value:
@@ -293,7 +293,7 @@ paths:
                     error:
                       code: PASSWORD_NOT_SET
                       message: Tài khoản chưa có mật khẩu.
-                      details: []
+                      details: null
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -339,7 +339,7 @@ paths:
                 error:
                   code: GOOGLE_TOKEN_INVALID
                   message: Không xác minh được tài khoản Google.
-                  details: []
+                  details: null
 
   /api/auth/forgot-password:
     post:
@@ -412,7 +412,7 @@ paths:
                     error:
                       code: RESET_CODE_INVALID
                       message: Mã không hợp lệ hoặc đã hết hạn.
-                      details: []
+                      details: null
 
   /api/auth/verify-email:
     post:
@@ -467,7 +467,7 @@ paths:
                     error:
                       code: VERIFICATION_CODE_INVALID
                       message: Mã xác minh không hợp lệ hoặc đã hết hạn.
-                      details: []
+                      details: null
         '401':
           $ref: '#/components/responses/Unauthorized'
 
@@ -500,7 +500,7 @@ paths:
                 error:
                   code: EMAIL_ALREADY_VERIFIED
                   message: Email đã được xác minh.
-                  details: []
+                  details: null
         '429':
           $ref: '#/components/responses/TooManyRequests'
 
@@ -527,7 +527,7 @@ paths:
       summary: Cập nhật tên hiển thị và múi giờ
       description: |
         FR-AUTH-08. `timezone` phải thuộc danh sách múi giờ IANA mà Java hỗ trợ (`ZoneId.getAvailableZoneIds()`).
-        Yêu cầu email đã xác minh.
+        Yêu cầu email đã xác minh. Cả `displayName` và `timezone` đều bắt buộc.
       requestBody:
         required: true
         content:
@@ -555,7 +555,7 @@ paths:
       operationId: deleteMe
       summary: Xoá tài khoản và toàn bộ dữ liệu
       description: |
-        FR-AUTH-07 (mức S). Yêu cầu xác nhận lại bằng `password`, hoặc `idToken` Google mới với tài khoản không có
+        FR-AUTH-07 (mức S). Yêu cầu xác nhận lại bằng `password`, hoặc `idToken` Google được phát hành trong vòng 5 phút với tài khoản không có
         mật khẩu. Xoá ảnh trên object storage rồi xoá dòng `users`; dữ liệu mọi module bị dọn theo
         `ON DELETE CASCADE`. Thao tác không hoàn tác được. Yêu cầu email đã xác minh.
       requestBody:
@@ -570,13 +570,19 @@ paths:
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
-          description: Thiếu access token, hoặc xác nhận (mật khẩu / Google ID token) sai.
+          description: `UNAUTHORIZED` khi thiếu access token; `INVALID_DELETE_CONFIRMATION` khi xác nhận mật khẩu hoặc Google account sai; `GOOGLE_TOKEN_INVALID` khi Google ID token không hợp lệ hoặc quá 5 phút.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '403':
           $ref: '#/components/responses/EmailNotVerified'
+        '503':
+          description: Không thể xác minh Google ID token do nhà cung cấp tạm thời không khả dụng (`GOOGLE_PROVIDER_UNAVAILABLE`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /api/users/me/avatar:
     post:
@@ -620,13 +626,13 @@ paths:
                 error:
                   code: INVALID_FILE
                   message: Chỉ chấp nhận ảnh JPEG hoặc PNG.
-                  details: []
+                  details: null
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/EmailNotVerified'
         '413':
-          description: Tệp vượt quá 2 MB.
+          description: Tệp vượt quá 2 MB (`PAYLOAD_TOO_LARGE`).
           content:
             application/json:
               schema:
@@ -637,7 +643,7 @@ paths:
                 error:
                   code: PAYLOAD_TOO_LARGE
                   message: Ảnh vượt quá dung lượng tối đa 2 MB.
-                  details: []
+                  details: null
 
 components:
   securitySchemes:
@@ -657,7 +663,7 @@ components:
 
   responses:
     ValidationError:
-      description: Dữ liệu không hợp lệ (`VALIDATION_ERROR`); `details` liệt kê theo từng trường.
+      description: Dữ liệu không hợp lệ (`VALIDATION_ERROR`); `details` là object map theo từng trường.
       content:
         application/json:
           schema:
@@ -669,8 +675,7 @@ components:
               code: VALIDATION_ERROR
               message: Dữ liệu không hợp lệ.
               details:
-                - field: password
-                  message: Mật khẩu phải có ít nhất 8 ký tự gồm cả chữ và số.
+                password: Mật khẩu phải có ít nhất 8 ký tự gồm cả chữ và số.
     Unauthorized:
       description: Thiếu, sai chữ ký, bị sửa claim hoặc hết hạn access token.
       content:
@@ -683,7 +688,7 @@ components:
             error:
               code: UNAUTHORIZED
               message: Chưa xác thực hoặc phiên đã hết hạn.
-              details: []
+              details: {}
     EmailNotVerified:
       description: Email chưa xác minh (`EMAIL_NOT_VERIFIED`). Mobile chuyển về màn nhập mã OTP.
       content:
@@ -696,7 +701,7 @@ components:
             error:
               code: EMAIL_NOT_VERIFIED
               message: Vui lòng xác minh email trước khi tiếp tục.
-              details: []
+              details: {}
     TooManyRequests:
       description: Vượt giới hạn tần suất (`TOO_MANY_REQUESTS`).
       headers:
@@ -712,7 +717,7 @@ components:
             error:
               code: TOO_MANY_REQUESTS
               message: Bạn thao tác quá nhanh, vui lòng thử lại sau.
-              details: []
+              details: {}
 
   schemas:
     # ---------- Request ----------
@@ -824,6 +829,7 @@ components:
 
     UpdateMeRequest:
       type: object
+      required: [displayName, timezone]
       properties:
         displayName:
           type: string
@@ -836,16 +842,13 @@ components:
 
     DeleteAccountRequest:
       type: object
-      description: Cần `password` (tài khoản có mật khẩu) hoặc `idToken` (tài khoản Google không có mật khẩu).
+      description: Gửi `password` cho tài khoản có mật khẩu hoặc `idToken` cho tài khoản Google không có mật khẩu. Thiếu cả hai trường vẫn được nhận ở request nhưng trả 401 `INVALID_DELETE_CONFIRMATION`.
       properties:
         password:
           type: string
         idToken:
           type: string
-          description: Google ID token mới.
-      oneOf:
-        - required: [password]
-        - required: [idToken]
+          description: Google ID token phát hành trong vòng 5 phút.
 
     # ---------- Domain ----------
     UserSummary:
@@ -863,7 +866,7 @@ components:
         avatarUrl:
           type: [string, 'null']
           format: uri
-          description: URL ký có thời hạn; `null` nếu chưa có ảnh.
+          description: URL ký có thời hạn mặc định 15 phút; mobile gọi lại `GET /api/users/me` khi hết hạn; `null` nếu chưa có ảnh.
         role:
           type: string
           enum: [USER, ADMIN]
@@ -936,7 +939,7 @@ components:
         avatarUrl:
           type: string
           format: uri
-          description: URL ký có thời hạn.
+          description: URL ký có thời hạn mặc định 15 phút; mobile gọi lại `GET /api/users/me` khi hết hạn.
 
     # ---------- Envelope ----------
     ApiResponseBase:
@@ -1033,27 +1036,15 @@ components:
           type: string
           description: Câu chữ cho người đọc; có thể đổi, không dùng để rẽ nhánh logic.
         details:
-          type: array
-          description: Lỗi theo từng trường (chỉ có với `VALIDATION_ERROR`).
-          items:
-            $ref: '#/components/schemas/FieldError'
-
-    FieldError:
-      type: object
-      required: [field, message]
-      properties:
-        field:
-          type: string
-          examples: [password]
-        message:
-          type: string
+          type: object
+          additionalProperties:
+            type: string
+          description: Map tên trường tới thông báo lỗi (chỉ có với `VALIDATION_ERROR`).
 
     ErrorCode:
       type: string
       description: |
-        Mã lỗi cố định để mobile xử lý. Tài liệu nguồn không nêu mã cho ba trường hợp: thiếu/sai access
-        token (401), ảnh quá 2 MB (413) và lỗi 500. Ba mã `UNAUTHORIZED`, `PAYLOAD_TOO_LARGE`,
-        `INTERNAL_ERROR` là tên suy luận; cần đối chiếu với enum `ErrorCode` khi cài đặt.
+        Mã lỗi cố định để mobile xử lý, đồng bộ với enum `ErrorCode` và các handler hiện tại.
       enum:
         - VALIDATION_ERROR
         - EMAIL_ALREADY_EXISTS
@@ -1072,3 +1063,15 @@ components:
         - UNAUTHORIZED
         - PAYLOAD_TOO_LARGE
         - INTERNAL_ERROR
+        - FORBIDDEN
+        - GOOGLE_ACCOUNT_CONFLICT
+        - GOOGLE_PROVIDER_UNAVAILABLE
+        - INVALID_DELETE_CONFIRMATION
+        - INVALID_PARAMETER
+        - MALFORMED_REQUEST
+        - METHOD_NOT_ALLOWED
+        - MISSING_PARAMETER
+        - NOT_FOUND
+        - PASSWORD_UNCHANGED
+        - UNSUPPORTED_MEDIA_TYPE
+        - REQUEST_ERROR

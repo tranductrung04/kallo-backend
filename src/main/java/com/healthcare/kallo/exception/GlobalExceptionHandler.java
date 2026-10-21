@@ -17,11 +17,14 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
@@ -118,6 +121,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   @Override
   protected ResponseEntity<Object> handleExceptionInternal(
       Exception e, Object body, HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+    if (e instanceof MaxUploadSizeExceededException) {
+      return ResponseEntity.status(ErrorCode.PAYLOAD_TOO_LARGE.status())
+          .body(
+              ApiResponse.error(
+                  ErrorCode.PAYLOAD_TOO_LARGE.name(), ErrorCode.PAYLOAD_TOO_LARGE.message()));
+    }
+
     if (status.is4xxClientError()) {
       return ResponseEntity.status(status)
           .body(ApiResponse.error("REQUEST_ERROR", "Request could not be processed"));
@@ -127,6 +137,22 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             ApiResponse.error(ErrorCode.INTERNAL_ERROR.name(), ErrorCode.INTERNAL_ERROR.message()));
   }
 
+  @Override
+  protected ResponseEntity<Object> handleMissingServletRequestPart(
+      MissingServletRequestPartException e,
+      HttpHeaders headers,
+      HttpStatusCode status,
+      WebRequest request) {
+    return ResponseEntity.badRequest()
+        .body(ApiResponse.error(ErrorCode.INVALID_FILE.name(), ErrorCode.INVALID_FILE.message()));
+  }
+
+  @ExceptionHandler(MultipartException.class)
+  public ResponseEntity<ApiResponse<Void>> multipart(MultipartException e) {
+    return ResponseEntity.badRequest()
+        .body(ApiResponse.error(ErrorCode.INVALID_FILE.name(), ErrorCode.INVALID_FILE.message()));
+  }
+
   @ExceptionHandler(DataIntegrityViolationException.class)
   public ResponseEntity<ApiResponse<Void>> conflict(DataIntegrityViolationException e) {
     log.warn("Data integrity violation while processing request");
@@ -134,6 +160,7 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
       return ResponseEntity.status(409)
           .body(ApiResponse.error("EMAIL_ALREADY_EXISTS", "Email already exists"));
     }
+
     return ResponseEntity.internalServerError()
         .body(
             ApiResponse.error(ErrorCode.INTERNAL_ERROR.name(), ErrorCode.INTERNAL_ERROR.message()));

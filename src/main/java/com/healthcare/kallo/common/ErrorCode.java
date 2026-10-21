@@ -27,6 +27,9 @@ public enum ErrorCode {
   UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type"),
   MISSING_PARAMETER(HttpStatus.BAD_REQUEST, "Required parameter is missing"),
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "Invalid parameter"),
+  INVALID_FILE(HttpStatus.BAD_REQUEST, "Invalid file"),
+  PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Payload is too large"),
+  INVALID_DELETE_CONFIRMATION(HttpStatus.UNAUTHORIZED, "Account deletion confirmation is invalid"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;
