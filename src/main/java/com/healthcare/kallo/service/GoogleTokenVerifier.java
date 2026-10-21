@@ -4,6 +4,8 @@ import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.GoogleProperties;
 import java.util.List;
+import java.time.Duration;
+import java.time.Instant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.security.oauth2.core.*;
@@ -48,7 +50,8 @@ public class GoogleTokenVerifier {
           subject,
           email,
           jwt.getClaimAsString("name"),
-          jwt.getClaimAsString("picture"));
+          jwt.getClaimAsString("picture"),
+          jwt.getIssuedAt());
     } catch (BusinessException e) {
       throw e;
     } catch (BadJwtException e) {
@@ -63,7 +66,22 @@ public class GoogleTokenVerifier {
     }
   }
 
-  public record GoogleClaims(String subject, String email, String name, String picture) {}
+  public GoogleClaims verifyFresh(String idToken) {
+    GoogleClaims claims = verify(idToken);
+    if (claims.issuedAt() == null
+        || claims.issuedAt().isBefore(Instant.now().minus(Duration.ofMinutes(5)))
+        || claims.issuedAt().isAfter(Instant.now().plusSeconds(30))) {
+      throw new BusinessException(ErrorCode.GOOGLE_TOKEN_INVALID);
+    }
+    return claims;
+  }
+
+  public record GoogleClaims(
+      String subject, String email, String name, String picture, Instant issuedAt) {
+    public GoogleClaims(String subject, String email, String name, String picture) {
+      this(subject, email, name, picture, null);
+    }
+  }
 
   public static final class IssuerValidator implements OAuth2TokenValidator<Jwt> {
     @Override

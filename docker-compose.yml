@@ -39,6 +39,20 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  minio:
+    image: minio/minio:latest
+    container_name: ${APP_NAME}-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.1.0
     container_name: ${APP_NAME}-elasticsearch
@@ -68,6 +82,8 @@ services:
         condition: service_healthy
       elasticsearch:
         condition: service_healthy
+      minio:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: prod
       PROD_DB_URL: ${DB_URL}
@@ -89,7 +105,7 @@ services:
       APP_AUTH_MAX_OTP_PER_HOUR: ${APP_AUTH_MAX_OTP_PER_HOUR:-3}
       OTP_HMAC_SECRET: ${OTP_HMAC_SECRET:?OTP_HMAC_SECRET must be set}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:?GOOGLE_CLIENT_ID must be set}
-      GOOGLE_JWKS_URI: ${GOOGLE_JWKS_URI:-https://www.googleapis.com/oauth2/v3/certs}
+      GOOGLE_JWKS_URI: ${GOOGLE_JWKS_URI}
       MAIL_HOST: mailpit
       MAIL_PORT: ${MAIL_PORT:-1025}
       MAIL_USERNAME: ${MAIL_USERNAME:-}
@@ -97,6 +113,11 @@ services:
       MAIL_SMTP_AUTH: ${MAIL_SMTP_AUTH:-false}
       MAIL_SMTP_STARTTLS_ENABLE: false
       MAIL_SMTP_STARTTLS_REQUIRED: false
+      STORAGE_ENDPOINT: http://minio:9000
+      STORAGE_PUBLIC_ENDPOINT: ${STORAGE_PUBLIC_ENDPOINT:-http://localhost:9000}
+      STORAGE_BUCKET: ${STORAGE_BUCKET}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
     ports:
       - "8080:8080"
 
@@ -104,3 +125,4 @@ volumes:
   postgres_data:
   redis_data:
   es_data:
+  minio_data:

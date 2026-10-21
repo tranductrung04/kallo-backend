@@ -122,11 +122,12 @@ public class SecurityConfig {
       emailVerifiedManager() {
     return (authentication, context) -> {
       HttpServletRequest request = context.getRequest();
+      Authentication auth = authentication.get();
+      if (auth == null || !auth.isAuthenticated()) return new AuthorizationDecision(false);
+      if (!(auth.getPrincipal() instanceof Jwt jwt)) return new AuthorizationDecision(false);
       if (request.getMethod().equals("GET") && request.getRequestURI().equals("/api/users/me")) {
         return new AuthorizationDecision(true);
       }
-      Authentication auth = authentication.get();
-      if (!(auth.getPrincipal() instanceof Jwt jwt)) return new AuthorizationDecision(false);
       return new AuthorizationDecision(Boolean.TRUE.equals(jwt.getClaim("email_verified")));
     };
   }

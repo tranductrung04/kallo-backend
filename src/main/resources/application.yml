@@ -26,6 +26,10 @@ spring:
           connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT:3000}
           timeout: ${MAIL_SMTP_TIMEOUT:5000}
           writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT:5000}
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 2MB
 
 app:
   otp-hmac-secret: ${OTP_HMAC_SECRET}
@@ -43,4 +47,11 @@ app:
     max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
   google:
     client-ids: ${GOOGLE_CLIENT_ID}
-    jwks-uri: ${GOOGLE_JWKS_URI:https://www.googleapis.com/oauth2/v3/certs}
+    jwks-uri: ${GOOGLE_JWKS_URI}
+  storage:
+    endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+    access-key: ${STORAGE_ACCESS_KEY}
+    secret-key: ${STORAGE_SECRET_KEY}
+    bucket: ${STORAGE_BUCKET}
+    public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
+    presigned-url-expiration: ${STORAGE_PRESIGNED_URL_EXPIRATION:15m}

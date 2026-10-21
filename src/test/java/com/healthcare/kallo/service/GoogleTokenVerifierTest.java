@@ -113,6 +113,39 @@ class GoogleTokenVerifierTest {
     .isEqualTo(com.healthcare.kallo.common.ErrorCode.GOOGLE_PROVIDER_UNAVAILABLE);
   }
 
+  @Test
+  void rejectsFreshVerificationTokenWithOldIssuedAt() {
+    assertThatThrownBy(
+            () ->
+                verifier.verifyFresh(
+                    tokenWithIssuedAt(Instant.now().minusSeconds(301), Instant.now().plusSeconds(60))))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).getErrorCode())
+        .isEqualTo(com.healthcare.kallo.common.ErrorCode.GOOGLE_TOKEN_INVALID);
+  }
+
+  @Test
+  void rejectsFreshVerificationTokenIssuedTooFarInFuture() {
+    assertThatThrownBy(
+            () ->
+                verifier.verifyFresh(
+                    tokenWithIssuedAt(Instant.now().plusSeconds(31), Instant.now().plusSeconds(60))))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).getErrorCode())
+        .isEqualTo(com.healthcare.kallo.common.ErrorCode.GOOGLE_TOKEN_INVALID);
+  }
+
+  @Test
+  void rejectsFreshVerificationTokenWithoutIssuedAt() {
+    assertThatThrownBy(
+            () ->
+                verifier.verifyFresh(
+                    tokenWithoutIssuedAt(Instant.now().plusSeconds(60))))
+        .isInstanceOf(BusinessException.class)
+        .extracting(e -> ((BusinessException) e).getErrorCode())
+        .isEqualTo(com.healthcare.kallo.common.ErrorCode.GOOGLE_TOKEN_INVALID);
+  }
+
   private String token(String issuer, List<String> audience, Instant expiresAt) {
     return token(issuer, audience, expiresAt, "user@example.com", true);
   }
@@ -139,6 +172,41 @@ class GoogleTokenVerifierTest {
       claimsBuilder.claim("email", email);
     }
     JwtClaimsSet claims = claimsBuilder.build();
+    return encoder
+        .encode(
+            JwtEncoderParameters.from(
+                JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key").build(), claims))
+        .getTokenValue();
+  }
+
+  private String tokenWithIssuedAt(Instant issuedAt, Instant expiresAt) {
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .issuer("https://accounts.google.com")
+            .subject("google-sub")
+            .audience(List.of("test-client-id"))
+            .issuedAt(issuedAt)
+            .expiresAt(expiresAt)
+            .claim("email_verified", true)
+            .claim("email", "user@example.com")
+            .build();
+    return encoder
+        .encode(
+            JwtEncoderParameters.from(
+                JwsHeader.with(SignatureAlgorithm.RS256).keyId("test-key").build(), claims))
+        .getTokenValue();
+  }
+
+  private String tokenWithoutIssuedAt(Instant expiresAt) {
+    JwtClaimsSet claims =
+        JwtClaimsSet.builder()
+            .issuer("https://accounts.google.com")
+            .subject("google-sub")
+            .audience(List.of("test-client-id"))
+            .expiresAt(expiresAt)
+            .claim("email_verified", true)
+            .claim("email", "user@example.com")
+            .build();
     return encoder
         .encode(
             JwtEncoderParameters.from(

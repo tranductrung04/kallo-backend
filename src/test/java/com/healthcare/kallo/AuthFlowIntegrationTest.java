@@ -7,9 +7,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.healthcare.kallo.repository.UserRepository;
 import com.healthcare.kallo.model.User;
@@ -22,6 +25,7 @@ import com.healthcare.kallo.repository.PasswordResetTokenRepository;
 import com.healthcare.kallo.service.TokenService;
 import com.healthcare.kallo.service.GoogleTokenVerifier;
 import com.healthcare.kallo.service.EmailService;
+import com.healthcare.kallo.service.StorageService;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -35,6 +39,7 @@ import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -74,9 +79,193 @@ class AuthFlowIntegrationTest {
 
   @Autowired PasswordEncoder passwordEncoder;
 
+  @Autowired JdbcTemplate jdbcTemplate;
+
   @MockitoBean GoogleTokenVerifier googleTokenVerifier;
 
   @MockitoBean EmailService emailService;
+
+  @MockitoBean StorageService storageService;
+
+  @Test
+  void updateProfilePersistsThroughHttpAndPostgres() throws Exception {
+    User user = new User();
+    user.setEmail("phase6-" + System.nanoTime() + "@example.com");
+    user.setPasswordHash(passwordEncoder.encode("Password1"));
+    user.setDisplayName("Before");
+    user.setTimezone("Asia/Ho_Chi_Minh");
+    user.setAuthProvider(AuthProvider.LOCAL);
+    user.setEmailVerified(true);
+    user = users.saveAndFlush(user);
+    Instant beforeUpdate = user.getUpdatedAt();
+    String accessToken = tokenService.issue(user).accessToken();
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put("/api/users/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(APPLICATION_JSON)
+                .content("{\"displayName\":\"After\",\"timezone\":\"Europe/Paris\"}"))
+        .andExpect(status().isOk());
+
+    User updated = users.findById(user.getId()).orElseThrow();
+    assertThat(updated.getDisplayName()).isEqualTo("After");
+    assertThat(updated.getTimezone()).isEqualTo("Europe/Paris");
+    assertThat(updated.getUpdatedAt()).isAfter(beforeUpdate);
+  }
+
+  @Test
+  void avatarUploadPersistsThroughHttpAndReturnsPresignedUrl() throws Exception {
+    User user = phase6User("avatar");
+    String accessToken = tokenService.issue(user).accessToken();
+    when(storageService.presignedUrl(any(), any())).thenReturn("http://localhost:9000/avatar");
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart(
+                    "/api/users/me/avatar")
+                .file(
+                    new org.springframework.mock.web.MockMultipartFile(
+                        "file", "avatar.jpg", "image/jpeg", new byte[] {(byte) 0xff, (byte) 0xd8, (byte) 0xff}))
+                .header("Authorization", "Bearer " + accessToken))
+        .andExpect(status().isOk())
+        .andExpect(result -> assertThat(objectMapper.readTree(result.getResponse().getContentAsString())
+            .at("/data/avatarUrl").asText()).isEqualTo("http://localhost:9000/avatar"));
+
+    User updated = users.findById(user.getId()).orElseThrow();
+    assertThat(updated.getAvatarUrl()).startsWith("avatars/" + user.getId() + "/");
+    assertThat(updated.getAvatarUrl()).endsWith(".jpg");
+    verify(storageService).upload(any(), any(), org.mockito.ArgumentMatchers.eq(3L), org.mockito.ArgumentMatchers.eq("image/jpeg"));
+  }
+
+  @Test
+  void deleteAccountRemovesTokensAndRejectsLoginThroughHttp() throws Exception {
+    User user = phase6User("delete");
+    String accessToken = tokenService.issue(user).accessToken();
+    String refreshToken = tokenService.issue(user).refreshToken();
+    user.setAvatarUrl("avatars/" + user.getId() + "/old.jpg");
+    users.saveAndFlush(user);
+    reset(storageService);
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/users/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(APPLICATION_JSON)
+                .content("{\"password\":\"Password1\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(storageService).deletePrefix("avatars/" + user.getId() + "/");
+    assertThat(users.findById(user.getId())).isEmpty();
+    assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from refresh_tokens where user_id = ?", Long.class, user.getId()))
+        .isZero();
+    assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from password_reset_tokens where user_id = ?", Long.class, user.getId()))
+        .isZero();
+    assertThat(jdbcTemplate.queryForObject(
+            "select count(*) from email_verification_tokens where user_id = ?", Long.class, user.getId()))
+        .isZero();
+    mockMvc
+        .perform(
+            post("/api/auth/refresh")
+                .contentType(APPLICATION_JSON)
+                .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc
+        .perform(
+            post("/api/auth/login")
+                .contentType(APPLICATION_JSON)
+                .content("{\"email\":\"" + user.getEmail() + "\",\"password\":\"Password1\"}"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void deleteAccountRejectsWrongPasswordAndMissingConfirmation() throws Exception {
+    User user = phase6User("delete-invalid");
+    String accessToken = tokenService.issue(user).accessToken();
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/users/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(APPLICATION_JSON)
+                .content("{\"password\":\"WrongPassword1\"}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(result -> assertThat(objectMapper.readTree(result.getResponse().getContentAsString())
+            .at("/error/code").asText()).isEqualTo("INVALID_DELETE_CONFIRMATION"));
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/users/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(APPLICATION_JSON)
+                .content("{}"))
+        .andExpect(status().isUnauthorized())
+        .andExpect(result -> assertThat(objectMapper.readTree(result.getResponse().getContentAsString())
+            .at("/error/code").asText()).isEqualTo("INVALID_DELETE_CONFIRMATION"));
+  }
+
+  @Test
+  void googleAccountDeletionAcceptsFreshTokenThroughHttp() throws Exception {
+    User user = phase6User("delete-google");
+    user.setPasswordHash(null);
+    user.setGoogleSub("delete-google-sub-" + System.nanoTime());
+    user.setAuthProvider(AuthProvider.GOOGLE);
+    users.saveAndFlush(user);
+    String accessToken = tokenService.issue(user).accessToken();
+    when(googleTokenVerifier.verifyFresh("fresh-delete-token"))
+        .thenReturn(new GoogleTokenVerifier.GoogleClaims(user.getGoogleSub(), user.getEmail(), user.getDisplayName(), null));
+
+    mockMvc
+        .perform(
+            org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete("/api/users/me")
+                .header("Authorization", "Bearer " + accessToken)
+                .contentType(APPLICATION_JSON)
+                .content("{\"idToken\":\"fresh-delete-token\"}"))
+        .andExpect(status().isNoContent());
+
+    verify(googleTokenVerifier).verifyFresh("fresh-delete-token");
+    assertThat(users.findById(user.getId())).isEmpty();
+  }
+
+  private User phase6User(String suffix) {
+    User user = new User();
+    user.setEmail("phase6-" + suffix + "-" + System.nanoTime() + "@example.com");
+    user.setPasswordHash(passwordEncoder.encode("Password1"));
+    user.setDisplayName("Phase 6");
+    user.setTimezone("Asia/Ho_Chi_Minh");
+    user.setAuthProvider(AuthProvider.LOCAL);
+    user.setEmailVerified(true);
+    return users.saveAndFlush(user);
+  }
+
+  @Test
+  void unauthenticatedGetMeIsUnauthorized() throws Exception {
+    mockMvc.perform(get("/api/users/me")).andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void everyForeignKeyReferencingUsersCascadesOnDelete() {
+    var constraints =
+        jdbcTemplate.queryForList(
+            """
+            select rc.constraint_name, rc.delete_rule
+            from information_schema.referential_constraints rc
+            join information_schema.table_constraints tc
+              on tc.constraint_name = rc.constraint_name
+             and tc.constraint_schema = rc.constraint_schema
+            join information_schema.constraint_column_usage ccu
+              on ccu.constraint_name = tc.constraint_name
+             and ccu.constraint_schema = tc.constraint_schema
+            where tc.constraint_type = 'FOREIGN KEY'
+              and ccu.table_name = 'users'
+              and tc.constraint_schema = 'public'
+              and tc.table_name <> 'users'
+            """);
+    assertThat(constraints).isNotEmpty();
+    assertThat(constraints).allSatisfy(row -> assertThat(row.get("delete_rule")).isEqualTo("CASCADE"));
+  }
 
   private final GoogleTokenVerifier.GoogleClaims googleClaims =
       new GoogleTokenVerifier.GoogleClaims(

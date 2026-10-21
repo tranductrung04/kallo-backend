@@ -146,6 +146,7 @@ Các biến môi trường chính:
 | `AI_SERVICE_URL`          | URL của AI service (FastAPI)                       | `http://localhost:8000`                           |
 | `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM                 | _(bắt buộc nếu bật push)_                         |
 | `STORAGE_ENDPOINT`        | Endpoint Object Storage (MinIO)                    | `http://localhost:9000`                           |
+| `STORAGE_PUBLIC_ENDPOINT` | Endpoint MinIO có thể truy cập từ mobile           | `http://localhost:9000`                           |
 | `STORAGE_BUCKET`          | Tên bucket lưu ảnh                                 | _(bắt buộc)_                                |
 | `STORAGE_ACCESS_KEY`      | Access key                                         | _(bắt buộc)_                                      |
 | `STORAGE_SECRET_KEY`      | Secret key                                         | _(bắt buộc)_                                      |
