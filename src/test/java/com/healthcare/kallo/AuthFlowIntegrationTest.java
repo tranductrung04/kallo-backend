@@ -5,6 +5,11 @@ import static org.springframework.http.MediaType.APPLICATION_JSON;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import com.healthcare.kallo.repository.UserRepository;
 import com.healthcare.kallo.model.User;
@@ -12,8 +17,11 @@ import com.healthcare.kallo.model.RefreshToken;
 import com.healthcare.kallo.model.enums.AuthProvider;
 import com.healthcare.kallo.model.enums.UserStatus;
 import com.healthcare.kallo.repository.RefreshTokenRepository;
+import com.healthcare.kallo.repository.EmailVerificationTokenRepository;
+import com.healthcare.kallo.repository.PasswordResetTokenRepository;
 import com.healthcare.kallo.service.TokenService;
 import com.healthcare.kallo.service.GoogleTokenVerifier;
+import com.healthcare.kallo.service.EmailService;
 import java.time.Instant;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -30,6 +38,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
+import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -57,11 +66,17 @@ class AuthFlowIntegrationTest {
 
   @Autowired RefreshTokenRepository refreshTokens;
 
+  @Autowired EmailVerificationTokenRepository verificationTokens;
+
+  @Autowired PasswordResetTokenRepository passwordResetTokens;
+
   @Autowired TokenService tokenService;
 
   @Autowired PasswordEncoder passwordEncoder;
 
   @MockitoBean GoogleTokenVerifier googleTokenVerifier;
+
+  @MockitoBean EmailService emailService;
 
   private final GoogleTokenVerifier.GoogleClaims googleClaims =
       new GoogleTokenVerifier.GoogleClaims(
@@ -326,7 +341,15 @@ class AuthFlowIntegrationTest {
         .andExpect(status().isUnauthorized());
     mockMvc
         .perform(get("/api/test/protected").header("Authorization", "Bearer " + accessToken))
-        .andExpect(status().isOk());
+        .andExpect(status().isForbidden())
+        .andExpect(
+            result ->
+                assertThat(
+                        objectMapper
+                            .readTree(result.getResponse().getContentAsString())
+                            .at("/error/code")
+                            .asText())
+                    .isEqualTo("EMAIL_NOT_VERIFIED"));
     mockMvc
         .perform(
             post("/api/auth/change-password")
@@ -337,6 +360,159 @@ class AuthFlowIntegrationTest {
                     {"currentPassword":"Password1","newPassword":"NewPassword1"}
                     """))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  void verificationAttemptsPersistThroughTransactionalFailuresAndLockCode() throws Exception {
+    String email = "verify-rollback-" + System.nanoTime() + "@example.com";
+    String registration =
+        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(
+                "{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Verify\"}"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    String access = objectMapper.readTree(registration).at("/data/accessToken").asText();
+    assertThat(objectMapper.readTree(registration).at("/data/user/emailVerified").asBoolean())
+        .isFalse();
+    ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(emailService).sendVerificationCode(any(User.class), code.capture());
+
+    for (int i = 0; i < 5; i++) {
+      mockMvc.perform(post("/api/auth/verify-email").header("Authorization", "Bearer " + access)
+              .contentType(APPLICATION_JSON).content("{\"code\":\"000000\"}"))
+          .andExpect(status().isBadRequest());
+    }
+
+    User user = users.findByNormalizedEmail(email).orElseThrow();
+    var token = verificationTokens.findAll().stream()
+        .filter(t -> t.getUser().getId().equals(user.getId())).findFirst().orElseThrow();
+    assertThat(token.getAttempts()).isEqualTo(5);
+    assertThat(token.getUsedAt()).isNotNull();
+    mockMvc.perform(post("/api/auth/verify-email").header("Authorization", "Bearer " + access)
+            .contentType(APPLICATION_JSON).content("{\"code\":\"" + code.getValue() + "\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void verifiedAccessTokenWorksWhilePreVerificationTokenRemainsBlocked() throws Exception {
+    String email = "verify-success-" + System.nanoTime() + "@example.com";
+    String registration =
+        mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(
+                "{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Verify\"}"))
+            .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    String oldAccess = objectMapper.readTree(registration).at("/data/accessToken").asText();
+    String refresh = objectMapper.readTree(registration).at("/data/refreshToken").asText();
+    ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(emailService).sendVerificationCode(any(User.class), code.capture());
+
+    String verification =
+        mockMvc.perform(post("/api/auth/verify-email").header("Authorization", "Bearer " + oldAccess)
+                .contentType(APPLICATION_JSON).content("{\"code\":\"" + code.getValue() + "\"}"))
+            .andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+    String newAccess = objectMapper.readTree(verification).at("/data/accessToken").asText();
+    assertThat(objectMapper.readTree(verification).at("/data/refreshToken").isNull()).isTrue();
+    assertThat(objectMapper.readTree(verification).at("/data/user/emailVerified").asBoolean())
+        .isTrue();
+
+    mockMvc.perform(get("/api/test/protected").header("Authorization", "Bearer " + oldAccess))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(get("/api/test/protected").header("Authorization", "Bearer " + newAccess))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/auth/refresh").contentType(APPLICATION_JSON)
+            .content("{\"refreshToken\":\"" + refresh + "\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void resetAttemptsPersistThroughTransactionalFailuresAndLockCode() throws Exception {
+    String email = "reset-rollback-" + System.nanoTime() + "@example.com";
+    mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON).content(
+            "{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Reset\"}"))
+        .andExpect(status().isCreated());
+    org.mockito.Mockito.clearInvocations(emailService);
+    mockMvc.perform(post("/api/auth/forgot-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\"}")).andExpect(status().isOk());
+    ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(emailService).sendPasswordResetCode(any(User.class), code.capture());
+
+    for (int i = 0; i < 5; i++) {
+      mockMvc.perform(post("/api/auth/reset-password").contentType(APPLICATION_JSON).content(
+              "{\"email\":\"" + email + "\",\"code\":\"000000\",\"newPassword\":\"NewPassword1\"}"))
+          .andExpect(status().isBadRequest());
+    }
+    User user = users.findByNormalizedEmail(email).orElseThrow();
+    var token = passwordResetTokens.findAll().stream()
+        .filter(t -> t.getUser().getId().equals(user.getId())).findFirst().orElseThrow();
+    assertThat(token.getAttempts()).isEqualTo(5);
+    assertThat(token.getUsedAt()).isNotNull();
+    mockMvc.perform(post("/api/auth/reset-password").contentType(APPLICATION_JSON).content(
+            "{\"email\":\"" + email + "\",\"code\":\"" + code.getValue()
+                + "\",\"newPassword\":\"NewPassword1\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void resetPasswordSuccessChangesPasswordVerifiesEmailAndRevokesRefreshToken() throws Exception {
+    String email = "reset-success-" + System.nanoTime() + "@example.com";
+    String registration = mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Reset\"}"))
+        .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    String oldRefresh = objectMapper.readTree(registration).at("/data/refreshToken").asText();
+    org.mockito.Mockito.clearInvocations(emailService);
+    mockMvc.perform(post("/api/auth/forgot-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\"}")).andExpect(status().isOk());
+    ArgumentCaptor<String> code = ArgumentCaptor.forClass(String.class);
+    org.mockito.Mockito.verify(emailService).sendPasswordResetCode(any(User.class), code.capture());
+
+    mockMvc.perform(post("/api/auth/reset-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"code\":\"" + code.getValue()
+                + "\",\"newPassword\":\"NewPassword1\"}"))
+        .andExpect(status().isNoContent());
+
+    assertThat(users.findByNormalizedEmail(email).orElseThrow().isEmailVerified()).isTrue();
+    mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"Password1\"}"))
+        .andExpect(status().isUnauthorized());
+    mockMvc.perform(post("/api/auth/login").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"NewPassword1\"}"))
+        .andExpect(status().isOk());
+    mockMvc.perform(post("/api/auth/refresh").contentType(APPLICATION_JSON)
+            .content("{\"refreshToken\":\"" + oldRefresh + "\"}"))
+        .andExpect(status().isUnauthorized());
+  }
+
+  @Test
+  void forgotPasswordDoesNotRevealUnknownEmailOrSendDuplicateWithinInterval() throws Exception {
+    String unknown = "unknown-" + System.nanoTime() + "@example.com";
+    mockMvc.perform(post("/api/auth/forgot-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + unknown + "\"}")).andExpect(status().isOk());
+    verify(emailService, never()).sendPasswordResetCode(any(User.class), any());
+
+    String email = "forgot-limit-" + System.nanoTime() + "@example.com";
+    mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Forgot\"}"))
+        .andExpect(status().isCreated());
+    clearInvocations(emailService);
+    mockMvc.perform(post("/api/auth/forgot-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\"}")).andExpect(status().isOk());
+    mockMvc.perform(post("/api/auth/forgot-password").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\"}")).andExpect(status().isOk());
+    verify(emailService, times(1)).sendPasswordResetCode(any(User.class), any());
+  }
+
+  @Test
+  void resendVerificationIsRateLimitedAndVerifiedUsersCannotResend() throws Exception {
+    String email = "resend-limit-" + System.nanoTime() + "@example.com";
+    String registration = mockMvc.perform(post("/api/auth/register").contentType(APPLICATION_JSON)
+            .content("{\"email\":\"" + email + "\",\"password\":\"Password1\",\"displayName\":\"Resend\"}"))
+        .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    String access = objectMapper.readTree(registration).at("/data/accessToken").asText();
+    mockMvc.perform(post("/api/auth/resend-verification").header("Authorization", "Bearer " + access))
+        .andExpect(status().isTooManyRequests());
+
+    User user = users.findByNormalizedEmail(email).orElseThrow();
+    user.setEmailVerified(true);
+    users.saveAndFlush(user);
+    mockMvc.perform(post("/api/auth/resend-verification").header("Authorization", "Bearer " + access))
+        .andExpect(status().isConflict());
   }
 
   @Test

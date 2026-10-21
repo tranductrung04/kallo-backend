@@ -9,6 +9,12 @@ import org.springframework.validation.annotation.Validated;
 @ConfigurationProperties("app.google")
 @Validated
 public record GoogleProperties(@NotBlank String clientIds, @NotBlank String jwksUri) {
+  public GoogleProperties {
+    if (jwksUri == null || jwksUri.isBlank()) {
+      jwksUri = "https://www.googleapis.com/oauth2/v3/certs";
+    }
+  }
+
   public List<String> clientIdList() {
     return clientIds == null || clientIds.isBlank()
         ? List.of()

@@ -15,9 +15,12 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+  private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
   private static final String DUMMY_PASSWORD_HASH =
       "$2a$12$LQv3c1yqBWVHxkd0L5k8jO6QJt8PjKq5J6O2m0q2gK8K5vS6G0m8W";
   private final UserRepository users;
@@ -27,6 +30,7 @@ public class AuthServiceImpl implements AuthService {
   private final ProfileStatusProvider profileStatus;
   private final TransactionTemplate txTemplate;
   private final GoogleTokenVerifier googleTokenVerifier;
+  private final EmailVerificationService emailVerification;
 
   public AuthServiceImpl(
       UserRepository u,
@@ -35,7 +39,7 @@ public class AuthServiceImpl implements AuthService {
       UserMapper m,
       ProfileStatusProvider p,
       TransactionTemplate txTemplate,
-      GoogleTokenVerifier googleTokenVerifier) {
+      GoogleTokenVerifier googleTokenVerifier, EmailVerificationService emailVerification) {
     users = u;
     encoder = e;
     tokens = t;
@@ -43,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
     profileStatus = p;
     this.txTemplate = txTemplate;
     this.googleTokenVerifier = googleTokenVerifier;
+    this.emailVerification = emailVerification;
   }
 
   public AuthResponse register(RegisterRequest r) {
@@ -50,7 +55,7 @@ public class AuthServiceImpl implements AuthService {
     if (users.existsByNormalizedEmail(email))
       throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
     String encodedPassword = encoder.encode(r.password());
-    return txTemplate.execute(
+    AuthResponse response = txTemplate.execute(
         status -> {
           if (users.existsByNormalizedEmail(email))
             throw new BusinessException(ErrorCode.EMAIL_ALREADY_EXISTS);
@@ -62,6 +67,12 @@ public class AuthServiceImpl implements AuthService {
           u.setEmailVerified(false);
           return response(users.save(u));
         });
+    try {
+      emailVerification.sendCode(response.user().id());
+    } catch (RuntimeException e) {
+      log.warn("Unable to create verification code for user {}", response.user().id(), e);
+    }
+    return response;
   }
 
   public AuthResponse login(LoginRequest r) {
@@ -162,6 +173,20 @@ public class AuthServiceImpl implements AuthService {
           tokens.revokeAll(managed);
           return response(managed);
         });
+  }
+
+  @Override
+  public AuthResponse verifyEmail(UUID userId, String code) {
+    emailVerification.verify(userId, code);
+    User user = users.findById(userId).orElseThrow(() -> new BusinessException(ErrorCode.UNAUTHORIZED));
+    return new AuthResponse(
+        tokens.issueAccessToken(user),
+        null,
+        "Bearer",
+        tokens.accessTokenLifetimeSeconds(),
+        mapper.toSummary(user),
+        profileStatus.isCompleted(user),
+        false);
   }
 
   private AuthResponse response(User u) {

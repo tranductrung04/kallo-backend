@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.healthcare.kallo.dto.response.AuthResponse;
 import com.healthcare.kallo.dto.response.UserSummary;
 import com.healthcare.kallo.service.AuthService;
+import com.healthcare.kallo.service.EmailVerificationService;
+import com.healthcare.kallo.service.PasswordResetService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +27,8 @@ class AuthControllerTest {
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private AuthService authService;
+  @MockitoBean private EmailVerificationService emailVerificationService;
+  @MockitoBean private PasswordResetService passwordResetService;
 
   @Test
   void registerRejectsInvalidPasswordWithFieldDetails() throws Exception {

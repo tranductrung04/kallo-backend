@@ -7,6 +7,8 @@ import java.util.UUID;
 public interface TokenService {
   TokenPair issue(User user);
 
+  String issueAccessToken(User user);
+
   TokenPair rotate(String refreshToken);
 
   void revoke(String refreshToken);
