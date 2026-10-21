@@ -29,8 +29,10 @@ info:
     **403 `EMAIL_NOT_VERIFIED`**. Ngoại lệ: nhóm `/api/auth/**` và `GET /api/users/me`. Sau
     `verify-email`, dùng access token mới do endpoint đó trả về.
 
-    ## Giới hạn tần suất (Phase 7)
-    Vượt ngưỡng trả 429 `TOO_MANY_REQUESTS` kèm header `Retry-After` (giây).
+    ## Giới hạn tần suất
+    Phase 5 giới hạn gửi lại mã theo user/email và trả 429 khi xác định được user; header `Retry-After`
+    sẽ được bổ sung trong Phase 7. Giới hạn theo IP (bao gồm forgot-password với email không tồn tại)
+    cũng thuộc Phase 7.
   contact:
     name: Nhóm Kallo
   license:
@@ -346,8 +348,8 @@ paths:
       summary: Yêu cầu mã OTP đặt lại mật khẩu
       description: |
         FR-AUTH-04. Nếu email tồn tại, gửi OTP 6 chữ số (hạn 15 phút). **Luôn trả 200** dù email có tồn tại
-        hay không, để không lộ email nào đã đăng ký. Giới hạn: 3 mã/giờ/email và 10 yêu cầu/giờ/IP, áp dụng cả
-        với email không tồn tại.
+        hay không, để không lộ email nào đã đăng ký. Phase 5 giới hạn 3 mã/giờ/email và khoảng cách 60 giây;
+        khi vượt giới hạn hệ thống vẫn trả 200 và không gửi thư mới. Giới hạn 10 yêu cầu/giờ/IP thuộc Phase 7.
       security: []
       requestBody:
         required: true
@@ -364,8 +366,6 @@ paths:
                 $ref: '#/components/schemas/EmptyApiResponse'
         '400':
           $ref: '#/components/responses/ValidationError'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
 
   /api/auth/reset-password:
     post:
@@ -478,7 +478,8 @@ paths:
       summary: Gửi lại mã OTP xác minh email
       description: |
         FR-AUTH-09. Cần Bearer, không có body. Mã cũ chưa dùng bị vô hiệu. Giới hạn: cách nhau ≥ 60 giây,
-        tối đa 3 mã/giờ/user và 10 yêu cầu/giờ/IP; vượt thì 429 kèm `Retry-After`. Email đã xác minh thì 409
+        tối đa 3 mã/giờ/user; vượt thì 429 (chưa có `Retry-After`, sẽ bổ sung ở Phase 7). Giới hạn
+        10 yêu cầu/giờ/IP thuộc Phase 7. Email đã xác minh thì 409
         `EMAIL_ALREADY_VERIFIED`.
       security:
         - bearerAuth: []

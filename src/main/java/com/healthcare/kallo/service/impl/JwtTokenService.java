@@ -34,6 +34,11 @@ public class JwtTokenService implements TokenService {
     return issue(u, UUID.randomUUID());
   }
 
+  @Override
+  public String issueAccessToken(User user) {
+    return accessToken(user);
+  }
+
   private TokenPair issue(User u, UUID familyId) {
     String access = accessToken(u);
     String refresh = createRefreshToken(u, familyId);
@@ -46,6 +51,7 @@ public class JwtTokenService implements TokenService {
         JwtClaimsSet.builder()
             .subject(u.getId().toString())
             .claim("role", u.getRole().name())
+            .claim("email_verified", u.isEmailVerified())
             .id(UUID.randomUUID().toString())
             .issuedAt(now)
             .expiresAt(now.plusMillis(props.accessExpiration()))

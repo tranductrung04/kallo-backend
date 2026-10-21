@@ -17,4 +17,6 @@ public interface AuthService {
   void logout(String refreshToken, boolean allDevices);
 
   AuthResponse changePassword(UUID userId, String currentPassword, String newPassword);
+
+  AuthResponse verifyEmail(UUID userId, String code);
 }

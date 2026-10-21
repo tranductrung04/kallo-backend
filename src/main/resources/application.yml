@@ -14,8 +14,21 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: false
+  mail:
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:false}
+          connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT:3000}
+          timeout: ${MAIL_SMTP_TIMEOUT:5000}
+          writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT:5000}
 
 app:
+  otp-hmac-secret: ${OTP_HMAC_SECRET}
   jwt:
     secret: ${JWT_SECRET}
     access-expiration: ${JWT_ACCESS_EXPIRATION:900000}
@@ -26,6 +39,8 @@ app:
     lock-duration: ${APP_AUTH_LOCK_DURATION:15m}
     otp-expiration: ${APP_AUTH_OTP_EXPIRATION:15m}
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
+    resend-interval: ${APP_AUTH_RESEND_INTERVAL:60s}
+    max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
   google:
     client-ids: ${GOOGLE_CLIENT_ID}
-    jwks-uri: ${GOOGLE_JWKS_URI}
+    jwks-uri: ${GOOGLE_JWKS_URI:https://www.googleapis.com/oauth2/v3/certs}

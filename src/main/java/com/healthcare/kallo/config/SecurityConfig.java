@@ -18,6 +18,11 @@ import org.springframework.security.oauth2.server.resource.web.DefaultBearerToke
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Configuration
 public class SecurityConfig {
@@ -101,8 +106,9 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/api/auth/change-password")
                     .authenticated()
-                    .anyRequest()
-                    .authenticated())
+                    .requestMatchers("/api/auth/verify-email", "/api/auth/resend-verification")
+                    .authenticated()
+                    .anyRequest().access(emailVerifiedManager()))
         .oauth2ResourceServer(
             o ->
                 o.bearerTokenResolver(resolver)
@@ -110,6 +116,19 @@ public class SecurityConfig {
                     .accessDeniedHandler(denied)
                     .jwt(j -> j.jwtAuthenticationConverter(jwtAuthenticationConverter())))
         .build();
+  }
+
+  private AuthorizationManager<org.springframework.security.web.access.intercept.RequestAuthorizationContext>
+      emailVerifiedManager() {
+    return (authentication, context) -> {
+      HttpServletRequest request = context.getRequest();
+      if (request.getMethod().equals("GET") && request.getRequestURI().equals("/api/users/me")) {
+        return new AuthorizationDecision(true);
+      }
+      Authentication auth = authentication.get();
+      if (!(auth.getPrincipal() instanceof Jwt jwt)) return new AuthorizationDecision(false);
+      return new AuthorizationDecision(Boolean.TRUE.equals(jwt.getClaim("email_verified")));
+    };
   }
 
   @Bean

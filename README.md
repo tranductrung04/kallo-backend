@@ -14,7 +14,6 @@
 - [Tính năng chính](#tính-năng-chính)
 - [Kiến trúc hệ thống](#kiến-trúc-hệ-thống)
 - [Công nghệ sử dụng](#công-nghệ-sử-dụng)
-- [Cấu trúc thư mục](#cấu-trúc-thư-mục)
 - [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
 - [Cài đặt & chạy dự án](#cài-đặt--chạy-dự-án)
 - [Cấu hình](#cấu-hình)
@@ -77,48 +76,6 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 | API docs        | SpringDoc OpenAPI (Swagger UI)                         |
 | Testing         | JUnit 5, Mockito, Testcontainers                       |
 | Container       | Docker, Docker Compose                                 |
-
-## Cấu trúc thư mục
-
-```
-kallo-backend/
-├── src/
-│   ├── main/
-│   │   ├── java/com/healthcare/kallo/
-│   │   │   ├── KalloBackendApplication.java
-│   │   │   ├── common/            # Hằng số, response wrapper, tiện ích dùng chung
-│   │   │   ├── config/            # Security, CORS, WebSocket, OpenAPI, Storage, FCM
-│   │   │   ├── controller/        # REST controllers
-│   │   │   ├── dto/               # Request / Response DTO
-│   │   │   ├── model/            # JPA entities
-│   │   │   ├── exception/         # Custom exception & global exception handler
-│   │   │   ├── mapper/            # Chuyển đổi Entity <-> DTO
-│   │   │   ├── repository/        # Spring Data JPA repositories
-│   │   │   └── service/           # Business logic (interface)
-│   │   │       └── impl/          # Cài đặt service
-│   │   └── resources/
-│   │       ├── db/migration/      # Flyway: V1__init_schema.sql, V2__...
-│   │       ├── static/
-│   │       ├── templates/
-│   │       ├── application.yml
-│   │       ├── application-dev.yml
-│   │       └── application-prod.yml
-│   └── test/
-│       └── java/com/healthcare/kallo/
-├── gradle/wrapper/
-├── .gitattributes
-├── .gitignore
-├── build.gradle
-├── docker-compose.yml
-├── gradlew
-├── gradlew.bat
-├── HELP.md
-├── LICENSE.txt
-├── README.md
-└── settings.gradle
-```
-
-> Dự án tổ chức theo **layer** (controller → service → repository), các entity chính được liệt kê ở mục [Database & Migration](#database--migration).
 
 ## Yêu cầu hệ thống
 
@@ -244,6 +201,8 @@ Các nhóm thực thể chính:
 - OpenAPI JSON: http://localhost:8080/v3/api-docs
 
 ## Testing
+
+- Tài liệu test: [docs/tests](docs/tests)
 
 ```bash
 # Chạy toàn bộ test
