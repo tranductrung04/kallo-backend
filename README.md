@@ -47,17 +47,7 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 
 ## Kiến trúc hệ thống
 
-```
-┌──────────────┐   REST / WebSocket   ┌──────────────────┐   HTTP (JSON)   ┌──────────────────┐
-│ Mobile App   │ ───────────────────▶ │ Spring Boot API  │ ──────────────▶ │ AI Service       │
-│ (Expo / RN)  │ ◀─────────────────── │ (repo này)       │ ◀────────────── │ (FastAPI + ONNX) │
-└──────────────┘                      └───────┬──────────┘                 └──────────────────┘
-                                              │
-                          ┌───────────────────┼────────────────────┐
-                          ▼                   ▼                    ▼
-                    PostgreSQL        Cloud Object Storage   Firebase Cloud
-                    (Flyway)          (ảnh món ăn, avatar)   Messaging (FCM)
-```
+![System Architecture](docs/images/system-architecture.png)
 
 ## Công nghệ sử dụng
 
@@ -178,17 +168,6 @@ spring:
 
 Quy ước đặt tên: `V<số phiên bản>__<mô_tả>.sql`, ví dụ `V1__init_schema.sql`, `V2__add_streak_tables.sql`.  
 **Không sửa** file migration đã chạy – hãy tạo phiên bản mới.
-
-Các nhóm thực thể chính:
-
-| Nhóm            | Thực thể                                                         |
-|-----------------|------------------------------------------------------------------|
-| Người dùng      | `User`, `UserHealthProfile`                                      |
-| Theo dõi        | `WeightLog`, `WaterLog`, `ActivityLog`, `HealthSyncLog`          |
-| Dinh dưỡng      | `Food`, `UserFoodLog`, `MealPlan`, `MealPlanFood`, `DailySummary`|
-| Chatbot         | `Conversation`, `ChatMessage`                                    |
-| Động lực        | `Streak`, `Badge`, `UserBadge`, `Challenge`, `UserChallenge`     |
-| Xã hội & hệ thống | `Friendship`, `Notification`                                   |
 
 ```bash
 # Xem trạng thái migration (nếu cấu hình plugin Flyway cho Gradle)

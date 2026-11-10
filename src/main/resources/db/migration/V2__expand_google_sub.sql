@@ -1,2 +1,0 @@
-ALTER TABLE users
-    ALTER COLUMN google_sub TYPE VARCHAR(255);

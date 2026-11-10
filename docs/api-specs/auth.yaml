@@ -570,7 +570,7 @@ paths:
         '400':
           $ref: '#/components/responses/ValidationError'
         '401':
-          description: `UNAUTHORIZED` khi thiếu access token; `INVALID_DELETE_CONFIRMATION` khi xác nhận mật khẩu hoặc Google account sai; `GOOGLE_TOKEN_INVALID` khi Google ID token không hợp lệ hoặc quá 5 phút.
+          description: "`UNAUTHORIZED` khi thiếu access token; `INVALID_DELETE_CONFIRMATION` khi xác nhận mật khẩu hoặc Google account sai; `GOOGLE_TOKEN_INVALID` khi Google ID token không hợp lệ hoặc quá 5 phút."
           content:
             application/json:
               schema:
