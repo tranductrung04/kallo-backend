@@ -1,7 +1,7 @@
 package com.healthcare.kallo.mapper;
 
-import com.healthcare.kallo.dto.response.UserSummary;
-import com.healthcare.kallo.model.User;
+import com.healthcare.kallo.dto.response.auth.UserSummary;
+import com.healthcare.kallo.model.auth.User;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 

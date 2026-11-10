@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.config.GoogleProperties;
+import com.healthcare.kallo.service.auth.GoogleTokenVerifier;
 import com.nimbusds.jose.jwk.RSAKey;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;

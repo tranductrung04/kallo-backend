@@ -6,11 +6,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.healthcare.kallo.dto.response.AuthResponse;
-import com.healthcare.kallo.dto.response.UserSummary;
-import com.healthcare.kallo.service.AuthService;
-import com.healthcare.kallo.service.EmailVerificationService;
-import com.healthcare.kallo.service.PasswordResetService;
+import com.healthcare.kallo.controller.auth.AuthController;
+import com.healthcare.kallo.dto.request.auth.LoginRequest;
+import com.healthcare.kallo.dto.response.auth.AuthResponse;
+import com.healthcare.kallo.dto.response.auth.UserSummary;
+import com.healthcare.kallo.service.auth.AuthService;
+import com.healthcare.kallo.service.auth.EmailVerificationService;
+import com.healthcare.kallo.service.auth.PasswordResetService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -49,8 +51,8 @@ class AuthControllerTest {
 
   @Test
   void passwordToStringIsRedacted() {
-    com.healthcare.kallo.dto.request.LoginRequest request =
-        new com.healthcare.kallo.dto.request.LoginRequest("user@example.com", "Password1");
+    LoginRequest request =
+        new LoginRequest("user@example.com", "Password1");
     org.junit.jupiter.api.Assertions.assertFalse(request.toString().contains("Password1"));
   }
 

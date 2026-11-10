@@ -6,12 +6,14 @@ import static org.mockito.Mockito.*;
 
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.config.StorageProperties;
-import com.healthcare.kallo.dto.request.DeleteAccountRequest;
-import com.healthcare.kallo.dto.request.UpdateUserRequest;
-import com.healthcare.kallo.model.User;
-import com.healthcare.kallo.model.enums.Role;
-import com.healthcare.kallo.repository.UserRepository;
-import com.healthcare.kallo.service.impl.UserServiceImpl;
+import com.healthcare.kallo.dto.request.auth.DeleteAccountRequest;
+import com.healthcare.kallo.dto.request.auth.UpdateUserRequest;
+import com.healthcare.kallo.model.auth.User;
+import com.healthcare.kallo.model.auth.enums.Role;
+import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.service.auth.GoogleTokenVerifier;
+import com.healthcare.kallo.service.auth.StorageService;
+import com.healthcare.kallo.service.auth.impl.UserServiceImpl;
 import java.time.Duration;
 import java.util.Optional;
 import java.util.UUID;
@@ -26,9 +28,11 @@ import org.springframework.mock.web.MockMultipartFile;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
   @Mock UserRepository users;
-  @Mock StorageService storage;
+  @Mock
+  StorageService storage;
   @Mock PasswordEncoder passwordEncoder;
-  @Mock GoogleTokenVerifier googleTokenVerifier;
+  @Mock
+  GoogleTokenVerifier googleTokenVerifier;
 
   private UserServiceImpl service;
   private User user;
