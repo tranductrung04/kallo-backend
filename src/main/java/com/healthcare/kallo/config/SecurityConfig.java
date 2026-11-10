@@ -1,5 +1,7 @@
 package com.healthcare.kallo.config;
 
+import com.healthcare.kallo.security.auth.CustomAccessDeniedHandler;
+import com.healthcare.kallo.security.auth.CustomAuthenticationEntryPoint;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
@@ -11,7 +13,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.*;
-import com.healthcare.kallo.service.GoogleTokenVerifier;
+import com.healthcare.kallo.service.auth.GoogleTokenVerifier;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
@@ -22,7 +24,6 @@ import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
-import org.springframework.security.core.context.SecurityContextHolder;
 
 @Configuration
 public class SecurityConfig {
@@ -91,8 +92,8 @@ public class SecurityConfig {
   @Bean
   SecurityFilterChain filterChain(
       HttpSecurity http,
-      com.healthcare.kallo.security.CustomAuthenticationEntryPoint ep,
-      com.healthcare.kallo.security.CustomAccessDeniedHandler denied,
+      CustomAuthenticationEntryPoint ep,
+      CustomAccessDeniedHandler denied,
       BearerTokenResolver resolver)
       throws Exception {
     return http.csrf(c -> c.disable())

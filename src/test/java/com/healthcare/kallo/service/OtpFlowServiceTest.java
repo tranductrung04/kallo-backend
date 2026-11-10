@@ -7,15 +7,17 @@ import static org.mockito.Mockito.*;
 
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.config.AuthProperties;
-import com.healthcare.kallo.model.EmailVerificationToken;
-import com.healthcare.kallo.model.PasswordResetToken;
-import com.healthcare.kallo.model.User;
-import com.healthcare.kallo.repository.EmailVerificationTokenRepository;
-import com.healthcare.kallo.repository.PasswordResetTokenRepository;
-import com.healthcare.kallo.repository.UserRepository;
+import com.healthcare.kallo.model.auth.EmailVerificationToken;
+import com.healthcare.kallo.model.auth.PasswordResetToken;
+import com.healthcare.kallo.model.auth.User;
+import com.healthcare.kallo.repository.auth.EmailVerificationTokenRepository;
+import com.healthcare.kallo.repository.auth.PasswordResetTokenRepository;
+import com.healthcare.kallo.repository.auth.UserRepository;
 import java.time.*;
 import java.util.Optional;
 import java.util.UUID;
+
+import com.healthcare.kallo.service.auth.*;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
@@ -31,9 +33,11 @@ class OtpFlowServiceTest {
   @Mock UserRepository users;
   @Mock EmailVerificationTokenRepository verificationTokens;
   @Mock PasswordResetTokenRepository resetTokens;
-  @Mock EmailService email;
+  @Mock
+  EmailService email;
   @Mock PasswordEncoder encoder;
-  @Mock TokenService tokenService;
+  @Mock
+  TokenService tokenService;
 
   @Test
   void verificationCodeIsLockedAfterFiveInvalidAttempts() {
