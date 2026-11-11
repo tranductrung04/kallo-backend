@@ -52,6 +52,8 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
     validateDistance(type, request.distanceKm());
+    String source = source(request.source());
+    validateRoute(source, request.routePolyline(), request.distanceKm(), request.durationMin());
     BigDecimal weight = bodyMetrics.weightAt(userId, request.startedAt())
         .orElseThrow(() -> new BusinessException(ErrorCode.WEIGHT_REQUIRED));
     BigDecimal met = met(type, request.intensity());
@@ -59,7 +61,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     BigDecimal calories = CalorieCalculator.calculate(met, weight, request.durationMin());
     int inserted = activities.insertIfAbsent(userId, clientUuid, type.getCode(),
         request.intensity().name(), met, weight, request.durationMin(), request.distanceKm(),
-        calories, source(request.source()), request.externalId(), request.startedAt(), ended, request.note());
+        calories, source, request.externalId(), request.startedAt(), ended, request.note(), request.routePolyline());
     ActivityLog result = activities.findByUserIdAndClientUuid(userId, clientUuid)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (inserted == 0) {
@@ -106,6 +108,8 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
     validateDistance(type, request.distanceKm());
+    String source = activity.getSource().name();
+    validateRoute(source, request.routePolyline(), request.distanceKm(), request.durationMin());
     BigDecimal weight = bodyMetrics.weightAt(userId, request.startedAt())
         .orElseThrow(() -> new BusinessException(ErrorCode.WEIGHT_REQUIRED));
     BigDecimal met = met(type, request.intensity());
@@ -115,6 +119,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     activity.setDistanceKm(request.distanceKm()); activity.setMet(met); activity.setWeightKgUsed(weight);
     activity.setCaloriesBurned(CalorieCalculator.calculate(met, weight, request.durationMin()));
     activity.setNote(request.note());
+    activity.setRoutePolyline(request.routePolyline());
     ActivityLog saved = activities.saveAndFlush(activity);
     deduplicator.deduplicate(userId);
     publish(userId, saved.getStartedAt());
@@ -212,6 +217,66 @@ public class ActivityLogServiceImpl implements ActivityLogService {
           Map.of("field", "distanceKm", "message", "Distance is not supported for this activity"));
     }
   }
+    private void validateRoute(String source, String routePolyline, BigDecimal distance, int durationMin) {
+      if (routePolyline != null) {
+        if (!source.equals("GPS")) {
+          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+              Map.of("field", "routePolyline", "message", "Route requires GPS source"));
+        }
+        if (routePolyline.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > properties.routeMaxBytes()) {
+          throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE,
+              Map.of("field", "routePolyline", "message", "Route polyline is too large"));
+        }
+        if (!isValidPolyline(routePolyline)) {
+          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+              Map.of("field", "routePolyline", "message", "Route polyline is invalid"));
+        }
+      }
+      if (source.equals("GPS") && distance != null) {
+        BigDecimal maxDistance = properties.gpsMaxSpeedKmh()
+            .multiply(BigDecimal.valueOf(durationMin))
+            .divide(BigDecimal.valueOf(60), 2, java.math.RoundingMode.CEILING);
+        if (distance.compareTo(maxDistance) > 0) {
+          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+              Map.of("field", "distanceKm", "message", "GPS speed is not plausible"));
+        }
+      }
+    }
+    private boolean isValidPolyline(String polyline) {
+      if (polyline.isBlank()) return false;
+      int index = 0, points = 0;
+      long latitude = 0, longitude = 0;
+      try {
+        while (index < polyline.length()) {
+          long[] lat = decodePolylineValue(polyline, index);
+          index = (int) lat[1];
+          long[] lon = decodePolylineValue(polyline, index);
+          index = (int) lon[1];
+          latitude += lat[0]; longitude += lon[0];
+          if (latitude < -90000000 || latitude > 90000000
+              || longitude < -180000000 || longitude > 180000000) return false;
+          points++;
+        }
+      } catch (IllegalArgumentException exception) {
+        return false;
+      }
+      return points >= 2;
+    }
+    private long[] decodePolylineValue(String value, int start) {
+      long result = 0; int shift = 0; int index = start;
+      while (index < value.length()) {
+        int chunk = value.charAt(index++) - 63;
+        if (chunk < 0 || chunk > 63) throw new IllegalArgumentException();
+        result |= (long) (chunk & 0x1f) << shift;
+        if ((chunk & 0x20) == 0) {
+          long decoded = (result & 1) != 0 ? ~(result >> 1) : result >> 1;
+          return new long[] {decoded, index};
+        }
+        shift += 5;
+        if (shift > 60) throw new IllegalArgumentException();
+      }
+      throw new IllegalArgumentException();
+    }
   private void validateTime(Instant startedAt) {
     Instant now = clock.instant();
     if (startedAt.isAfter(now.plus(properties.futureTolerance()))

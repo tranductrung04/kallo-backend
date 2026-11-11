@@ -15,7 +15,8 @@ public record UpdateActivityRequest(
     @Min(1) @Max(1440) @JsonAlias("durationMinutes") int durationMin,
     @DecimalMin("0.0") @DecimalMax("9999.99") BigDecimal distanceKm,
     @Size(max = 255) String note,
-    Instant clientUpdatedAt) {
+    Instant clientUpdatedAt,
+    String routePolyline) {
   public UpdateActivityRequest {
     if (intensity == null) intensity = Intensity.MODERATE;
   }

@@ -10,4 +10,5 @@ public record ActivityResponse(
     UUID id, UUID userId, UUID clientUuid, String activityType, Intensity intensity,
     BigDecimal met, BigDecimal weightKgUsed, int durationMin, BigDecimal distanceKm,
     BigDecimal caloriesBurned, ActivitySource source, Instant startedAt, Instant endedAt,
-    UUID supersededBy, String note, Instant createdAt, Instant updatedAt, Instant deletedAt) {}
+    UUID supersededBy, String note, Instant createdAt, Instant updatedAt, Instant deletedAt,
+    String routePolyline) {}

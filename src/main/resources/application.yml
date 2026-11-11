@@ -59,6 +59,8 @@ app:
     step-source-priority: ${APP_ACT_STEP_SOURCE_PRIORITY:HEALTH_CONNECT,HEALTHKIT,DEVICE_SENSOR}
     dedup-overlap-ratio: ${APP_ACT_DEDUP_OVERLAP_RATIO:0.8}
     tombstone-retention: ${APP_ACT_TOMBSTONE_RETENTION:90d}
+    route-max-bytes: ${APP_ACT_ROUTE_MAX_BYTES:102400}
+    gps-max-speed-kmh: ${APP_ACT_GPS_MAX_SPEED_KMH:60}
   google:
     client-ids: ${GOOGLE_CLIENT_ID}
     jwks-uri: ${GOOGLE_JWKS_URI}
