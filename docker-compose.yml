@@ -40,7 +40,7 @@ services:
       - "8025:8025"
 
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest
     container_name: ${APP_NAME}-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
