@@ -6,6 +6,8 @@ import com.healthcare.kallo.dto.response.act.ActivityResponse;
 import java.time.LocalDate;
 import java.util.Optional;
 import java.util.UUID;
+import java.time.Instant;
+import java.util.List;
 
 public interface ActivityLogService {
   CreateResult create(UUID userId, CreateActivityRequest request);
@@ -15,5 +17,10 @@ public interface ActivityLogService {
   ActivityResponse update(UUID userId, UUID id, UpdateActivityRequest request);
   void delete(UUID userId, UUID id);
   void deleteByClientUuid(UUID userId, UUID clientUuid);
+
+  List<ActivityResponse> changedSince(UUID userId, Instant since);
+
+  ActivityResponse upsertFromClient(
+      UUID userId, CreateActivityRequest request, Instant clientUpdatedAt, Instant clientDeletedAt);
   record CreateResult(ActivityResponse response, boolean created) {}
 }

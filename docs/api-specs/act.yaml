@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - ACT API
+  version: 1.0.0
+  description: |
+    API theo dõi cân nặng, hoạt động và dữ liệu sức khoẻ đồng bộ. User id luôn lấy từ JWT.
+    Mobile gửi lại cùng clientUuid/externalId để đạt tính idempotent.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: weight-logs
+  - name: activities
+  - name: health-sync
+paths:
+  /api/weight-logs:
+    get:
+      tags: [weight-logs]
+      summary: Liệt kê cân nặng theo ngày
+      parameters:
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+    post:
+      tags: [weight-logs]
+      summary: Ghi cân nặng
+      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      responses:
+        '201': { $ref: '#/components/responses/ApiResponse' }
+  /api/activities:
+    get:
+      tags: [activities]
+      summary: Liệt kê hoạt động
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+    post:
+      tags: [activities]
+      summary: Ghi hoạt động
+      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      responses:
+        '201': { $ref: '#/components/responses/ApiResponse' }
+  /api/health-sync:
+    post:
+      tags: [health-sync]
+      summary: Đồng bộ bucket bước chân hoặc nhịp tim
+      description: Tối đa 500 bản ghi mỗi lô theo mặc định; bản ghi sai được trả trong rejected.
+      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+        '413': { description: Lô vượt giới hạn }
+  /api/health-sync/status:
+    get:
+      tags: [health-sync]
+      summary: Lấy mốc đồng bộ gần nhất
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    from:
+      name: from
+      in: query
+      schema: { type: string, format: date }
+    to:
+      name: to
+      in: query
+      schema: { type: string, format: date }
+  requestBodies:
+    JsonBody:
+      required: true
+      content:
+        application/json:
+          schema: { type: object }
+  responses:
+    ApiResponse:
+      description: ApiResponse envelope
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [success]
+            properties:
+              success: { type: boolean }
+              data: {}
+              error: { type: object, nullable: true }

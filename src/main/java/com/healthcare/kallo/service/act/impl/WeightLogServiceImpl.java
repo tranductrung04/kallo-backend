@@ -161,6 +161,44 @@ public class WeightLogServiceImpl implements WeightLogService {
     }
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public List<WeightLogResponse> changedSince(UUID userId, Instant since) {
+    if (since == null) {
+      throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    }
+    return weightLogs.findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(userId, since).stream()
+        .map(mapper::toResponse)
+        .toList();
+  }
+
+  @Override
+  @Transactional
+  public WeightLogResponse upsertFromClient(
+      UUID userId, CreateWeightLogRequest request, Instant clientUpdatedAt, Instant clientDeletedAt) {
+    if (clientDeletedAt != null) {
+      WeightLog existing = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid())
+          .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+      if (clientUpdatedAt == null || existing.getUpdatedAt() == null
+          || !clientUpdatedAt.isBefore(existing.getUpdatedAt())) {
+        delete(userId, existing.getId());
+        existing.setDeletedAt(clock.instant());
+        existing.setUpdatedAt(existing.getDeletedAt());
+      }
+      return mapper.toResponse(existing);
+    }
+    Optional<WeightLog> existing = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid());
+    if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null
+        && clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
+      return mapper.toResponse(existing.get());
+    }
+    if (existing.isPresent()) {
+      return update(userId, existing.get().getId(),
+          new UpdateWeightLogRequest(request.weightKg(), request.loggedAtOrNow(), request.note(), clientUpdatedAt));
+    }
+    return create(userId, request).response();
+  }
+
   private void validateUserExists(UUID userId) {
     if (!users.existsById(userId)) {
       throw new BusinessException(ErrorCode.NOT_FOUND);

@@ -16,6 +16,13 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
   Optional<ActivityLog> findByIdAndUserId(UUID id, UUID userId);
   Optional<ActivityLog> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
+  List<ActivityLog> findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(UUID userId, Instant since);
+
+  @Modifying
+  @Transactional
+  @Query("delete from ActivityLog a where a.deletedAt is not null and a.deletedAt < :cutoff")
+  int deleteTombstonesBefore(@Param("cutoff") Instant cutoff);
+
   @Query("""
       select a from ActivityLog a join fetch a.activityType
       where a.user.id = :userId and a.deletedAt is null

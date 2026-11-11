@@ -147,6 +147,43 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     delete(userId, activity.getId());
   }
 
+  @Override
+  @Transactional(readOnly = true)
+  public List<ActivityResponse> changedSince(UUID userId, Instant since) {
+    if (since == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    return activities.findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(userId, since).stream()
+        .map(mapper::toResponse)
+        .toList();
+  }
+
+  @Override
+  @Transactional
+  public ActivityResponse upsertFromClient(
+      UUID userId, CreateActivityRequest request, Instant clientUpdatedAt, Instant clientDeletedAt) {
+    UUID clientUuid = toUuid(request.clientUuid());
+    Optional<ActivityLog> existing = activities.findByUserIdAndClientUuid(userId, clientUuid);
+    if (clientDeletedAt != null) {
+      if (existing.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND);
+      if (clientUpdatedAt == null || existing.get().getUpdatedAt() == null
+          || !clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
+        delete(userId, existing.get().getId());
+        existing.get().setDeletedAt(clock.instant());
+        existing.get().setUpdatedAt(existing.get().getDeletedAt());
+      }
+      return mapper.toResponse(existing.get());
+    }
+    if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null
+        && clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
+      return mapper.toResponse(existing.get());
+    }
+    if (existing.isPresent()) {
+      return update(userId, existing.get().getId(), new UpdateActivityRequest(
+          request.activityType(), request.intensity(), request.startedAt(), request.durationMin(),
+          request.distanceKm(), request.note(), clientUpdatedAt, request.routePolyline()));
+    }
+    return create(userId, request).response();
+  }
+
   private ActivityType activeType(String code) {
     String normalized = normalizeCode(code);
     return types.findByCodeAndActiveTrue(normalized)
