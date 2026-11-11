@@ -19,6 +19,7 @@ public interface ActivityLogService {
   void deleteByClientUuid(UUID userId, UUID clientUuid);
 
   List<ActivityResponse> changedSince(UUID userId, Instant since);
+  List<ActivityResponse> changedSince(UUID userId, Instant since, int limit);
 
   ActivityResponse upsertFromClient(
       UUID userId, CreateActivityRequest request, Instant clientUpdatedAt, Instant clientDeletedAt);

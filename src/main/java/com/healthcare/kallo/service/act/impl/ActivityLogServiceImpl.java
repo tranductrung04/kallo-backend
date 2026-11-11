@@ -47,30 +47,30 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     Optional<ActivityLog> existing = activities.findByUserIdAndClientUuid(userId, clientUuid);
     if (existing.isPresent()) {
       if (existing.get().getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
-      return new CreateResult(mapper.toResponse(existing.get()), false);
+      return new CreateResult(mapper.toResponse(existing.get()).withoutRoute(), false);
     }
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
     validateDistance(type, request.distanceKm());
     String source = source(request.source());
-    validateRoute(source, request.routePolyline(), request.distanceKm(), request.durationMin());
+    BigDecimal distance = validateRoute(source, request.routePolyline(), request.distanceKm(), request.durationMin());
     BigDecimal weight = bodyMetrics.weightAt(userId, request.startedAt())
         .orElseThrow(() -> new BusinessException(ErrorCode.WEIGHT_REQUIRED));
     BigDecimal met = met(type, request.intensity());
     Instant ended = request.startedAt().plusSeconds(request.durationMin() * 60L);
     BigDecimal calories = CalorieCalculator.calculate(met, weight, request.durationMin());
     int inserted = activities.insertIfAbsent(userId, clientUuid, type.getCode(),
-        request.intensity().name(), met, weight, request.durationMin(), request.distanceKm(),
+        request.intensity().name(), met, weight, request.durationMin(), distance,
         calories, source, request.externalId(), request.startedAt(), ended, request.note(), request.routePolyline());
     ActivityLog result = activities.findByUserIdAndClientUuid(userId, clientUuid)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (inserted == 0) {
       if (result.getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
-      return new CreateResult(mapper.toResponse(result), false);
+      return new CreateResult(mapper.toResponse(result).withoutRoute(), false);
     }
-    deduplicator.deduplicate(userId);
+    deduplicator.deduplicate(userId, result.getStartedAt(), result.getEndedAt());
     publish(userId, result.getStartedAt());
-    return new CreateResult(mapper.toResponse(result), true);
+    return new CreateResult(mapper.toResponse(result).withoutRoute(), true);
   }
 
   @Override
@@ -93,7 +93,8 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     var rangeTo = timeResolver.dayRange(to, zone).end();
     Page<ActivityLog> result = activities.findInRange(userId, rangeFrom, rangeTo, includeSuperseded,
         PageRequest.of(page, size));
-    return new PageResponse<>(result.getContent().stream().map(mapper::toResponse).toList(),
+    return new PageResponse<>(result.getContent().stream().map(mapper::toResponse)
+        .map(ActivityResponse::withoutRoute).toList(),
         page, size, result.getTotalElements(), result.getTotalPages());
   }
 
@@ -104,28 +105,33 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (activity.getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
     if (request.clientUpdatedAt() != null && request.clientUpdatedAt().isBefore(activity.getUpdatedAt()))
-      return mapper.toResponse(activity);
+      return mapper.toResponse(activity).withoutRoute();
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
     validateDistance(type, request.distanceKm());
     String source = activity.getSource().name();
-    validateRoute(source, request.routePolyline(), request.distanceKm(), request.durationMin());
+    String routePolyline = request.routePolyline() == null
+        ? activity.getRoutePolyline() : request.routePolyline();
+    BigDecimal distance = validateRoute(source, routePolyline, request.distanceKm(), request.durationMin());
     BigDecimal weight = bodyMetrics.weightAt(userId, request.startedAt())
         .orElseThrow(() -> new BusinessException(ErrorCode.WEIGHT_REQUIRED));
     BigDecimal met = met(type, request.intensity());
     LocalDate oldDate = localDate(userId, activity.getStartedAt());
+    Instant oldStartedAt = activity.getStartedAt();
+    Instant oldEndedAt = activity.getEndedAt();
     activity.setActivityType(type); activity.setIntensity(request.intensity()); activity.setStartedAt(request.startedAt());
     activity.setDurationMin(request.durationMin()); activity.setEndedAt(request.startedAt().plusSeconds(request.durationMin() * 60L));
-    activity.setDistanceKm(request.distanceKm()); activity.setMet(met); activity.setWeightKgUsed(weight);
+    activity.setDistanceKm(distance); activity.setMet(met); activity.setWeightKgUsed(weight);
     activity.setCaloriesBurned(CalorieCalculator.calculate(met, weight, request.durationMin()));
     activity.setNote(request.note());
-    activity.setRoutePolyline(request.routePolyline());
+    activity.setRoutePolyline(routePolyline);
     ActivityLog saved = activities.saveAndFlush(activity);
-    deduplicator.deduplicate(userId);
+    deduplicator.deduplicate(userId,
+        min(oldStartedAt, saved.getStartedAt()), max(oldEndedAt, saved.getEndedAt()));
     publish(userId, saved.getStartedAt());
     LocalDate newDate = localDate(userId, saved.getStartedAt());
     if (!oldDate.equals(newDate)) events.publishEvent(new ActivityDataChangedEvent(userId, oldDate));
-    return mapper.toResponse(saved);
+    return mapper.toResponse(saved).withoutRoute();
   }
 
   @Override
@@ -134,8 +140,10 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     ActivityLog activity = activities.findByIdAndUserId(id, userId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (activity.getDeletedAt() == null) {
-      if (activities.softDeleteByIdAndUserId(id, userId, clock.instant()) > 0) publish(userId, activity.getStartedAt());
-      deduplicator.deduplicate(userId);
+      if (activities.softDeleteByIdAndUserId(id, userId, clock.instant()) > 0) {
+        publish(userId, activity.getStartedAt());
+        deduplicator.deduplicate(userId, activity.getStartedAt(), activity.getEndedAt());
+      }
     }
   }
 
@@ -150,9 +158,17 @@ public class ActivityLogServiceImpl implements ActivityLogService {
   @Override
   @Transactional(readOnly = true)
   public List<ActivityResponse> changedSince(UUID userId, Instant since) {
+    return changedSince(userId, since, 500);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<ActivityResponse> changedSince(UUID userId, Instant since, int limit) {
     if (since == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
-    return activities.findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(userId, since).stream()
+    if (limit < 1 || limit > 500) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    return activities.findChangedSince(userId, since.minusSeconds(1), PageRequest.of(0, limit)).stream()
         .map(mapper::toResponse)
+        .map(ActivityResponse::withoutRoute)
         .toList();
   }
 
@@ -163,18 +179,17 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     UUID clientUuid = toUuid(request.clientUuid());
     Optional<ActivityLog> existing = activities.findByUserIdAndClientUuid(userId, clientUuid);
     if (clientDeletedAt != null) {
-      if (existing.isEmpty()) throw new BusinessException(ErrorCode.NOT_FOUND);
+      if (existing.isEmpty()) return null;
       if (clientUpdatedAt == null || existing.get().getUpdatedAt() == null
           || !clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
         delete(userId, existing.get().getId());
-        existing.get().setDeletedAt(clock.instant());
-        existing.get().setUpdatedAt(existing.get().getDeletedAt());
       }
-      return mapper.toResponse(existing.get());
+      return activities.findByIdAndUserId(existing.get().getId(), userId)
+          .map(mapper::toResponse).map(ActivityResponse::withoutRoute).orElse(null);
     }
     if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null
         && clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
-      return mapper.toResponse(existing.get());
+      return mapper.toResponse(existing.get()).withoutRoute();
     }
     if (existing.isPresent()) {
       return update(userId, existing.get().getId(), new UpdateActivityRequest(
@@ -222,13 +237,16 @@ public class ActivityLogServiceImpl implements ActivityLogService {
   }
 
   private String source(String source) {
-    if (source == null || source.isBlank() || source.equalsIgnoreCase("MANUAL")) return "MANUAL";
-    if (source.equalsIgnoreCase("APPLE_HEALTH")) return "HEALTHKIT";
-    if (source.equalsIgnoreCase("HEALTH_CONNECT")) return "HEALTH_CONNECT";
-    if (source.equalsIgnoreCase("HEALTHKIT")) return "HEALTHKIT";
-    if (source.equalsIgnoreCase("SENSOR")) return "SENSOR";
-    if (source.equalsIgnoreCase("GPS")) return "GPS";
-    return "MANUAL";
+    if (source == null || source.isBlank()) return "MANUAL";
+    String normalized = source.trim().toUpperCase(Locale.ROOT);
+    if (normalized.equals("MANUAL") || normalized.equals("GPS") || normalized.equals("SENSOR")) {
+      return normalized;
+    }
+    if (normalized.equals("APPLE_HEALTH") || normalized.equals("HEALTH_CONNECT")
+        || normalized.equals("HEALTHKIT")) return normalized.equals("APPLE_HEALTH") || normalized.equals("HEALTHKIT")
+            ? "HEALTHKIT" : "HEALTH_CONNECT";
+    throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+        Map.of("field", "source", "message", "Source must be MANUAL, GPS, or SENSOR"));
   }
 
   private UUID toUuid(String value) {
@@ -254,51 +272,61 @@ public class ActivityLogServiceImpl implements ActivityLogService {
           Map.of("field", "distanceKm", "message", "Distance is not supported for this activity"));
     }
   }
-    private void validateRoute(String source, String routePolyline, BigDecimal distance, int durationMin) {
-      if (routePolyline != null) {
-        if (!source.equals("GPS")) {
-          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-              Map.of("field", "routePolyline", "message", "Route requires GPS source"));
-        }
-        if (routePolyline.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > properties.routeMaxBytes()) {
-          throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE,
-              Map.of("field", "routePolyline", "message", "Route polyline is too large"));
-        }
-        if (!isValidPolyline(routePolyline)) {
-          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-              Map.of("field", "routePolyline", "message", "Route polyline is invalid"));
-        }
-      }
-      if (source.equals("GPS") && distance != null) {
-        BigDecimal maxDistance = properties.gpsMaxSpeedKmh()
-            .multiply(BigDecimal.valueOf(durationMin))
-            .divide(BigDecimal.valueOf(60), 2, java.math.RoundingMode.CEILING);
-        if (distance.compareTo(maxDistance) > 0) {
-          throw new BusinessException(ErrorCode.VALIDATION_ERROR,
-              Map.of("field", "distanceKm", "message", "GPS speed is not plausible"));
-        }
-      }
+  private BigDecimal validateRoute(String source, String routePolyline, BigDecimal distance, int durationMin) {
+    if (source.equals("GPS") && (routePolyline == null || routePolyline.isBlank())) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+          Map.of("field", "routePolyline", "message", "GPS activities require a route"));
     }
-    private boolean isValidPolyline(String polyline) {
-      if (polyline.isBlank()) return false;
-      int index = 0, points = 0;
-      long latitude = 0, longitude = 0;
-      try {
-        while (index < polyline.length()) {
-          long[] lat = decodePolylineValue(polyline, index);
-          index = (int) lat[1];
-          long[] lon = decodePolylineValue(polyline, index);
-          index = (int) lon[1];
-          latitude += lat[0]; longitude += lon[0];
-          if (latitude < -90000000 || latitude > 90000000
-              || longitude < -180000000 || longitude > 180000000) return false;
-          points++;
-        }
-      } catch (IllegalArgumentException exception) {
-        return false;
-      }
-      return points >= 2;
+    if (routePolyline == null) return distance;
+    if (!source.equals("GPS")) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+          Map.of("field", "routePolyline", "message", "Route requires GPS source"));
     }
+    if (routePolyline.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > properties.routeMaxBytes()) {
+      throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE,
+          Map.of("field", "routePolyline", "message", "Route polyline is too large"));
+    }
+    List<Point> points = decodePoints(routePolyline);
+    double routeDistanceKm = routeDistanceKm(points);
+    double maxDistanceKm = properties.gpsMaxSpeedKmh().doubleValue() * durationMin / 60.0;
+    if (routeDistanceKm > maxDistanceKm) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+          Map.of("field", "routePolyline", "message", "GPS route speed is not plausible"));
+    }
+    if (distance != null && Math.abs(distance.doubleValue() - routeDistanceKm)
+        > Math.max(0.1, routeDistanceKm * 0.2)) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR,
+          Map.of("field", "distanceKm", "message", "Distance does not match route"));
+    }
+    return distance == null ? BigDecimal.valueOf(routeDistanceKm).setScale(2, java.math.RoundingMode.HALF_UP) : distance;
+  }
+  private List<Point> decodePoints(String polyline) {
+    if (polyline.isBlank()) throw invalidPolyline();
+    int index = 0;
+    long latitude = 0, longitude = 0;
+    List<Point> points = new ArrayList<>();
+    try {
+      while (index < polyline.length()) {
+        long[] lat = decodePolylineValue(polyline, index);
+        index = (int) lat[1];
+        long[] lon = decodePolylineValue(polyline, index);
+        index = (int) lon[1];
+        latitude += lat[0];
+        longitude += lon[0];
+        if (latitude < -9000000 || latitude > 9000000
+            || longitude < -18000000 || longitude > 18000000) throw invalidPolyline();
+        points.add(new Point(latitude / 100000.0, longitude / 100000.0));
+      }
+    } catch (IllegalArgumentException exception) {
+      throw invalidPolyline();
+    }
+    if (points.size() < 2) throw invalidPolyline();
+    return points;
+  }
+  private BusinessException invalidPolyline() {
+    return new BusinessException(ErrorCode.VALIDATION_ERROR,
+        Map.of("field", "routePolyline", "message", "Route polyline is invalid"));
+  }
     private long[] decodePolylineValue(String value, int start) {
       long result = 0; int shift = 0; int index = start;
       while (index < value.length()) {
@@ -314,6 +342,21 @@ public class ActivityLogServiceImpl implements ActivityLogService {
       }
       throw new IllegalArgumentException();
     }
+  private double routeDistanceKm(List<Point> points) {
+    double distance = 0;
+    for (int i = 1; i < points.size(); i++) distance += haversineKm(points.get(i - 1), points.get(i));
+    return distance;
+  }
+  private double haversineKm(Point left, Point right) {
+    double lat1 = Math.toRadians(left.latitude());
+    double lat2 = Math.toRadians(right.latitude());
+    double dLat = lat2 - lat1;
+    double dLon = Math.toRadians(right.longitude() - left.longitude());
+    double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+        + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return 6371.0088 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  private record Point(double latitude, double longitude) {}
   private void validateTime(Instant startedAt) {
     Instant now = clock.instant();
     if (startedAt.isAfter(now.plus(properties.futureTolerance()))
@@ -321,5 +364,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
       throw new BusinessException(ErrorCode.TIMESTAMP_OUT_OF_RANGE);
   }
   private LocalDate localDate(UUID userId, Instant instant) { return instant.atZone(timeResolver.zoneOf(userId)).toLocalDate(); }
+  private Instant min(Instant left, Instant right) { return left.isBefore(right) ? left : right; }
+  private Instant max(Instant left, Instant right) { return left.isAfter(right) ? left : right; }
   private void publish(UUID userId, Instant instant) { events.publishEvent(new ActivityDataChangedEvent(userId, localDate(userId, instant))); }
 }

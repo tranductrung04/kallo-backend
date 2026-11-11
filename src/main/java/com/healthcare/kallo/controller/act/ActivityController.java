@@ -16,6 +16,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.time.LocalDate;
+import java.time.Clock;
 import java.util.UUID;
 import java.util.List;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -30,11 +31,13 @@ public class ActivityController {
   private final ActivityLogService activities;
   private final ActivityDailyAggregator aggregator;
   private final UserTimeResolver timeResolver;
+  private final Clock clock;
   public ActivityController(ActivityLogService activities, ActivityDailyAggregator aggregator,
-      UserTimeResolver timeResolver) {
+      UserTimeResolver timeResolver, Clock clock) {
     this.activities = activities;
     this.aggregator = aggregator;
     this.timeResolver = timeResolver;
+    this.clock = clock;
   }
 
   @GetMapping("/summary")
@@ -47,10 +50,10 @@ public class ActivityController {
     if (date != null && (from != null || to != null)) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     if (date != null) return ApiResponse.success(List.of(aggregator.aggregate(userId, date)));
     if (from == null && to == null) {
-      date = LocalDate.now(java.time.Clock.systemUTC().withZone(timeResolver.zoneOf(userId)));
+      date = LocalDate.now(clock.withZone(timeResolver.zoneOf(userId)));
       return ApiResponse.success(List.of(aggregator.aggregate(userId, date)));
     }
-    if (from == null || to == null || from.isAfter(to) || from.plusDays(31).isBefore(to))
+    if (from == null || to == null || from.isAfter(to) || from.plusDays(30).isBefore(to))
       throw new BusinessException(ErrorCode.INVALID_TIME_RANGE);
     List<DailyActivityStats> result = new java.util.ArrayList<>();
     for (LocalDate current = from; !current.isAfter(to); current = current.plusDays(1))

@@ -11,6 +11,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.data.domain.Pageable;
 
 public interface WeightLogRepository extends JpaRepository<WeightLog, UUID> {
   Optional<WeightLog> findByUserIdAndClientUuid(UUID userId, UUID clientUuid);
@@ -19,7 +20,13 @@ public interface WeightLogRepository extends JpaRepository<WeightLog, UUID> {
 
   Optional<WeightLog> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
-  List<WeightLog> findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(UUID userId, Instant since);
+  @Query("""
+      select w from WeightLog w
+      where w.user.id = :userId and w.updatedAt > :since
+      order by w.updatedAt asc, w.id asc
+      """)
+  List<WeightLog> findChangedSince(@Param("userId") UUID userId,
+      @Param("since") Instant since, Pageable pageable);
 
   @Modifying
   @Transactional
@@ -64,7 +71,7 @@ public interface WeightLogRepository extends JpaRepository<WeightLog, UUID> {
       @Param("loggedAt") Instant loggedAt,
       @Param("note") String note);
 
-  @Modifying
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Transactional
   @Query(
       value =
