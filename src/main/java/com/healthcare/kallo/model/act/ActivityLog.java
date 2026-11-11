@@ -34,6 +34,7 @@ public class ActivityLog {
   @Column(name = "external_id", length = 100) private String externalId;
   @Column(name = "started_at", nullable = false) private Instant startedAt;
   @Column(name = "ended_at", nullable = false) private Instant endedAt;
+  @Column(name = "route_polyline", columnDefinition = "TEXT") private String routePolyline;
   @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "superseded_by") private ActivityLog supersededBy;
   @Column(length = 255) private String note;
   @CreatedDate @Column(name = "created_at", nullable = false, updatable = false) private Instant createdAt;

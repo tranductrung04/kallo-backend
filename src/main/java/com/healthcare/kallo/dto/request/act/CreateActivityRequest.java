@@ -18,13 +18,14 @@ public record CreateActivityRequest(
     @DecimalMin("0.0") @DecimalMax("9999.99") BigDecimal distanceKm,
     @Size(max = 255) String note,
     String source,
-    String externalId) {
+    String externalId,
+    String routePolyline) {
   public CreateActivityRequest {
     if (intensity == null) intensity = Intensity.MODERATE;
   }
 
   public CreateActivityRequest(UUID clientUuid, String activityType, Intensity intensity,
       Instant startedAt, int durationMin, BigDecimal distanceKm, String note) {
-    this(clientUuid.toString(), activityType, intensity, startedAt, durationMin, distanceKm, note, null, null);
+    this(clientUuid.toString(), activityType, intensity, startedAt, durationMin, distanceKm, note, null, null, null);
   }
 }

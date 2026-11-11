@@ -26,7 +26,9 @@ public record ActProperties(
     @Min(1) int fallbackCadenceSpm,
     @NotNull List<String> stepSourcePriority,
     @NotNull @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal dedupOverlapRatio,
-    @NotNull Duration tombstoneRetention) {
+    @NotNull Duration tombstoneRetention,
+    @Min(1) int routeMaxBytes,
+    @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal gpsMaxSpeedKmh) {
 
   @AssertTrue(message = "weightMinKg must be less than weightMaxKg")
   public boolean isWeightRangeValid() {
