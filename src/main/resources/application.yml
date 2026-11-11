@@ -45,6 +45,19 @@ app:
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
     resend-interval: ${APP_AUTH_RESEND_INTERVAL:60s}
     max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
+  act:
+    max-sync-batch-size: ${APP_ACT_MAX_SYNC_BATCH_SIZE:500}
+    sync-backfill-days: ${APP_ACT_SYNC_BACKFILL_DAYS:30}
+    manual-backfill-days: ${APP_ACT_MANUAL_BACKFILL_DAYS:365}
+    future-tolerance: ${APP_ACT_FUTURE_TOLERANCE:5m}
+    weight-min-kg: ${APP_ACT_WEIGHT_MIN_KG:20}
+    weight-max-kg: ${APP_ACT_WEIGHT_MAX_KG:300}
+    walking-met: ${APP_ACT_WALKING_MET:3.5}
+    walking-speed-kmh: ${APP_ACT_WALKING_SPEED_KMH:5}
+    stride-factor: ${APP_ACT_STRIDE_FACTOR:0.415}
+    fallback-cadence-spm: ${APP_ACT_FALLBACK_CADENCE_SPM:100}
+    dedup-overlap-ratio: ${APP_ACT_DEDUP_OVERLAP_RATIO:0.8}
+    tombstone-retention: ${APP_ACT_TOMBSTONE_RETENTION:90d}
   google:
     client-ids: ${GOOGLE_CLIENT_ID}
     jwks-uri: ${GOOGLE_JWKS_URI}

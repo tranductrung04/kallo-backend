@@ -1,4 +1,4 @@
-package com.healthcare.kallo.controller;
+package com.healthcare.kallo.controller.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;

@@ -1,4 +1,4 @@
-package com.healthcare.kallo.service;
+package com.healthcare.kallo.service.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
