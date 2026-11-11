@@ -27,12 +27,10 @@
 7. [Yêu cầu giao diện](#7-yêu-cầu-giao-diện)
 8. [Yêu cầu giao tiếp ngoài và API](#8-yêu-cầu-giao-tiếp-ngoài-và-api)
 9. [Yêu cầu phi chức năng](#9-yêu-cầu-phi-chức-năng)
-10. [Phân công công việc](#10-phân-công-công-việc)
-11. [Kế hoạch và mốc tiến độ](#11-kế-hoạch-và-mốc-tiến-độ)
-12. [Kiểm thử và tiêu chí nghiệm thu](#12-kiểm-thử-và-tiêu-chí-nghiệm-thu)
-13. [Rủi ro, giả định, ràng buộc](#13-rủi-ro-giả-định-ràng-buộc)
-14. [Câu hỏi mở cần chốt](#14-câu-hỏi-mở-cần-chốt)
-15. [Phụ lục](#15-phụ-lục)
+10. [Kiểm thử và tiêu chí nghiệm thu](#10-kiểm-thử-và-tiêu-chí-nghiệm-thu)
+11. [Rủi ro, giả định, ràng buộc](#13-rủi-ro-giả-định-ràng-buộc)
+12. [Câu hỏi mở cần chốt](#14-câu-hỏi-mở-cần-chốt)
+13. [Phụ lục](#15-phụ-lục)
 
 ---
 
@@ -845,27 +843,9 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 
 ---
 
-## 10. Kế hoạch và mốc tiến độ
+## 10. Kiểm thử và tiêu chí nghiệm thu
 
-Mốc dự kiến `(*)`; đề cương chỉ xác định giao đề tài 09/2026 và hoàn thiện 12/2026.
-
-| Giai đoạn | Thời gian đề xuất | Kết quả bàn giao |
-|---|---|---|
-| 1. Khởi động, đặc tả, thiết kế | Tuần 1–3 (cuối 09 – đầu 10/2026) | Tài liệu yêu cầu, ERD, thiết kế API, wireframe, kiến trúc |
-| 2. Nền tảng | Tuần 3–5 | Dự án Spring Boot + CSDL + migration; AUTH; khung ứng dụng Expo; CI cơ bản |
-| 3. Dữ liệu và AI | Tuần 2–8 (song song) | Dữ liệu VietFood68 + bảng dinh dưỡng; mô hình YOLOv11m, ONNX; FastAPI nhận diện |
-| 4. Chức năng lõi | Tuần 5–9 | PROFILE, NUTRI (ghi log, tra cứu, mã vạch, tuỳ chỉnh), nước, cân nặng, ACT, DailySummary |
-| 5. Thông minh và xã hội | Tuần 8–11 | Thực đơn AI, chatbot, REPORT, GAME, thông báo, WebSocket |
-| 6. Ngoại tuyến, tích hợp, hoàn thiện | Tuần 11–13 | Đồng bộ ngoại tuyến, kiểm thử tích hợp, tối ưu hiệu năng, sửa lỗi |
-| 7. Báo cáo và bảo vệ | Tuần 13–15 (đến 12/2026) | Báo cáo đồ án, demo, bản build ứng dụng |
-
-**Đề xuất cắt phạm vi nếu chậm tiến độ `(*)`:** ưu tiên giữ các yêu cầu **M**; hoãn các yêu cầu **C** (xuất báo cáo, lộ trình GPS, i18n, giao diện tối) trước, sau đó đến một số yêu cầu **S** (thực đơn 7 ngày, dự đoán xu hướng nâng cao).
-
----
-
-## 11. Kiểm thử và tiêu chí nghiệm thu
-
-### 11.1. Chiến lược kiểm thử `(*)`
+### 10.1. Chiến lược kiểm thử `(*)`
 
 | Mức | Nội dung | Công cụ gợi ý |
 |---|---|---|
@@ -878,7 +858,7 @@ Mốc dự kiến `(*)`; đề cương chỉ xác định giao đề tài 09/202
 | Ngoại tuyến | Mất mạng/ có mạng lại, đồng bộ lặp lại | Kịch bản thủ công + tự động |
 | Chấp nhận | Người dùng thử nghiệm (UAT) | Bảng khảo sát ngắn |
 
-### 11.2. Tiêu chí nghiệm thu tổng thể `(*)`
+### 10.2. Tiêu chí nghiệm thu tổng thể `(*)`
 
 Sản phẩm được coi là đạt khi:
 
@@ -891,9 +871,9 @@ Sản phẩm được coi là đạt khi:
 
 ---
 
-## 12. Rủi ro, giả định, ràng buộc
+## 11. Rủi ro, giả định, ràng buộc
 
-### 12.1. Rủi ro và biện pháp `(*)`
+### 11.1. Rủi ro và biện pháp `(*)`
 
 | # | Rủi ro | Mức | Biện pháp |
 |---|---|---|---|
@@ -909,14 +889,14 @@ Sản phẩm được coi là đạt khi:
 | R10 | Lộ dữ liệu cá nhân/sức khoẻ | Cao | Mục 9.2 và 9.3 |
 | R11 | Chiếm email: kẻ xấu đăng ký trước bằng email của người khác (chưa xác minh), rồi chờ nạn nhân dùng Google hoặc khiến nạn nhân gặp lỗi “email đã tồn tại” | Trung bình | Xác minh email bằng OTP (FR-AUTH-09); liên kết Google vào tài khoản chưa xác minh thì xoá mật khẩu cũ và thu hồi token; nạn nhân lấy lại tài khoản bằng Google hoặc quên mật khẩu |
 
-### 12.2. Giả định `(*)`
+### 11.2. Giả định `(*)`
 
 - Người dùng có điện thoại có camera và kết nối mạng khi dùng tính năng AI.
 - Nhóm có đủ quyền sử dụng/ gán nhãn bộ dữ liệu VietFood68 cho mục đích học thuật.
 - Có môi trường máy chủ/đám mây đủ để triển khai demo (Backend, AI, CSDL, Object Storage).
 - Người dùng chủ yếu ăn món Việt thuộc phạm vi 68 lớp.
 
-### 12.3. Ràng buộc
+### 11.3. Ràng buộc
 
 - Pipeline nhận diện và ước lượng calo do nhóm tự xây dựng, triển khai độc lập.
 - Sử dụng bộ công nghệ đã nêu ở mục 3.2.
@@ -925,7 +905,7 @@ Sản phẩm được coi là đạt khi:
 
 ---
 
-## 13. Câu hỏi mở cần chốt
+## 12. Câu hỏi mở cần chốt
 
 | # | Câu hỏi | Vì sao cần chốt |
 |---|---|---|
@@ -945,7 +925,7 @@ Sản phẩm được coi là đạt khi:
 
 ---
 
-## 14. Phụ lục
+## 13. Phụ lục
 
 ### Phụ lục A — Công thức tính toán `(*)`
 

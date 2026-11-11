@@ -1,4 +1,4 @@
-package com.healthcare.kallo.controller;
+package com.healthcare.kallo.controller.auth;
 
 import com.healthcare.kallo.common.ApiResponse;
 import org.springframework.context.annotation.Profile;

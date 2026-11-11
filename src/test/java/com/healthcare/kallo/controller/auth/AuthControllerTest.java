@@ -1,4 +1,4 @@
-package com.healthcare.kallo.controller;
+package com.healthcare.kallo.controller.auth;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;

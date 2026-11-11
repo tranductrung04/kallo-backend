@@ -166,7 +166,11 @@ spring:
     locations: classpath:db/migration
 ```
 
-Quy ước đặt tên: `V<số phiên bản>__<mô_tả>.sql`, ví dụ `V1__init_schema.sql`, `V2__add_streak_tables.sql`.  
+Quy ước đặt tên: migration khởi tạo hiện có dùng `V1__init_schema.sql`; các migration mới
+dùng `V<yyyyMMddHHmm>__<module>_<mô_tả>.sql` với thời gian tạo theo UTC, ví dụ
+`V202611121030__act_weight_logs.sql`. Số phiên bản phải tăng theo thứ tự phụ thuộc trong
+cùng module. Khi phát triển local, profile `dev` cho phép Flyway chạy migration lệch thứ tự;
+production vẫn giữ mặc định an toàn.
 **Không sửa** file migration đã chạy – hãy tạo phiên bản mới.
 
 ```bash
