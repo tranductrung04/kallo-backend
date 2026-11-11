@@ -28,13 +28,16 @@ public class ActivityLogServiceImpl implements ActivityLogService {
   private final ApplicationEventPublisher events;
   private final ActProperties properties;
   private final Clock clock;
+  private final ActivityDeduplicatorService deduplicator;
 
   public ActivityLogServiceImpl(ActivityLogRepository activities, ActivityTypeRepository types,
       BodyMetricsService bodyMetrics, UserTimeResolver timeResolver,
-      ActivityMapper mapper, ApplicationEventPublisher events, ActProperties properties, Clock clock) {
+      ActivityMapper mapper, ApplicationEventPublisher events, ActProperties properties, Clock clock,
+      ActivityDeduplicatorService deduplicator) {
     this.activities = activities; this.types = types; this.bodyMetrics = bodyMetrics;
     this.timeResolver = timeResolver; this.mapper = mapper; this.events = events;
     this.properties = properties; this.clock = clock;
+    this.deduplicator = deduplicator;
   }
 
   @Override
@@ -63,6 +66,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
       if (result.getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
       return new CreateResult(mapper.toResponse(result), false);
     }
+    deduplicator.deduplicate(userId);
     publish(userId, result.getStartedAt());
     return new CreateResult(mapper.toResponse(result), true);
   }
@@ -112,6 +116,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     activity.setCaloriesBurned(CalorieCalculator.calculate(met, weight, request.durationMin()));
     activity.setNote(request.note());
     ActivityLog saved = activities.saveAndFlush(activity);
+    deduplicator.deduplicate(userId);
     publish(userId, saved.getStartedAt());
     LocalDate newDate = localDate(userId, saved.getStartedAt());
     if (!oldDate.equals(newDate)) events.publishEvent(new ActivityDataChangedEvent(userId, oldDate));
@@ -125,6 +130,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (activity.getDeletedAt() == null) {
       if (activities.softDeleteByIdAndUserId(id, userId, clock.instant()) > 0) publish(userId, activity.getStartedAt());
+      deduplicator.deduplicate(userId);
     }
   }
 

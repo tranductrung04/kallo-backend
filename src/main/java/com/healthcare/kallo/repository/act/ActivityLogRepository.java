@@ -3,6 +3,7 @@ package com.healthcare.kallo.repository.act;
 import com.healthcare.kallo.model.act.ActivityLog;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,6 +15,22 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
   Optional<ActivityLog> findByUserIdAndClientUuid(UUID userId, UUID clientUuid);
   Optional<ActivityLog> findByIdAndUserId(UUID id, UUID userId);
   Optional<ActivityLog> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
+
+  @Query("""
+      select a from ActivityLog a join fetch a.activityType
+      where a.user.id = :userId and a.deletedAt is null
+      order by a.startedAt
+      """)
+  List<ActivityLog> findActiveForDeduplication(@Param("userId") UUID userId);
+
+  @Query("""
+      select a from ActivityLog a join fetch a.activityType
+      where a.user.id = :userId and a.startedAt < :to and a.endedAt > :from
+        and a.deletedAt is null and a.supersededBy is null
+      order by a.startedAt
+      """)
+  List<ActivityLog> findActiveOverlapping(@Param("userId") UUID userId,
+      @Param("from") Instant from, @Param("to") Instant to);
 
   @Query("""
       select a from ActivityLog a where a.user.id = :userId
