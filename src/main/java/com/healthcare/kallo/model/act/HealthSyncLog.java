@@ -28,4 +28,5 @@ public class HealthSyncLog {
   @Column(name = "start_time", nullable = false) private Instant startTime;
   @Column(name = "end_time", nullable = false) private Instant endTime;
   @Column(name = "synced_at", nullable = false) private Instant syncedAt;
+  @Column(name = "last_synced_at", nullable = false) private Instant lastSyncedAt;
 }

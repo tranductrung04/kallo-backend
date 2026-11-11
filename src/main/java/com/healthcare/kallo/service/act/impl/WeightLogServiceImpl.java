@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -164,10 +165,17 @@ public class WeightLogServiceImpl implements WeightLogService {
   @Override
   @Transactional(readOnly = true)
   public List<WeightLogResponse> changedSince(UUID userId, Instant since) {
+    return changedSince(userId, since, 500);
+  }
+
+  @Override
+  @Transactional(readOnly = true)
+  public List<WeightLogResponse> changedSince(UUID userId, Instant since, int limit) {
     if (since == null) {
       throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     }
-    return weightLogs.findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(userId, since).stream()
+    if (limit < 1 || limit > 500) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    return weightLogs.findChangedSince(userId, since.minusSeconds(1), PageRequest.of(0, limit)).stream()
         .map(mapper::toResponse)
         .toList();
   }
@@ -177,15 +185,15 @@ public class WeightLogServiceImpl implements WeightLogService {
   public WeightLogResponse upsertFromClient(
       UUID userId, CreateWeightLogRequest request, Instant clientUpdatedAt, Instant clientDeletedAt) {
     if (clientDeletedAt != null) {
-      WeightLog existing = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid())
-          .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+      Optional<WeightLog> existingOptional = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid());
+      if (existingOptional.isEmpty()) return null;
+      WeightLog existing = existingOptional.get();
       if (clientUpdatedAt == null || existing.getUpdatedAt() == null
           || !clientUpdatedAt.isBefore(existing.getUpdatedAt())) {
         delete(userId, existing.getId());
-        existing.setDeletedAt(clock.instant());
-        existing.setUpdatedAt(existing.getDeletedAt());
       }
-      return mapper.toResponse(existing);
+      return weightLogs.findByIdAndUserId(existing.getId(), userId)
+          .map(mapper::toResponse).orElse(null);
     }
     Optional<WeightLog> existing = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid());
     if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null

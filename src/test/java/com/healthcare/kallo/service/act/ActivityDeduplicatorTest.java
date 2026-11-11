@@ -6,6 +6,7 @@ import com.healthcare.kallo.model.act.ActivityLog;
 import com.healthcare.kallo.model.act.ActivityType;
 import com.healthcare.kallo.model.act.enums.ActivitySource;
 import java.time.Instant;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ActivityDeduplicatorTest {
@@ -30,6 +31,41 @@ class ActivityDeduplicatorTest {
         "2026-11-11T08:00:00Z", "2026-11-11T09:00:00Z");
 
     assertThat(deduplicator.overlaps(walking, weights, 0.8)).isFalse();
+  }
+
+  @Test
+  void breaksEqualPriorityTiesDeterministically() {
+    ActivityLog first = activity("WALK_BRISK", "WALKING", ActivitySource.MANUAL,
+        "2026-11-11T08:00:00Z", "2026-11-11T09:00:00Z");
+    first.setClientUuid(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"));
+    ActivityLog second = activity("WALK_BRISK", "WALKING", ActivitySource.MANUAL,
+        "2026-11-11T08:00:00Z", "2026-11-11T09:00:00Z");
+    second.setClientUuid(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002"));
+
+    assertThat(deduplicator.winner(first, second)).isSameAs(first);
+    assertThat(deduplicator.winner(second, first)).isSameAs(first);
+  }
+
+  @Test
+  void usesKeptRootsForTransitiveOverlapsAndRestoresWhenWinnerIsGone() {
+    ActivityLog device = activity("WALK_BRISK", "WALKING", ActivitySource.HEALTH_CONNECT,
+        "2026-11-11T08:30:00Z", "2026-11-11T09:00:00Z");
+    ActivityLog sensor = activity("WALK_BRISK", "WALKING", ActivitySource.SENSOR,
+        "2026-11-11T08:30:00Z", "2026-11-11T09:30:00Z");
+    ActivityLog manual = activity("WALK_BRISK", "WALKING", ActivitySource.MANUAL,
+        "2026-11-11T09:00:00Z", "2026-11-11T09:30:00Z");
+    device.setId(java.util.UUID.fromString("00000000-0000-0000-0000-000000000001"));
+    sensor.setId(java.util.UUID.fromString("00000000-0000-0000-0000-000000000002"));
+    manual.setId(java.util.UUID.fromString("00000000-0000-0000-0000-000000000003"));
+
+    var result = deduplicator.deduplicate(List.of(device, sensor, manual), 0.8);
+    assertThat(result.get(device.getId())).isNull();
+    assertThat(result.get(sensor.getId())).isEqualTo(device.getId());
+    assertThat(result.get(manual.getId())).isNull();
+
+    var restored = deduplicator.deduplicate(List.of(sensor, manual), 0.8);
+    assertThat(restored.get(sensor.getId())).isNull();
+    assertThat(restored.get(manual.getId())).isEqualTo(sensor.getId());
   }
 
   private ActivityLog activity(String code, String category, ActivitySource source,

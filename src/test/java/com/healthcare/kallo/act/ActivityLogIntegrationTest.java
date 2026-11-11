@@ -212,13 +212,119 @@ class ActivityLogIntegrationTest extends ActIntegrationTestBase {
     postWeight(user, "70.0", Instant.now().minusSeconds(60));
     postActivity(token, UUID.randomUUID(), "RUN_8KMH", "MODERATE",
         Instant.now().minusSeconds(30), 30, null).andExpect(status().isCreated());
+    postSyncForCascade(token);
 
     mockMvc.perform(delete("/api/users/me").header("Authorization", bearer(token))
         .contentType(APPLICATION_JSON).content("{\"password\":\"Password1\"}"))
         .andExpect(status().isNoContent());
     assertThat(jdbcTemplate.queryForObject(
-        "select count(*) from activity_logs where user_id = ?", Long.class, user.getId()))
-        .isZero();
+        "select count(*) from weight_logs where user_id = ?", Long.class, user.getId())).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "select count(*) from activity_logs where user_id = ?", Long.class, user.getId())).isZero();
+    assertThat(jdbcTemplate.queryForObject(
+        "select count(*) from health_sync_logs where user_id = ?", Long.class, user.getId())).isZero();
+  }
+
+  private void postSyncForCascade(String token) throws Exception {
+    mockMvc.perform(post("/api/health-sync").header("Authorization", bearer(token))
+        .contentType(APPLICATION_JSON).content("""
+            {"provider":"HEALTH_CONNECT","records":[{
+              "dataType":"STEPS","externalId":"STEPS:cascade","value":10,
+              "startTime":"2026-11-11T10:00:00Z","endTime":"2026-11-11T11:00:00Z"}]}
+            """)).andExpect(status().isOk());
+  }
+
+  @Test
+  void validatesPolylinePrecisionRouteSpeedAndOwnerAccess() throws Exception {
+    User owner = verifiedUser();
+    User stranger = verifiedUser();
+    String ownerToken = accessToken(owner);
+    String route = encodePolyline(List.of(new double[] {10.00000, 106.00000},
+        new double[] {10.00100, 106.00100}));
+    postWeight(owner, "70.0", Instant.now().minusSeconds(60));
+    String body = "{\"clientUuid\":\"" + UUID.randomUUID()
+        + "\",\"activityType\":\"RUN_8KMH\",\"source\":\"GPS\",\"startedAt\":\""
+        + Instant.now().minusSeconds(30)
+        + "\",\"durationMin\":30,\"routePolyline\":\"" + route + "\"}";
+    String created = mockMvc.perform(post("/api/activities").header("Authorization", bearer(ownerToken))
+        .contentType(APPLICATION_JSON).content(body)).andExpect(status().isCreated())
+        .andReturn().getResponse().getContentAsString();
+    String id = data(created).get("id").asText();
+    assertThat(created).doesNotContain("routePolyline");
+    String detail = mockMvc.perform(get("/api/activities/" + id)
+        .header("Authorization", bearer(ownerToken))).andExpect(status().isOk())
+        .andReturn().getResponse().getContentAsString();
+    assertThat(data(detail).get("routePolyline").asText()).isEqualTo(route);
+    mockMvc.perform(get("/api/activities/" + id)
+        .header("Authorization", bearer(accessToken(stranger))))
+        .andExpect(status().isNotFound());
+
+    String tooFast = "{\"clientUuid\":\"" + UUID.randomUUID()
+        + "\",\"activityType\":\"RUN_8KMH\",\"source\":\"GPS\",\"startedAt\":\""
+        + Instant.now().minusSeconds(30)
+        + "\",\"durationMin\":30,\"routePolyline\":\""
+        + encodePolyline(List.of(new double[] {10, 106}, new double[] {10, 107})) + "\"}";
+    mockMvc.perform(post("/api/activities").header("Authorization", bearer(ownerToken))
+        .contentType(APPLICATION_JSON).content(tooFast)).andExpect(status().isBadRequest());
+
+    String impossibleCoordinates = "{\"clientUuid\":\"" + UUID.randomUUID()
+        + "\",\"activityType\":\"RUN_8KMH\",\"source\":\"GPS\",\"startedAt\":\""
+        + Instant.now().minusSeconds(30)
+        + "\",\"durationMin\":30,\"routePolyline\":\""
+        + encodePolyline(List.of(new double[] {200, 300}, new double[] {800, -700})) + "\"}";
+    mockMvc.perform(post("/api/activities").header("Authorization", bearer(ownerToken))
+        .contentType(APPLICATION_JSON).content(impossibleCoordinates)).andExpect(status().isBadRequest());
+
+    String oversized = "{\"clientUuid\":\"" + UUID.randomUUID()
+        + "\",\"activityType\":\"RUN_8KMH\",\"source\":\"GPS\",\"startedAt\":\""
+        + Instant.now().minusSeconds(30)
+        + "\",\"durationMin\":30,\"routePolyline\":\"" + "?".repeat(102401) + "\"}";
+    mockMvc.perform(post("/api/activities").header("Authorization", bearer(ownerToken))
+        .contentType(APPLICATION_JSON).content(oversized)).andExpect(status().isPayloadTooLarge());
+  }
+
+  @Test
+  void softDeletingActivityRemovesRoutePolyline() throws Exception {
+    User user = verifiedUser();
+    String token = accessToken(user);
+    postWeight(user, "70.0", Instant.now().minusSeconds(60));
+    String body = "{\"clientUuid\":\"" + UUID.randomUUID()
+        + "\",\"activityType\":\"RUN_8KMH\",\"source\":\"GPS\",\"startedAt\":\""
+        + Instant.now().minusSeconds(30)
+        + "\",\"durationMin\":30,\"routePolyline\":\""
+        + encodePolyline(List.of(new double[] {10, 106}, new double[] {10.001, 106.001})) + "\"}";
+    String created = mockMvc.perform(post("/api/activities").header("Authorization", bearer(token))
+        .contentType(APPLICATION_JSON).content(body)).andExpect(status().isCreated())
+        .andReturn().getResponse().getContentAsString();
+    String id = data(created).get("id").asText();
+    mockMvc.perform(delete("/api/activities/" + id).header("Authorization", bearer(token)))
+        .andExpect(status().isNoContent());
+    assertThat(jdbcTemplate.queryForObject(
+        "select route_polyline from activity_logs where id = ?", String.class, UUID.fromString(id)))
+        .isNull();
+  }
+
+  private String encodePolyline(List<double[]> points) {
+    StringBuilder result = new StringBuilder();
+    long lastLat = 0, lastLon = 0;
+    for (double[] point : points) {
+      long lat = Math.round(point[0] * 100000);
+      long lon = Math.round(point[1] * 100000);
+      appendEncoded(result, lat - lastLat);
+      appendEncoded(result, lon - lastLon);
+      lastLat = lat;
+      lastLon = lon;
+    }
+    return result.toString();
+  }
+
+  private void appendEncoded(StringBuilder output, long value) {
+    long encoded = value < 0 ? ~(value << 1) : value << 1;
+    while (encoded >= 0x20) {
+      output.append((char) (((encoded & 0x1f) | 0x20) + 63));
+      encoded >>= 5;
+    }
+    output.append((char) (encoded + 63));
   }
 
   private org.springframework.test.web.servlet.ResultActions postActivity(String token, UUID clientUuid,

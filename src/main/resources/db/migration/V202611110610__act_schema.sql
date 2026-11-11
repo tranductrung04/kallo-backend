@@ -7,16 +7,16 @@
 -- weight_logs
 -- ============================================================
 CREATE TABLE weight_logs (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID          NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    client_uuid UUID          NOT NULL,
-    weight_kg   NUMERIC(5, 1) NOT NULL,
-    logged_at   TIMESTAMPTZ   NOT NULL,
-    note        VARCHAR(255),
-    created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
-    deleted_at  TIMESTAMPTZ,
-    CONSTRAINT uq_weight_logs_client UNIQUE (user_id, client_uuid)
+                             id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                             user_id     UUID          NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                             client_uuid UUID          NOT NULL,
+                             weight_kg   NUMERIC(5, 1) NOT NULL,
+                             logged_at   TIMESTAMPTZ   NOT NULL,
+                             note        VARCHAR(255),
+                             created_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+                             updated_at  TIMESTAMPTZ   NOT NULL DEFAULT now(),
+                             deleted_at  TIMESTAMPTZ,
+                             CONSTRAINT uq_weight_logs_client UNIQUE (user_id, client_uuid)
 );
 
 CREATE INDEX idx_weight_logs_user_logged
@@ -32,19 +32,19 @@ CREATE INDEX idx_weight_logs_user_updated
 -- Ainsworth et al., Compendium of Physical Activities (2011 update).
 -- ============================================================
 CREATE TABLE activity_types (
-    code         VARCHAR(40) PRIMARY KEY,
-    name_vi      VARCHAR(100) NOT NULL,
-    category     VARCHAR(20) NOT NULL,
-    met_light    NUMERIC(4, 1),
-    met_moderate NUMERIC(4, 1) NOT NULL CHECK (met_moderate > 0 AND met_moderate <= 25),
-    met_vigorous NUMERIC(4, 1),
-    has_distance BOOLEAN NOT NULL DEFAULT FALSE,
-    sort_order   INTEGER NOT NULL DEFAULT 0,
-    active       BOOLEAN NOT NULL DEFAULT TRUE
+                                code         VARCHAR(40) PRIMARY KEY,
+                                name_vi      VARCHAR(100) NOT NULL,
+                                category     VARCHAR(20) NOT NULL,
+                                met_light    NUMERIC(4, 1),
+                                met_moderate NUMERIC(4, 1) NOT NULL CHECK (met_moderate > 0 AND met_moderate <= 25),
+                                met_vigorous NUMERIC(4, 1),
+                                has_distance BOOLEAN NOT NULL DEFAULT FALSE,
+                                sort_order   INTEGER NOT NULL DEFAULT 0,
+                                active       BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 INSERT INTO activity_types
-    (code, name_vi, category, met_moderate, has_distance, sort_order)
+(code, name_vi, category, met_moderate, has_distance, sort_order)
 VALUES
     ('WALK_BRISK', 'Đi bộ nhanh', 'WALKING', 3.5, TRUE, 1),
     ('RUN_8KMH', 'Chạy bộ 8 km/h', 'RUNNING', 8.3, TRUE, 2),
@@ -135,27 +135,29 @@ VALUES
 -- activity_logs
 -- ============================================================
 CREATE TABLE activity_logs (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    client_uuid     UUID NOT NULL,
-    activity_type   VARCHAR(40) NOT NULL REFERENCES activity_types (code),
-    intensity       VARCHAR(10) NOT NULL DEFAULT 'MODERATE',
-    met             NUMERIC(4, 1) NOT NULL,
-    weight_kg_used  NUMERIC(5, 1) NOT NULL,
-    duration_min    INTEGER NOT NULL CHECK (duration_min BETWEEN 1 AND 1440),
-    distance_km     NUMERIC(6, 2) CHECK (distance_km >= 0),
-    calories_burned NUMERIC(7, 1) NOT NULL CHECK (calories_burned >= 0),
-    source          VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
-    external_id     VARCHAR(100),
-    started_at      TIMESTAMPTZ NOT NULL,
-    ended_at        TIMESTAMPTZ NOT NULL,
-    superseded_by   UUID REFERENCES activity_logs (id) ON DELETE SET NULL,
-    note            VARCHAR(255),
-    route_polyline  TEXT,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    deleted_at      TIMESTAMPTZ,
-    CONSTRAINT uq_activity_logs_client UNIQUE (user_id, client_uuid)
+                               id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                               user_id         UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                               client_uuid     UUID NOT NULL,
+                               activity_type   VARCHAR(40) NOT NULL REFERENCES activity_types (code),
+                               intensity       VARCHAR(10) NOT NULL DEFAULT 'MODERATE',
+                               met             NUMERIC(4, 1) NOT NULL,
+                               weight_kg_used  NUMERIC(5, 1) NOT NULL,
+                               duration_min    INTEGER NOT NULL CHECK (duration_min BETWEEN 1 AND 1440),
+                               distance_km     NUMERIC(6, 2) CHECK (distance_km >= 0),
+                               calories_burned NUMERIC(7, 1) NOT NULL CHECK (calories_burned >= 0),
+                               source          VARCHAR(20) NOT NULL DEFAULT 'MANUAL',
+                               external_id     VARCHAR(100),
+                               started_at      TIMESTAMPTZ NOT NULL,
+                               ended_at        TIMESTAMPTZ NOT NULL,
+                               superseded_by   UUID REFERENCES activity_logs (id) ON DELETE SET NULL,
+                               note            VARCHAR(255),
+                               route_polyline  TEXT,
+                               created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                               updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                               deleted_at      TIMESTAMPTZ,
+                               CONSTRAINT chk_activity_route_polyline_size
+                                   CHECK (route_polyline IS NULL OR octet_length(route_polyline) <= 102400),
+                               CONSTRAINT uq_activity_logs_client UNIQUE (user_id, client_uuid)
 );
 
 CREATE UNIQUE INDEX uq_activity_logs_external
@@ -171,21 +173,26 @@ CREATE INDEX idx_activity_logs_user_updated
 -- health_sync_logs
 -- ============================================================
 CREATE TABLE health_sync_logs (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id     UUID           NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    provider    VARCHAR(20)    NOT NULL,
-    data_type   VARCHAR(20)    NOT NULL,
-    external_id VARCHAR(100)   NOT NULL,
-    value       NUMERIC(12, 2) NOT NULL,
-    value_min   NUMERIC(12, 2),
-    value_max   NUMERIC(12, 2),
-    data_origin VARCHAR(100),
-    start_time  TIMESTAMPTZ    NOT NULL,
-    end_time    TIMESTAMPTZ    NOT NULL,
-    synced_at   TIMESTAMPTZ    NOT NULL DEFAULT now(),
-    CONSTRAINT chk_health_sync_range CHECK (end_time >= start_time),
-    CONSTRAINT uq_health_sync UNIQUE (user_id, provider, data_type, external_id)
+                                  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                                  user_id     UUID           NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+                                  provider    VARCHAR(20)    NOT NULL,
+                                  data_type   VARCHAR(20)    NOT NULL,
+                                  external_id VARCHAR(100)   NOT NULL,
+                                  value       NUMERIC(12, 2) NOT NULL,
+                                  value_min   NUMERIC(12, 2),
+                                  value_max   NUMERIC(12, 2),
+                                  data_origin VARCHAR(100),
+                                  start_time  TIMESTAMPTZ    NOT NULL,
+                                  end_time    TIMESTAMPTZ    NOT NULL,
+                                  synced_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                  last_synced_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                                  CONSTRAINT chk_health_sync_range CHECK (end_time >= start_time),
+                                  CONSTRAINT uq_health_sync UNIQUE (user_id, provider, data_type, external_id)
 );
 
 CREATE INDEX idx_health_sync_user_time
     ON health_sync_logs (user_id, data_type, start_time);
+-- Keep the initial last_synced_at value aligned with synced_at.
+UPDATE health_sync_logs
+SET last_synced_at = synced_at
+WHERE last_synced_at IS DISTINCT FROM synced_at;

@@ -7,6 +7,7 @@ import com.healthcare.kallo.repository.act.ActivityLogRepository;
 import com.healthcare.kallo.repository.act.WeightLogRepository;
 import com.healthcare.kallo.service.act.ActivityDailyAggregator;
 import com.healthcare.kallo.service.act.ProfileBodyMetrics;
+import com.healthcare.kallo.service.act.StepCaloriesCalculator;
 import com.healthcare.kallo.service.act.UserTimeResolver;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -53,7 +54,8 @@ public class ActivityDailyAggregatorImpl implements ActivityDailyAggregator {
         order by start_time
         """, (rs, row) -> new StepBucket(rs.getString("provider"),
         rs.getBigDecimal("value").longValue(), rs.getTimestamp("start_time").toInstant(),
-        rs.getTimestamp("end_time").toInstant()),         userId, Timestamp.from(range.start()), Timestamp.from(range.end()));
+        rs.getTimestamp("end_time").toInstant()), userId,
+        Timestamp.from(range.start()), Timestamp.from(range.end()));
     Map<String, StepBucket> selected = selectSteps(steps, zone);
     long totalSteps = selected.values().stream().mapToLong(StepBucket::steps).sum();
 
@@ -61,10 +63,11 @@ public class ActivityDailyAggregatorImpl implements ActivityDailyAggregator {
         select value, value_max
         from health_sync_logs
         where user_id = ? and data_type = 'HEART_RATE'
-          and start_time < ? and end_time > ?
+          and start_time >= ? and start_time < ?
         """, (rs, row) -> new HeartRate(rs.getBigDecimal("value"), rs.getBigDecimal("value_max")),
-        userId, Timestamp.from(range.end()), Timestamp.from(range.start()));
-    List<ActivityLog> active = activities.findActiveOverlapping(userId, range.start(), range.end());
+        userId, Timestamp.from(range.start()), Timestamp.from(range.end()));
+    List<ActivityLog> active = activities.findStartedInRange(userId, range.start(), range.end());
+    List<ActivityLog> overlapping = activities.findActiveOverlapping(userId, range.start(), range.end());
     BigDecimal activityCalories = active.stream().map(ActivityLog::getCaloriesBurned)
         .reduce(BigDecimal.ZERO, BigDecimal::add);
     int activeMinutes = active.stream().mapToInt(ActivityLog::getDurationMin).sum();
@@ -72,8 +75,10 @@ public class ActivityDailyAggregatorImpl implements ActivityDailyAggregator {
         .stream().max(Comparator.comparing(w -> w.getLoggedAt()))
         .map(w -> w.getWeightKg()).orElseGet(() ->
             profile.getIfAvailable() == null ? null : profile.getIfAvailable().weightKg(userId).orElse(null));
+    BigDecimal calorieWeight = weights.findLatestAtOrBefore(userId, range.end().minusNanos(1))
+        .map(w -> w.getWeightKg()).orElseGet(() -> weight);
     BigDecimal height = profile.getIfAvailable() == null ? null : profile.getIfAvailable().heightCm(userId).orElse(null);
-    BigDecimal stepCalories = stepCalories(selected.values(), active, weight, height);
+    BigDecimal stepCalories = stepCalories(selected.values(), overlapping, calorieWeight, height);
     BigDecimal totalCalories = activityCalories.add(stepCalories).setScale(1, RoundingMode.HALF_UP);
     BigDecimal averageHeartRate = heartRates.isEmpty() ? null
         : heartRates.stream().map(HeartRate::value).reduce(BigDecimal.ZERO, BigDecimal::add)
@@ -81,7 +86,9 @@ public class ActivityDailyAggregatorImpl implements ActivityDailyAggregator {
     BigDecimal maxHeartRate = heartRates.stream()
         .map(rate -> rate.max() == null ? rate.value() : rate.max())
         .max(Comparator.naturalOrder()).orElse(null);
-    String source = selected.values().stream().map(StepBucket::provider).findFirst().orElse(null);
+    String source = selected.values().stream().map(StepBucket::provider)
+        .max(Comparator.comparingInt(this::sourcePriority).thenComparing(String::compareTo))
+        .orElse(null);
     return new DailyActivityStats(date, totalSteps, scale(activityCalories), scale(stepCalories),
         totalCalories, activeMinutes, averageHeartRate, maxHeartRate, weight, source);
   }
@@ -109,12 +116,9 @@ public class ActivityDailyAggregatorImpl implements ActivityDailyAggregator {
               && bucket.end().isAfter(activity.getStartedAt()));
       if (!covered) steps = steps.add(BigDecimal.valueOf(bucket.steps()));
     }
-    BigDecimal hours = height == null
-        ? steps.divide(BigDecimal.valueOf(properties.fallbackCadenceSpm() * 60L), 10, RoundingMode.HALF_UP)
-        : steps.multiply(properties.strideFactor()).multiply(height)
-            .divide(BigDecimal.valueOf(1000L), 10, RoundingMode.HALF_UP)
-            .divide(properties.walkingSpeedKmh(), 10, RoundingMode.HALF_UP);
-    return properties.walkingMet().multiply(weight).multiply(hours).setScale(1, RoundingMode.HALF_UP);
+    return StepCaloriesCalculator.calculate(steps.longValue(), weight, height,
+        properties.walkingMet(), properties.walkingSpeedKmh(),
+        properties.fallbackCadenceSpm(), properties.strideFactor());
   }
 
   private int sourcePriority(String provider) {

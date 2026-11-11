@@ -16,7 +16,13 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
   Optional<ActivityLog> findByIdAndUserId(UUID id, UUID userId);
   Optional<ActivityLog> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
-  List<ActivityLog> findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(UUID userId, Instant since);
+  @Query("""
+      select a from ActivityLog a
+      where a.user.id = :userId and a.updatedAt > :since
+      order by a.updatedAt asc, a.id asc
+      """)
+  List<ActivityLog> findChangedSince(@Param("userId") UUID userId,
+      @Param("since") Instant since, Pageable pageable);
 
   @Modifying
   @Transactional
@@ -25,16 +31,35 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
 
   @Query("""
       select a from ActivityLog a join fetch a.activityType
-      where a.user.id = :userId and a.deletedAt is null
+      where a.user.id = :userId and a.startedAt < :to and a.endedAt > :from
+        and a.deletedAt is null
+      """)
+  List<ActivityLog> findForDeduplication(@Param("userId") UUID userId,
+      @Param("from") Instant from, @Param("to") Instant to);
+
+  @Modifying
+  @Transactional
+  @Query(value = """
+      UPDATE activity_logs
+      SET superseded_by = :winnerId
+      WHERE id = :activityId AND user_id = :userId
+      """, nativeQuery = true)
+  int updateSupersededBy(@Param("userId") UUID userId, @Param("activityId") UUID activityId,
+      @Param("winnerId") UUID winnerId);
+
+  @Query("""
+      select a from ActivityLog a join fetch a.activityType
+      where a.user.id = :userId and a.startedAt >= :from and a.startedAt < :to
+        and a.deletedAt is null and a.supersededBy is null
       order by a.startedAt
       """)
-  List<ActivityLog> findActiveForDeduplication(@Param("userId") UUID userId);
+  List<ActivityLog> findStartedInRange(@Param("userId") UUID userId,
+      @Param("from") Instant from, @Param("to") Instant to);
 
   @Query("""
       select a from ActivityLog a join fetch a.activityType
       where a.user.id = :userId and a.startedAt < :to and a.endedAt > :from
         and a.deletedAt is null and a.supersededBy is null
-      order by a.startedAt
       """)
   List<ActivityLog> findActiveOverlapping(@Param("userId") UUID userId,
       @Param("from") Instant from, @Param("to") Instant to);
@@ -68,10 +93,11 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
       @Param("endedAt") Instant endedAt, @Param("note") String note,
       @Param("routePolyline") String routePolyline);
 
-  @Modifying
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Transactional
   @Query(value = """
-      UPDATE activity_logs SET deleted_at = :deletedAt, updated_at = :deletedAt
+      UPDATE activity_logs
+      SET deleted_at = :deletedAt, updated_at = :deletedAt, route_polyline = NULL
       WHERE id = :id AND user_id = :userId AND deleted_at IS NULL
       """, nativeQuery = true)
   int softDeleteByIdAndUserId(@Param("id") UUID id, @Param("userId") UUID userId,

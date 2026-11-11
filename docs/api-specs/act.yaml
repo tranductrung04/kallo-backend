@@ -3,14 +3,15 @@ info:
   title: Kallo Backend - ACT API
   version: 1.0.0
   description: |
-    API theo dõi cân nặng, hoạt động và dữ liệu sức khoẻ đồng bộ. User id luôn lấy từ JWT.
-    Mobile gửi lại cùng clientUuid/externalId để đạt tính idempotent.
+    API theo dõi cân nặng, hoạt động và dữ liệu sức khoẻ đồng bộ.
+    User id luôn lấy từ JWT; mọi endpoint yêu cầu email đã xác minh.
 servers:
   - url: http://localhost:8080
 security:
   - bearerAuth: []
 tags:
   - name: weight-logs
+  - name: activity-types
   - name: activities
   - name: health-sync
 paths:
@@ -26,27 +27,105 @@ paths:
     post:
       tags: [weight-logs]
       summary: Ghi cân nặng
-      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      requestBody: { $ref: '#/components/requestBodies/WeightCreate' }
       responses:
         '201': { $ref: '#/components/responses/ApiResponse' }
+        '200': { description: Bản ghi trùng clientUuid, trả bản đã có }
+  /api/weight-logs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [weight-logs]
+      summary: Xem một bản ghi cân nặng
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [weight-logs]
+      summary: Sửa bản ghi cân nặng
+      requestBody: { $ref: '#/components/requestBodies/WeightUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+    delete:
+      tags: [weight-logs]
+      summary: Xoá mềm bản ghi cân nặng
+      responses:
+        '204': { description: Đã xoá hoặc thao tác idempotent }
+  /api/activity-types:
+    get:
+      tags: [activity-types]
+      summary: Liệt kê danh mục hoạt động đang bật
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
   /api/activities:
     get:
       tags: [activities]
       summary: Liệt kê hoạt động
+      description: Route không bao giờ được trả trong danh sách.
+      parameters:
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+        - { $ref: '#/components/parameters/page' }
+        - { $ref: '#/components/parameters/size' }
+        - name: includeSuperseded
+          in: query
+          schema: { type: boolean, default: false }
       responses:
         '200': { $ref: '#/components/responses/ApiResponse' }
     post:
       tags: [activities]
       summary: Ghi hoạt động
-      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      description: |
+        Source mới chỉ dùng MANUAL, GPS hoặc SENSOR. APPLE_HEALTH, HEALTH_CONNECT
+        và HEALTHKIT vẫn được ánh xạ tạm thời để tương thích client cũ; dữ liệu
+        Health Connect/HealthKit mới nên gửi qua health-sync.
+        GPS bắt buộc routePolyline theo Google Encoded Polyline precision 5.
+        Khi bỏ trống distanceKm, server tính từ route bằng Haversine.
+      requestBody: { $ref: '#/components/requestBodies/ActivityCreate' }
       responses:
         '201': { $ref: '#/components/responses/ApiResponse' }
+        '200': { description: Bản ghi trùng clientUuid, trả bản đã có }
+        '413': { description: Polyline hoặc lô dữ liệu vượt giới hạn }
+  /api/activities/summary:
+    get:
+      tags: [activities]
+      summary: Tổng hợp hoạt động theo ngày
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - $ref: '#/components/parameters/from'
+        - $ref: '#/components/parameters/to'
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+  /api/activities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags: [activities]
+      summary: Xem chi tiết hoạt động và lộ trình
+      description: Đây là endpoint duy nhất trả routePolyline.
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [activities]
+      summary: Sửa hoạt động
+      description: PUT thay thế dữ liệu hoạt động; nếu không gửi routePolyline thì giữ route hiện tại.
+      requestBody: { $ref: '#/components/requestBodies/ActivityUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/ApiResponse' }
+    delete:
+      tags: [activities]
+      summary: Xoá mềm hoạt động
+      responses:
+        '204': { description: Đã xoá; route bị xoá ngay }
   /api/health-sync:
     post:
       tags: [health-sync]
       summary: Đồng bộ bucket bước chân hoặc nhịp tim
-      description: Tối đa 500 bản ghi mỗi lô theo mặc định; bản ghi sai được trả trong rejected.
-      requestBody: { $ref: '#/components/requestBodies/JsonBody' }
+      description: Tối đa 500 bản ghi mỗi lô; bản ghi sai được trả trong rejected.
+      requestBody: { $ref: '#/components/requestBodies/HealthSync' }
       responses:
         '200': { $ref: '#/components/responses/ApiResponse' }
         '413': { description: Lô vượt giới hạn }
@@ -63,6 +142,11 @@ components:
       scheme: bearer
       bearerFormat: JWT
   parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
     from:
       name: from
       in: query
@@ -71,12 +155,98 @@ components:
       name: to
       in: query
       schema: { type: string, format: date }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
   requestBodies:
-    JsonBody:
+    WeightCreate:
       required: true
       content:
         application/json:
-          schema: { type: object }
+          schema: { $ref: '#/components/schemas/WeightCreate' }
+    WeightUpdate:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/WeightUpdate' }
+    ActivityCreate:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ActivityCreate' }
+    ActivityUpdate:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ActivityUpdate' }
+    HealthSync:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/HealthSync' }
+  schemas:
+    WeightCreate:
+      type: object
+      required: [clientUuid, weightKg]
+      properties:
+        clientUuid: { type: string, format: uuid }
+        weightKg: { type: number, minimum: 20, maximum: 300 }
+        loggedAt: { type: string, format: date-time }
+        note: { type: string, maxLength: 255 }
+    WeightUpdate:
+      allOf:
+        - $ref: '#/components/schemas/WeightCreate'
+        - type: object
+          required: [loggedAt]
+          properties:
+            clientUpdatedAt: { type: string, format: date-time }
+    ActivityCreate:
+      type: object
+      required: [clientUuid, activityType, startedAt, durationMin]
+      properties:
+        clientUuid: { type: string }
+        activityType: { type: string, maxLength: 40 }
+        intensity: { type: string, enum: [LIGHT, MODERATE, VIGOROUS], default: MODERATE }
+        startedAt: { type: string, format: date-time }
+        durationMin: { type: integer, minimum: 1, maximum: 1440 }
+        distanceKm: { type: number, minimum: 0 }
+        source: { type: string, enum: [MANUAL, GPS, SENSOR, APPLE_HEALTH, HEALTH_CONNECT, HEALTHKIT] }
+        externalId: { type: string, maxLength: 100 }
+        routePolyline: { type: string, maxLength: 102400, description: Encoded Polyline precision 5; GPS bắt buộc }
+        note: { type: string, maxLength: 255 }
+    ActivityUpdate:
+      allOf:
+        - $ref: '#/components/schemas/ActivityCreate'
+        - type: object
+          required: [activityType, startedAt, durationMin]
+          properties:
+            clientUpdatedAt: { type: string, format: date-time }
+    HealthSync:
+      type: object
+      required: [provider, records]
+      properties:
+        provider: { type: string, enum: [HEALTH_CONNECT, HEALTHKIT, DEVICE_SENSOR] }
+        records:
+          type: array
+          maxItems: 500
+          items: { $ref: '#/components/schemas/HealthSyncRecord' }
+    HealthSyncRecord:
+      type: object
+      required: [dataType, externalId, startTime, endTime, value]
+      properties:
+        dataType: { type: string, enum: [STEPS, HEART_RATE] }
+        externalId: { type: string, maxLength: 100 }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        value: { type: number, minimum: 0 }
+        min: { type: number, minimum: 0 }
+        max: { type: number, minimum: 0 }
+        dataOrigin: { type: string, maxLength: 100 }
   responses:
     ApiResponse:
       description: ApiResponse envelope
@@ -89,3 +259,5 @@ components:
               success: { type: boolean }
               data: {}
               error: { type: object, nullable: true }
+    NotFound:
+      description: Không tìm thấy tài nguyên hoặc tài nguyên thuộc user khác

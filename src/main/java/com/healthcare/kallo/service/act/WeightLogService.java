@@ -21,6 +21,7 @@ public interface WeightLogService {
   void delete(UUID userId, UUID id);
 
   List<WeightLogResponse> changedSince(UUID userId, Instant since);
+  List<WeightLogResponse> changedSince(UUID userId, Instant since, int limit);
 
   WeightLogResponse upsertFromClient(
       UUID userId, CreateWeightLogRequest request, Instant clientUpdatedAt, Instant clientDeletedAt);
