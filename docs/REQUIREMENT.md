@@ -28,9 +28,9 @@
 8. [Yêu cầu giao tiếp ngoài và API](#8-yêu-cầu-giao-tiếp-ngoài-và-api)
 9. [Yêu cầu phi chức năng](#9-yêu-cầu-phi-chức-năng)
 10. [Kiểm thử và tiêu chí nghiệm thu](#10-kiểm-thử-và-tiêu-chí-nghiệm-thu)
-11. [Rủi ro, giả định, ràng buộc](#13-rủi-ro-giả-định-ràng-buộc)
-12. [Câu hỏi mở cần chốt](#14-câu-hỏi-mở-cần-chốt)
-13. [Phụ lục](#15-phụ-lục)
+11. [Rủi ro, giả định, ràng buộc](#11-rủi-ro-giả-định-ràng-buộc)
+12. [Câu hỏi mở cần chốt](#12-câu-hỏi-mở-cần-chốt)
+13. [Phụ lục](#13-phụ-lục)
 
 ---
 
