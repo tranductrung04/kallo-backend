@@ -56,6 +56,7 @@ app:
     walking-speed-kmh: ${APP_ACT_WALKING_SPEED_KMH:5}
     stride-factor: ${APP_ACT_STRIDE_FACTOR:0.415}
     fallback-cadence-spm: ${APP_ACT_FALLBACK_CADENCE_SPM:100}
+    step-source-priority: ${APP_ACT_STEP_SOURCE_PRIORITY:HEALTH_CONNECT,HEALTHKIT,DEVICE_SENSOR}
     dedup-overlap-ratio: ${APP_ACT_DEDUP_OVERLAP_RATIO:0.8}
     tombstone-retention: ${APP_ACT_TOMBSTONE_RETENTION:90d}
   google:
