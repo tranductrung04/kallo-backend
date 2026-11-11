@@ -27,6 +27,7 @@ public record ActProperties(
     @NotNull List<String> stepSourcePriority,
     @NotNull @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal dedupOverlapRatio,
     @NotNull Duration tombstoneRetention,
+    @NotNull String tombstoneCleanupCron,
     @Min(1) int routeMaxBytes,
     @NotNull @DecimalMin(value = "0.0", inclusive = false) BigDecimal gpsMaxSpeedKmh) {
 

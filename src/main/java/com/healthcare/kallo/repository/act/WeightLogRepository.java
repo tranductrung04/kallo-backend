@@ -19,6 +19,13 @@ public interface WeightLogRepository extends JpaRepository<WeightLog, UUID> {
 
   Optional<WeightLog> findByIdAndUserIdAndDeletedAtIsNull(UUID id, UUID userId);
 
+  List<WeightLog> findByUserIdAndUpdatedAtAfterOrderByUpdatedAtAsc(UUID userId, Instant since);
+
+  @Modifying
+  @Transactional
+  @Query("delete from WeightLog w where w.deletedAt is not null and w.deletedAt < :cutoff")
+  int deleteTombstonesBefore(@Param("cutoff") Instant cutoff);
+
   @Query("""
       select w from WeightLog w
       where w.user.id = :userId
