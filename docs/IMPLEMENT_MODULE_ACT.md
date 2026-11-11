@@ -222,6 +222,18 @@ Tiền tố `/api`, tất cả cần Bearer và `email_verified = true`. Mọi p
 | `GET /api/health-sync/status` | FR-ACT-02, 03 | 3 | — | 200 + mỗi `(provider, dataType)` có `lastEndTime`, `lastSyncedAt`; người chưa sync nhận danh sách rỗng, không phải lỗi |
 | `GET /api/activities/summary` | FR-ACT-05, 08 | 4 | `date`, hoặc `from`+`to` (tối đa 31 ngày) | 200 + số bước, calo hoạt động, calo bước chân, tổng calo tiêu hao, phút vận động, nhịp tim trung bình/tối đa, cân nặng mới nhất |
 
+Khi tính calo cho hoạt động, backend chỉ dùng bản ghi cân nặng có
+`logged_at <= startedAt`; nếu không có thì mới hỏi cổng PROFILE. Vì vậy cân
+được ghi sau thời điểm buổi tập không được dùng hồi tố cho buổi tập đó.
+
+`POST /api/activities` cũng chấp nhận payload legacy của mobile: `id` được
+dùng làm `clientUuid` ổn định, `type` ánh xạ sang mã catalog chuẩn,
+`durationMinutes` ánh xạ sang `durationMin`, `timestamp` ánh xạ sang
+`startedAt`, và thiếu `intensity` mặc định là `MODERATE`. `caloriesBurned`,
+`name` và `date` do client gửi bị bỏ qua; calo trả về luôn do backend tính
+từ MET và cân nặng snapshot. ID dạng `act-*` của payload legacy cũng được
+chấp nhận ở endpoint xoá.
+
 Quy ước chung của phần này:
 
 - `POST` có `clientUuid` là **idempotent**: gửi lại cùng `clientUuid` trả bản đã có (200), không tạo thêm, bỏ qua phần còn lại của body; muốn đổi nội dung thì dùng `PUT`.

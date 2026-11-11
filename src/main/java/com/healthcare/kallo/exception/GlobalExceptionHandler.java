@@ -33,7 +33,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   @ExceptionHandler(BusinessException.class)
   public ResponseEntity<ApiResponse<Void>> business(BusinessException e) {
     return ResponseEntity.status(e.getErrorCode().status())
-        .body(ApiResponse.error(e.getErrorCode().name(), e.getErrorCode().message()));
+        .body(new ApiResponse<>(
+            false, null,
+            new ApiResponse.Error(
+                e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails())));
   }
 
   @Override
