@@ -16,7 +16,6 @@
 - [Công nghệ sử dụng](#công-nghệ-sử-dụng)
 - [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
 - [Cài đặt & chạy dự án](#cài-đặt--chạy-dự-án)
-- [Cấu hình](#cấu-hình)
 - [Database & Migration](#database--migration)
 - [API Documentation](#api-documentation)
 - [Testing](#testing)
@@ -111,46 +110,6 @@ docker compose up -d postgres
 
 Ứng dụng chạy tại: http://localhost:8080  
 Flyway sẽ tự động chạy migration khi ứng dụng khởi động.
-
-## Cấu hình
-
-Các biến môi trường chính:
-
-| Biến                      | Mô tả                                              | Mặc định / Ví dụ                                  |
-|---------------------------|----------------------------------------------------|---------------------------------------------------|
-| `APP_NAME`                | Tên project, dùng đặt tên container (Docker)       | `kallo-backend`                                   |
-| `SPRING_PROFILES_ACTIVE`  | Profile đang chạy                                  | `dev` (Docker Compose đặt `prod`)                 |
-| `SERVER_PORT`             | Cổng ứng dụng (profile dev)                        | `8080`                                            |
-| `PROD_SERVER_PORT`        | Cổng ứng dụng (profile prod)                       | `8080`                                            |
-| `DB_NAME`                 | Tên database                                       | _(bắt buộc)_                                        |
-| `DB_URL`                  | JDBC URL, chỉ dùng khi chạy local (tuỳ chọn)       | `jdbc:postgresql://localhost:5432/<db_name>`      |
-| `DB_USERNAME`             | Tài khoản database                                 | _(bắt buộc)_                                        |
-| `DB_PASSWORD`             | Mật khẩu database (bắt buộc với Docker)            | _(bắt buộc)_                                         |
-| `PROD_REDIS_PASSWORD`     | Mật khẩu Redis (để trống nếu không đặt)            | _(trống)_                                         |
-| `JWT_SECRET`              | Khoá ký JWT                                        | _(bắt buộc)_                                      |
-| `JWT_ACCESS_EXPIRATION`   | Thời hạn access token (ms)                         | `900000`                                          |
-| `JWT_REFRESH_EXPIRATION`  | Thời hạn refresh token (ms)                        | `604800000`                                       |
-| `JWT_REFRESH_REUSE_GRACE` | Cửa sổ ân hạn khi refresh token bị gửi đồng thời (ms) | `3000`                                         |
-| `GOOGLE_CLIENT_ID`        | Danh sách client ID Google, phân cách bằng dấu phẩy (Web/Android/iOS) | Bắt buộc khi khởi động ứng dụng |
-| `GOOGLE_JWKS_URI`         | URL JWKS dùng để xác minh Google ID token          | _(bắt buộc)_   |
-| `AI_SERVICE_URL`          | URL của AI service (FastAPI)                       | `http://localhost:8000`                           |
-| `FCM_CREDENTIALS_PATH`    | Đường dẫn file service account FCM                 | _(bắt buộc nếu bật push)_                         |
-| `STORAGE_ENDPOINT`        | Endpoint Object Storage (MinIO)                    | `http://localhost:9000`                           |
-| `STORAGE_PUBLIC_ENDPOINT` | Endpoint MinIO có thể truy cập từ mobile           | `http://localhost:9000`                           |
-| `STORAGE_BUCKET`          | Tên bucket lưu ảnh                                 | _(bắt buộc)_                                |
-| `STORAGE_ACCESS_KEY`      | Access key                                         | _(bắt buộc)_                                      |
-| `STORAGE_SECRET_KEY`      | Secret key                                         | _(bắt buộc)_                                      |
-| `MAIL_HOST`               | SMTP host gửi mail khôi phục mật khẩu              | _(bắt buộc)_                                      |
-| `MAIL_USERNAME`           | Tài khoản SMTP                                     | _(bắt buộc)_                                      |
-| `MAIL_PASSWORD`           | Mật khẩu SMTP                                      | _(bắt buộc)_                                      |
-
-> Khi chạy bằng Docker Compose, các biến `PROD_DB_URL`, `PROD_DB_USERNAME`, `PROD_DB_PASSWORD`,
-> `PROD_REDIS_HOST`, `PROD_ES_URIS`... đã được `docker-compose.yml` thiết lập sẵn, không cần khai trong `.env`.
->
-> Spring Boot không tự đọc file `.env`: khi chạy `./gradlew bootRun`, hãy export biến vào shell
-> hoặc dùng plugin EnvFile của IntelliJ.
-> 
-> **Lưu ý:** Không commit `.env`, file service account FCM hay bất kỳ thông tin nhạy cảm nào lên Git.
 
 ## Database & Migration
 
