@@ -11,11 +11,24 @@ import org.springframework.data.repository.query.Param;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.Pageable;
+import com.healthcare.kallo.model.auth.enums.UserStatus;
 
 public interface UserRepository extends JpaRepository<User, UUID> {
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select u from User u where u.id = :id")
   Optional<User> findByIdForUpdate(@Param("id") UUID id);
+  @Query("""
+      select u from User u
+      where u.status = :status
+        and u.emailVerified = true
+        and exists (select s.userId from NotificationSettings s
+                    where s.userId = u.id
+                      and (s.waterReminderEnabled = true or s.mealReminderEnabled = true))
+        and exists (select d.id from DeviceToken d where d.userId = u.id)
+      order by u.id
+      """)
+  List<User> findReminderCandidates(@Param("status") UserStatus status, Pageable pageable);
   @Query("select u from User u where lower(u.email) = :email")
   Optional<User> findByNormalizedEmail(@Param("email") String email);
 

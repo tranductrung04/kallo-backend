@@ -1,4 +1,6 @@
 app:
+  reminder:
+    enabled: false
   otp-hmac-secret: test-otp-secret-with-at-least-32-bytes
   jwt:
     secret: test-secret-with-at-least-32-bytes-for-tests
