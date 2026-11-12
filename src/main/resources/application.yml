@@ -75,6 +75,9 @@ app:
   push:
     enabled: ${PUSH_ENABLED:false}
     credentials-path: ${FCM_CREDENTIALS_PATH:}
+  websocket:
+    allowed-origins: ${APP_WEBSOCKET_ALLOWED_ORIGINS:*}
+    max-sessions-per-user: ${APP_WEBSOCKET_MAX_SESSIONS_PER_USER:5}
   notification:
     retention-days: ${APP_NOTIFICATION_RETENTION_DAYS:30}
     reminder-daily-cap: ${APP_NOTIFICATION_REMINDER_DAILY_CAP:6}
