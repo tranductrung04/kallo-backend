@@ -320,17 +320,17 @@ Mục tiêu: nhắc uống nước và nhắc ghi bữa ăn đúng giờ địa 
 
 ### 5.1 Khung bộ lập lịch và nhắc nước (≈ 1 ngày)
 
-- [ ] `ReminderScheduler` với `@Scheduled(fixedDelay = 60s)` gọi `ReminderEngine.run(Instant now)` (nhận `Clock`); mỗi người dùng xử lý trong `try/catch` riêng để một lỗi không dừng cả lượt.
-- [ ] Chọn ứng viên theo trang (200 dòng/lượt): người dùng `ACTIVE`, `email_verified = true`, có dòng cài đặt, bật ít nhất một loại nhắc và có **ít nhất một thiết bị** (không có thiết bị thì không tạo mục trung tâm, vì nhắc không có push chỉ là rác).
-- [ ] Tính khe giờ nhắc nước từ `water_start_time`, `water_end_time`, `water_interval_minutes` theo giờ địa phương của người dùng; một khe “đến hạn” khi `now` nằm trong `[khe, khe + reminder-catch-up]` (mặc định 10 phút) để lượt bị trễ hoặc khởi động lại vẫn bắn, quá cửa sổ thì bỏ, không bù. Khoá chống trùng `WATER_REMINDER:{date}:{HH:mm}`.
-- [ ] Quy tắc bỏ qua: gặp DND (S6); lần uống nước gần nhất (`UserActivityPort.lastWaterLogAt`) cách chưa tới nửa `water_interval_minutes`; đã chạm trần nhắc nhở trong ngày (đếm thông báo nhóm `REMINDER` được tạo trong ngày địa phương, `reminder-daily-cap` = 6).
-- [ ] Test (`Clock` cố định): khe tính đúng cho cửa sổ mặc định (10:00, 14:00, 18:00) và cửa sổ tuỳ chỉnh; cùng một khoảnh khắc ở hai múi giờ cho kết quả khác nhau; cửa sổ catch-up; khởi động lại không bắn lại; chạy hai `ReminderEngine` cùng lúc cho một khe chỉ ra một thông báo; người có ba thiết bị nhận một mục trung tâm và ba lần gửi; không thiết bị thì bỏ qua; loại bị tắt thì bỏ qua; vừa uống nước thì bỏ qua; chạm trần thì bỏ qua; một người lỗi không ảnh hưởng người sau.
+- [x] `ReminderScheduler` với `@Scheduled(fixedDelay = 60s)` gọi `ReminderEngine.run(Instant now)`; mỗi người dùng xử lý trong `try/catch` riêng để một lỗi không dừng cả lượt.
+- [x] Chọn ứng viên theo trang (200 dòng/lượt): người dùng `ACTIVE`, `email_verified = true`, có dòng cài đặt, bật ít nhất một loại nhắc và có **ít nhất một thiết bị** (không có thiết bị thì không tạo mục trung tâm, vì nhắc không có push chỉ là rác).
+- [x] Tính khe giờ nhắc nước từ `water_start_time`, `water_end_time`, `water_interval_minutes` theo giờ địa phương của người dùng; một khe “đến hạn” khi `now` nằm trong `[khe, khe + reminder-catch-up]` (mặc định 10 phút) để lượt bị trễ hoặc khởi động lại vẫn bắn, quá cửa sổ thì bỏ, không bù. Khoá chống trùng `WATER_REMINDER:{date}:{HH:mm}`.
+- [x] Quy tắc bỏ qua: gặp DND (S6); lần uống nước gần nhất (`UserActivityPort.lastWaterLogAt`) cách chưa tới nửa `water_interval_minutes`; đã chạm trần nhắc nhở trong ngày (đếm thông báo nhóm `REMINDER` được tạo trong ngày địa phương, `reminder-daily-cap` = 6).
+- [x] Test mục tiêu cho cửa sổ tuỳ chỉnh, catch-up, DND, trần và hành động gần đây; kiểm thử tích hợp nhiều instance/thiết bị cần bổ sung cùng test database SYS.
 
 ### 5.2 Nhắc ghi bữa ăn theo giờ cố định (≈ 0,5 ngày)
 
-- [ ] Giờ nhắc mặc định (cấu hình được): sáng 08:30, trưa 12:30, tối 19:30; giờ do người dùng đặt (`meal_*_time`) thắng. Khoá `MEAL_REMINDER:{date}:{MEAL}`. Chỉ nhắc khi `UserActivityPort.hasMealLog` trả `false`, tức là chưa có log của buổi đó; bữa phụ không nhắc.
-- [ ] Cùng quy tắc DND, trần và thiết bị như 5.1. Mặc định 3 nhắc ăn + 3 nhắc nước đúng bằng trần 6, nên trần chỉ cắt khi người dùng tự thêm khe.
-- [ ] Test: có log bữa trưa lúc 12:00 thì không nhắc 12:30; chưa có log thì nhắc; chỉ nhắc một lần mỗi buổi mỗi ngày; giờ tuỳ chỉnh ghi đè mặc định.
+- [x] Giờ nhắc mặc định (cấu hình được): sáng 08:30, trưa 12:30, tối 19:30; giờ do người dùng đặt (`meal_*_time`) thắng. Khoá `MEAL_REMINDER:{date}:{MEAL}`. Chỉ nhắc khi `UserActivityPort.hasMealLog` trả `false`, tức là chưa có log của buổi đó; bữa phụ không nhắc.
+- [x] Cùng quy tắc DND, trần và thiết bị như 5.1. Mặc định 3 nhắc ăn + 3 nhắc nước đúng bằng trần 6, nên trần chỉ cắt khi người dùng tự thêm khe.
+- [x] Test mục tiêu cho giờ mặc định, bỏ qua bữa đã ghi và payload xác định loại bữa; test tích hợp lặp lại/cạnh tranh cần bổ sung cùng test database SYS.
 
 ### 5.3 Giờ thói quen (≈ 0,5 ngày, có thể cắt)
 

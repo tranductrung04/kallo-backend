@@ -1,7 +1,9 @@
 package com.healthcare.kallo.repository.sys;
 
 import com.healthcare.kallo.model.sys.Notification;
+import com.healthcare.kallo.model.sys.enums.NotificationType;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.*;
@@ -35,6 +37,17 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
       org.springframework.data.domain.Pageable pageable);
 
   long countByUserIdAndReadFalseAndDeletedAtIsNull(UUID userId);
+
+  @Query("""
+      select count(n) from Notification n
+      where n.userId = :userId and n.type in :types
+        and n.createdAt >= :from and n.createdAt < :to
+      """)
+  long countByUserIdAndTypesAndCreatedAtBetween(
+      @Param("userId") UUID userId,
+      @Param("types") Collection<NotificationType> types,
+      @Param("from") Instant from,
+      @Param("to") Instant to);
 
   @Modifying
   @Query("""

@@ -11,8 +11,6 @@ import com.healthcare.kallo.dto.request.auth.UpdateUserRequest;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.auth.enums.Role;
 import com.healthcare.kallo.repository.auth.UserRepository;
-import com.healthcare.kallo.service.auth.GoogleTokenVerifier;
-import com.healthcare.kallo.service.auth.StorageService;
 import com.healthcare.kallo.service.auth.impl.UserServiceImpl;
 import java.time.Duration;
 import java.util.Optional;
