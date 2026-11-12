@@ -1,13 +1,20 @@
 package com.healthcare.kallo.service.sys.impl;
 
 import com.healthcare.kallo.event.sys.NotificationCreatedEvent;
+import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.sys.Notification;
+import com.healthcare.kallo.model.sys.NotificationSettings;
+import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.sys.NotificationRepository;
 import com.healthcare.kallo.service.sys.*;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import java.time.Instant;
 import java.time.Clock;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.DateTimeException;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 import tools.jackson.databind.ObjectMapper;
@@ -24,6 +31,8 @@ public class NotificationServiceImpl implements NotificationService {
   private final NotificationMessageFactory messageFactory;
   private final Clock clock;
   private final NotificationPolicy policy;
+  private final NotificationSettingsService settingsService;
+  private final UserRepository users;
 
   public NotificationServiceImpl(
       NotificationRepository notifications,
@@ -32,7 +41,9 @@ public class NotificationServiceImpl implements NotificationService {
       ObjectMapper objectMapper,
       NotificationMessageFactory messageFactory,
       Clock clock,
-      NotificationPolicy policy) {
+      NotificationPolicy policy,
+      NotificationSettingsService settingsService,
+      UserRepository users) {
     this.notifications = notifications;
     this.entityManager = entityManager;
     this.events = events;
@@ -40,6 +51,8 @@ public class NotificationServiceImpl implements NotificationService {
     this.messageFactory = messageFactory;
     this.clock = clock;
     this.policy = policy;
+    this.settingsService = settingsService;
+    this.users = users;
   }
 
   @Override
@@ -48,9 +61,16 @@ public class NotificationServiceImpl implements NotificationService {
     if (command.userId() == null || command.type() == null) {
       throw new IllegalArgumentException("Notification command is incomplete");
     }
-    NotifyOutcome policyOutcome = policy.evaluate(command.userId(), command.type());
-    if (policyOutcome != NotifyOutcome.SENT) return policyOutcome;
-    NotificationContent content = messageFactory.render(command.type(), command.params());
+    User user = users.findById(command.userId())
+        .orElseThrow(() -> new IllegalArgumentException("Notification user does not exist"));
+    NotificationSettings settings = settingsService.getOrCreate(command.userId());
+    ZoneId zone = zoneOrDefault(user.getTimezone());
+    NotifyOutcome policyOutcome = policy.evaluate(
+        settings, command.type(), LocalTime.now(clock.withZone(zone)));
+    if (policyOutcome == NotifyOutcome.SUPPRESSED_DISABLED
+        || policyOutcome == NotifyOutcome.SUPPRESSED_DND_REMINDER) return policyOutcome;
+    Locale locale = Locale.forLanguageTag(settings.getLanguage().replace('_', '-'));
+    NotificationContent content = messageFactory.render(command.type(), locale, command.params());
     validateLength(content.title(), 200, "title");
     validateLength(content.body(), 1000, "body");
     if (command.dedupeKey() != null) validateLength(command.dedupeKey(), 120, "dedupeKey");
@@ -69,13 +89,23 @@ public class NotificationServiceImpl implements NotificationService {
           .setParameter("dedupeKey", command.dedupeKey())
           .setParameter("createdAt", Instant.now(clock))
           .getSingleResult();
-      events.publishEvent(new NotificationCreatedEvent(
-          id, command.userId(), command.type(), content.pushTitle(), content.pushBody()));
-      return NotifyOutcome.SENT;
+      if (policyOutcome == NotifyOutcome.SENT) {
+        events.publishEvent(new NotificationCreatedEvent(
+            id, command.userId(), command.type(), content.pushTitle(), content.pushBody()));
+      }
+      return policyOutcome;
     } catch (NoResultException duplicate) {
       return NotifyOutcome.DUPLICATE;
     }
   }
+
+  private ZoneId zoneOrDefault(String timezone) {
+      try {
+        return ZoneId.of(timezone == null ? "Asia/Ho_Chi_Minh" : timezone);
+      } catch (DateTimeException e) {
+        return ZoneId.of("Asia/Ho_Chi_Minh");
+      }
+    }
 
   private String toJson(NotifyCommand command) {
     try {
