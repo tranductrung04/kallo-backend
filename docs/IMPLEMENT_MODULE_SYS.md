@@ -236,7 +236,7 @@ SYS có 12 endpoint HTTP (cộng một endpoint chỉ có ở profile `dev`) và
 | `DELETE /api/notifications/{id}` | FR-SYS-03 | 2 | — | 204 (xoá mềm); 404 `NOTIFICATION_NOT_FOUND` |
 | `GET /api/notification-settings` | FR-SYS-04 | 3 | — | 200 + cài đặt (tạo mặc định nếu chưa có) |
 | `PUT /api/notification-settings` | FR-SYS-04 | 3 | các trường cài đặt (giờ dạng `HH:mm`) | 200 + cài đặt mới; 400 `VALIDATION_ERROR` kèm `details` theo trường |
-| `POST /api/sync/push` | FR-SYS-05, 06 | 6 | `operations[]`: `entity`, `clientUuid`, `op` (`UPSERT`\|`DELETE`), `updatedAt`, `data` | 200 + `results[]` từng thao tác (`APPLIED`, `UNCHANGED`, `CONFLICT_SERVER_WINS`, `REJECTED` kèm mã lý do) + `serverTime`; 413 `SYNC_BATCH_TOO_LARGE`; 429 `TOO_MANY_REQUESTS` |
+| `POST /api/sync/push` | FR-SYS-05, 06 | 6 | `operations[]`: `entityType`, `clientUuid`, `operation` (`UPSERT`\|`DELETE`), `updatedAt`, `data` | 200 + `results[]` từng thao tác (`entityType`, `clientUuid`, `APPLIED`, `UNCHANGED`, `CONFLICT_SERVER_WINS`, `REJECTED` kèm mã lý do) + `serverTime`; 413 `SYNC_BATCH_TOO_LARGE`; 429 `TOO_MANY_REQUESTS` |
 | `GET /api/sync/pull` | FR-SYS-05 | 6 | `cursor` (rỗng = từ đầu), `limit` (mặc định 500, tối đa 1000) | 200 + `changes[]`, `nextCursor`, `hasMore`, `serverTime`; 409 `FULL_RESYNC_REQUIRED` khi con trỏ quá hạn giữ tombstone |
 | `POST /api/devices/test-push` | dev | 1 | — | Chỉ có ở profile `dev` (`@Profile("dev")`), gửi một push thử tới thiết bị của mình để nhóm mobile kiểm tra |
 | WebSocket `/ws` (STOMP) | mục 8.2 | 7 | khung `CONNECT` kèm header `Authorization` | đích `/user/queue/notifications` |
@@ -345,36 +345,45 @@ Mục tiêu: dữ liệu ghi khi mất mạng được đẩy lên đúng một 
 
 ### 6.1 Hạ tầng và khung (≈ 0,75 ngày)
 
-- [ ] `V5__sync_infrastructure.sql` (sequence và hàm `touch_sync`); soạn tài liệu “mẫu cột bắt buộc” ở mục Mô hình dữ liệu và gửi chủ NUTRI/ACT **trước khi** họ viết migration bảng log, vì thêm cột sau tốn công hơn.
-- [ ] Khung: `SyncEntityType` (`WATER_LOG`, `WEIGHT_LOG`, `FOOD_LOG`, `ACTIVITY_LOG`), `SyncOperation`, `SyncApplyResult`, `SyncChange` và SPI:
+- [x] `V5__sync_infrastructure.sql` dùng sequence tên `sync_seq`, `clock_timestamp()` cho `server_updated_at`, và trigger `BEFORE UPDATE`; soạn tài liệu “mẫu cột bắt buộc” ở mục Mô hình dữ liệu và gửi chủ NUTRI/ACT **trước khi** họ viết migration bảng log, vì thêm cột sau tốn công hơn.
+- [x] Khung: `SyncEntityType`, `SyncOperation`, `SyncApplyResult`, `SyncChange` và SPI:
 
 ```java
 public interface SyncEntityHandler {
   SyncEntityType type();
   SyncApplyResult apply(UUID userId, SyncOperation op);          // idempotent theo (userId, clientUuid); gọi qua dịch vụ nghiệp vụ của module
-  List<SyncChange> changesSince(UUID userId, long sinceSeq, Instant settledBefore, int limit);
+  List<SyncChange> changesSince(UUID userId, long sinceSeq, Instant settledBefore, int limitPlusOne);
+  // Trả tối đa limitPlusOne dòng; SYS dùng dòng dư để tính hasMore toàn cục.
 }
 ```
 
-- [ ] `SyncRegistry` gom các bean `SyncEntityHandler` theo `type()`; thực thể chưa có handler trả `REJECTED` với lý do `UNKNOWN_ENTITY`, không ném lỗi cho cả lô.
+`SyncApplyResult` cung cấp sẵn `applied()`, `unchanged()`, `conflictServerWins(data, serverUpdatedAt)` và `rejected(reason)`. `SyncOperationResponse` luôn trả cả `entityType` và `clientUuid`; `clientUuid` chỉ có giá trị duy nhất trong phạm vi một loại thực thể.
+
+- [x] `SyncRegistry` gom các bean `SyncEntityHandler` theo `type()`; thực thể chưa có handler trả `REJECTED` với lý do `UNKNOWN_ENTITY`, không ném lỗi cho cả lô.
 
 ### 6.2 Đẩy dữ liệu lên (≈ 1 ngày)
 
-- [ ] `POST /api/sync/push`: lô quá `max-operations` (200) hoặc thân yêu cầu quá 1 MB trả 413 `SYNC_BATCH_TOO_LARGE`; trong lô, các thao tác cùng `clientUuid` xử lý theo thứ tự `updatedAt` tăng dần.
-- [ ] Mỗi thao tác chạy trong **transaction riêng** (`TransactionTemplate`), một thao tác lỗi không làm hỏng cả lô; kết quả từng thao tác `APPLIED`, `UNCHANGED` (đã áp dụng từ trước, gửi lại cùng nội dung), `CONFLICT_SERVER_WINS` (kèm bản của server để client ghi đè cục bộ), `REJECTED` (kèm mã lý do: `VALIDATION_ERROR`, `FORBIDDEN_REFERENCE`, `UNKNOWN_ENTITY`).
-- [ ] Quy tắc S10: `updatedAt` của client lớn hơn `now + max-future-skew` bị kẹp về `now`; bản ghi hiện có có `updated_at` lớn hơn hoặc bằng thì server thắng. `DELETE` ghi tombstone (`deleted_at`) kể cả khi chưa có bản ghi, để `UPSERT` cũ đến muộn không làm sống lại dữ liệu đã xoá.
+- [ ] `POST /api/sync/push`: filter đọc stream trước MVC, giới hạn body 1 MB và đếm cả request chunked; vượt giới hạn trả 413 `SYNC_BATCH_TOO_LARGE`. Sau khi parse, giới hạn `max-operations` cũng trả 413. `@Valid` không dùng để phân loại lỗi từng thao tác; `SyncOperation` nhận `entityType` và `operation` dạng String rồi map thủ công, enum lạ chỉ làm thao tác đó `REJECTED`/`UNKNOWN_ENTITY`.
+- [ ] Sắp xếp lô bằng stable sort theo `updatedAt` tăng dần, không sort theo `clientUuid`; giữ thứ tự request khi thời gian hoà. Kết quả trả đúng thứ tự request và gồm `entityType` cùng `clientUuid`.
+- [ ] Mỗi thao tác chạy trong **transaction riêng** (`TransactionTemplate`). Validate null và handler không tồn tại trước transaction. Trong lambda, để exception thoát ra để rollback; bên ngoài chỉ map `IllegalArgumentException`/`BusinessException` thành `VALIDATION_ERROR`, exception riêng `SyncForbiddenReferenceException` thành `FORBIDDEN_REFERENCE`. Không bắt lỗi hạ tầng (`DataAccessException`) hoặc runtime ngoài dự kiến; để lan ra 5xx để client retry cả lô. Chỉ log lỗi bất ngờ.
+- [ ] Quy tắc S10: `updatedAt` của client lớn hơn `now + max-future-skew` bị kẹp về `now`; ghi test hợp đồng cho trường hợp kẹp và nhiều thao tác cùng `clientUuid`. Bản ghi hiện có có `updated_at` lớn hơn hoặc bằng thì server thắng. `DELETE` ghi tombstone (`deleted_at`) kể cả khi chưa có bản ghi, để `UPSERT` cũ đến muộn không làm sống lại dữ liệu đã xoá.
 - [ ] Tham chiếu chéo phải kiểm tra quyền sở hữu (ví dụ `FOOD_LOG` trỏ tới `food_id` của món tuỳ chỉnh thuộc người khác) và trả `REJECTED`/`FORBIDDEN_REFERENCE`.
+- [ ] Ghi rõ hợp đồng JPA: cột `sync_seq` và `server_updated_at` do DB quản lý phải `insertable = false`; trigger `touch_sync` chỉ `BEFORE UPDATE`, còn `INSERT` dùng `DEFAULT`.
+- [ ] `SyncProperties` kiểm tra Duration trong compact constructor; giữ một kiểm tra `defaultPage <= maxPage`. Bean validation dùng tên getter chuẩn hoặc không lặp lại kiểm tra constructor. Thêm test `settle-delay=0s`.
+- [ ] Body-size filter cũng giới hạn độ sâu/kích thước `data`; không kiểm tra `Content-Length` ở controller.
 
 ### 6.3 Kéo dữ liệu về (≈ 0,75 ngày)
 
-- [ ] `GET /api/sync/pull`: con trỏ không trong suốt dạng base64url của `v1:<sync_seq>:<epochGiây phát hành>`; mỗi handler trả các thay đổi có `sync_seq > con trỏ` và `server_updated_at <= now - settle-delay` (S9); SYS trộn kết quả các handler theo `sync_seq` toàn cục, cắt theo `limit`, đặt `nextCursor` là `sync_seq` cuối và `hasMore`.
-- [ ] Con trỏ phát hành quá `tombstone-retention` (30 ngày) trả 409 `FULL_RESYNC_REQUIRED`; mobile phải tải lại bằng các API `GET` thường và bắt đầu con trỏ mới. Không cần bảng trạng thái vì thời điểm phát hành nằm ngay trong con trỏ.
-- [ ] Công việc dọn dẹp tombstone cũ hơn `tombstone-retention` do handler của từng module phụ trách, SYS chỉ gọi qua `SysMaintenanceJob` (Phase 8).
+- [ ] `GET /api/sync/pull`: mỗi handler nhận `limit + 1`, trả các thay đổi có `sync_seq > con trỏ` và `server_updated_at <= now - settle-delay` (S9); SYS trộn kết quả rồi cắt theo `limit`, `hasMore = merged.size() > limit`. Dùng stable ordering theo `sync_seq`.
+- [ ] Cursor opaque dạng base64url của `v1:<sync_seq>:<epochGiây phát hành>`; `decode` từ chối sequence âm hoặc `issuedAt` ở tương lai. Khi `hasMore = false`, làm mới `issuedAt = now`; còn trang tiếp thì giữ thời điểm cũ. Con trỏ phát hành quá `tombstone-retention` (30 ngày) trả 409 `FULL_RESYNC_REQUIRED`; mobile phải tải lại bằng các API `GET` thường và bắt đầu con trỏ mới.
+- [ ] Công việc dọn dẹp tombstone cũ hơn `tombstone-retention` do handler của từng module phụ trách, SYS chỉ gọi qua `SysMaintenanceJob` (Phase 8). Thuộc tính `server_updated_at` được lấy bằng `clock_timestamp()` để không bị coi là settled trước khi transaction dài commit.
 
 ### 6.4 Bộ test hợp đồng và handler giả (≈ 0,5 ngày)
 
-- [ ] Handler giả trong bộ nhớ (chỉ ở test) để chứng minh khung: lô nhiều thao tác, `UNCHANGED` khi gửi lại, thua xung đột, tombstone chặn `UPSERT` cũ, kẹp giờ tương lai, con trỏ liên tục không bỏ sót hay lặp vô hạn, hết hạn con trỏ, quá 200 thao tác, thao tác lỗi không phá lô, hai thiết bị cùng đẩy một `clientUuid` chỉ có một bản ghi.
-- [ ] Lớp trừu tượng `SyncHandlerContractTest`: module sở hữu bảng kế thừa và chạy cùng bộ kiểm tra cho handler thật (idempotent theo `clientUuid`, xung đột theo `updated_at`, tombstone, thứ tự `sync_seq`, từ chối tham chiếu chéo người dùng, đi qua dịch vụ nghiệp vụ để `DailySummary` và sự kiện được cập nhật).
+- [ ] Bổ sung `SyncServiceImpl` unit test với handler giả: lỗi một thao tác rollback sạch và không phá thao tác khác; lỗi nghiệp vụ trả `REJECTED`, lỗi DB lan thành 5xx; thứ tự xử lý và kết quả giữ nguyên thứ tự request; stable ordering khi nhiều thao tác cùng `updatedAt`; entityType lạ không làm hỏng cả lô; kẹp giờ tương lai.
+- [ ] Test pull khi chỉ một handler có đúng `limit` thay đổi nhưng còn dòng dư; cursor được làm mới sau khi bắt kịp; cursor âm, cursor tương lai và cursor rác bị từ chối; cursor quá 30 ngày trả `FULL_RESYNC_REQUIRED`.
+- [ ] Handler giả trong bộ nhớ (chỉ ở test) chứng minh `UNCHANGED`, thua xung đột, tombstone chặn `UPSERT` cũ, con trỏ liên tục không bỏ sót/lặp vô hạn, quá 200 thao tác, hai thiết bị cùng đẩy một `clientUuid` chỉ có một bản ghi.
+- [ ] Lớp trừu tượng `SyncHandlerContractTest`: module sở hữu bảng kế thừa và chạy cùng bộ kiểm tra cho handler thật (idempotent theo `clientUuid`, xung đột theo `updated_at`, tombstone, thứ tự `sync_seq`, từ chối tham chiếu chéo người dùng, đi qua dịch vụ nghiệp vụ để `DailySummary` và sự kiện được cập nhật). Cursor encode/decode phải có test cho dữ liệu hợp lệ và rác.
 
 ### 6.5 Cắm handler thật (làm khi module sở hữu bảng sẵn sàng)
 
