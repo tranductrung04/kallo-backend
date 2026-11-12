@@ -31,12 +31,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
   @ExceptionHandler(BusinessException.class)
-  public ResponseEntity<ApiResponse<Void>> business(BusinessException e) {
+  public ResponseEntity<ApiResponse<?>> business(BusinessException e) {
     return ResponseEntity.status(e.getErrorCode().status())
-        .body(new ApiResponse<>(
-            false, null,
-            new ApiResponse.Error(
-                e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails())));
+        .body(ApiResponse.errorListDataMessages(
+            e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails()));
   }
 
   @Override
