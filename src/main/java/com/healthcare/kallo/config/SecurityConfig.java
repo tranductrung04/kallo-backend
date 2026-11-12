@@ -34,7 +34,8 @@ public class SecurityConfig {
     path("/api/auth/logout"),
     path("/api/auth/google"),
     path("/api/auth/forgot-password"),
-    path("/api/auth/reset-password")
+    path("/api/auth/reset-password"),
+    path("/api/app/attributions")
   };
 
   private static RequestMatcher path(String expected) {

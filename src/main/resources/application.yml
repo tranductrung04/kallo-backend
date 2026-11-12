@@ -72,3 +72,28 @@ app:
     bucket: ${STORAGE_BUCKET}
     public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
     presigned-url-expiration: ${STORAGE_PRESIGNED_URL_EXPIRATION:15m}
+  push:
+    enabled: ${PUSH_ENABLED:false}
+    credentials-path: ${FCM_CREDENTIALS_PATH:}
+  notification:
+    retention-days: ${APP_NOTIFICATION_RETENTION_DAYS:30}
+    reminder-daily-cap: ${APP_NOTIFICATION_REMINDER_DAILY_CAP:6}
+    max-devices-per-user: ${APP_NOTIFICATION_MAX_DEVICES_PER_USER:10}
+    reminder-catch-up: ${APP_NOTIFICATION_REMINDER_CATCH_UP:10m}
+  sync:
+    max-operations: ${APP_SYNC_MAX_OPERATIONS:200}
+    settle-delay: ${APP_SYNC_SETTLE_DELAY:2s}
+    tombstone-retention: ${APP_SYNC_TOMBSTONE_RETENTION:30d}
+    default-page: ${APP_SYNC_DEFAULT_PAGE:500}
+    max-page: ${APP_SYNC_MAX_PAGE:1000}
+    max-future-skew: ${APP_SYNC_MAX_FUTURE_SKEW:5m}
+  attribution:
+    open-food-facts-url: ${APP_ATTRIBUTION_OFF_URL:https://world.openfoodfacts.org}
+    open-food-facts-license: ${APP_ATTRIBUTION_OFF_LICENSE:ODbL-1.0}
+    open-food-facts-attribution: ${APP_ATTRIBUTION_OFF_TEXT:Data from Open Food Facts, licensed under the Open Database License (ODbL).}
+    nin-url: ${APP_ATTRIBUTION_NIN_URL:https://viendinhduong.vn/}
+    nin-license: ${APP_ATTRIBUTION_NIN_LICENSE:Vietnamese Food Composition Table terms}
+    nin-attribution: ${APP_ATTRIBUTION_NIN_TEXT:Dữ liệu từ Viện Dinh dưỡng Quốc gia / Data from the Vietnam National Institute of Nutrition.}
+    fao-infoods-url: ${APP_ATTRIBUTION_FAO_INFOODS_URL:https://www.fao.org/infoods}
+    fao-infoods-license: ${APP_ATTRIBUTION_FAO_INFOODS_LICENSE:FAO/INFOODS terms of use}
+    fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
