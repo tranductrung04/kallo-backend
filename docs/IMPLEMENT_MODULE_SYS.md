@@ -309,7 +309,7 @@ Mục tiêu: tổng calo nạp trong ngày vượt ngưỡng thì người dùng
 
 - [ ] `CalorieAlertListener` nghe `DailySummaryChangedEvent` bằng `@TransactionalEventListener(AFTER_COMMIT)` kèm `@Transactional(REQUIRES_NEW)`.
 - [ ] Quy tắc: bỏ qua nếu `calorieGoal ≤ 0` hoặc ngày của sự kiện khác “hôm nay” theo múi giờ người dùng (đồng bộ log cũ hoặc sửa ngày trước không được báo); bỏ qua khi `calorie_alert_enabled = false`; điều kiện `caloriesIn > calorieGoal × ngưỡng/100`; khoá chống trùng `CALORIE_OVER:{yyyy-MM-dd}:{ngưỡng}` nên mỗi ngày mỗi mức chỉ một lần, kể cả khi người dùng xoá log rồi nạp lại. Mục trung tâm ghi số liệu cụ thể, push chỉ nói chung chung (S12).
-- [ ] Hỏi nhóm NUTRI: sự kiện phải phát **sau commit** của giao dịch ghi log/sửa/xoá và sau khi `DailySummary` đã cập nhật; `calorieGoal` lấy từ mục tiêu hiện hành. Đồng bộ ngoại tuyến cũng phải đi qua dịch vụ của NUTRI để phát sự kiện (Phase 6, mục 6.5).
+- [ ] Checklist hợp đồng NUTRI: phát sự kiện **sau commit** và sau khi `DailySummary` đã cập nhật; `date` là ngày theo `users.timezone`, không phải UTC; `calorieGoal` lấy từ mục tiêu hiện hành; phát khi ghi/sửa/xoá log và khi đồng bộ ngoại tuyến, đồng bộ phải đi qua dịch vụ NUTRI để phát sự kiện (Phase 6, mục 6.5).
 - [ ] Test (phát sự kiện giả bằng `ApplicationEventPublisher`): ba sự kiện liên tiếp vượt ngưỡng chỉ ra một thông báo và một lần gọi push (AC2); dưới ngưỡng không báo; sau ngày mới báo lại; sự kiện cho ngày hôm qua không báo; hai luồng cùng vượt ngưỡng một lúc vẫn chỉ một thông báo; nâng ngưỡng 120% thì mức 100% không còn được tính là mức mới; ngày được tính theo múi giờ người dùng (người ở `Asia/Ho_Chi_Minh` lúc 00:30 giờ địa phương là ngày mới dù UTC vẫn là ngày cũ).
 
 **Hoàn thành khi:** AC2 của mục 4.8 SRS có test xanh với sự kiện giả; checklist hợp đồng gửi cho chủ module NUTRI; khi NUTRI cài FR-NUT-01 thì chạy lại luồng thật “ghi log → nhận đúng một thông báo”.
@@ -445,7 +445,7 @@ SYS chạy được trước khi các module khác hoàn tất nhờ sự kiện
 
 | Module | Việc cần làm | Cần cho | Khi nào |
 | --- | --- | --- | --- |
-| NUTRI | Phát `DailySummaryChangedEvent`, `WaterLoggedEvent`, `MealLoggedEvent` sau commit; cài `UserActivityPort` | Phase 4, 5 | Khi cài FR-NUT-01, FR-NUT-11 |
+| NUTRI | Phát `DailySummaryChangedEvent`, `WaterLoggedEvent`, `MealLoggedEvent` sau commit và sau khi `DailySummary` đã cập nhật; `date` là ngày theo `users.timezone` (không phải UTC); `calorieGoal` là mục tiêu hiện hành; phát cả khi ghi, sửa, xoá log và khi đồng bộ ngoại tuyến; cài `UserActivityPort` | Phase 4, 5 | Khi cài FR-NUT-01, FR-NUT-11 |
 | NUTRI, ACT | Bảng log có đủ cột mẫu đồng bộ (`client_uuid`, `updated_at`, `deleted_at`, `sync_seq`, `server_updated_at`, trigger); cài `SyncEntityHandler` đi qua dịch vụ nghiệp vụ; kế thừa `SyncHandlerContractTest` | Phase 6.5 | Cùng migration bảng log |
 | PROFILE | `calorieGoal` hiện hành có sẵn để NUTRI đưa vào sự kiện | Phase 4 | Khi cài FR-PRO-05 |
 | FOODDATA | Dùng bảng nhãn `source` của `GET /api/app/attributions` để hiển thị nhãn nguồn món | FR-SYS-09 | Khi cài FR-FD-07b |
