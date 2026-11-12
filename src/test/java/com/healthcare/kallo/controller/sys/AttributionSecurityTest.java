@@ -1,4 +1,4 @@
-package com.healthcare.kallo.controller;
+package com.healthcare.kallo.controller.sys;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -53,10 +53,10 @@ class AttributionSecurityTest {
           "Data from Open Food Facts.",
           "https://viendinhduong.vn/",
           "Vietnamese Food Composition Table terms",
-          "Dữ liệu từ Viện Dinh dưỡng Quốc gia.",
+          "Dá»¯ liá»‡u tá»« Viá»‡n Dinh dÆ°á»¡ng Quá»‘c gia.",
           "https://www.fao.org/infoods",
           "FAO/INFOODS terms of use",
-          "Dữ liệu từ FAO/INFOODS.");
+          "Dá»¯ liá»‡u tá»« FAO/INFOODS.");
     }
 
     @Bean
