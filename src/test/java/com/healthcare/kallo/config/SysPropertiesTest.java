@@ -15,6 +15,7 @@ class SysPropertiesTest {
               "app.notification.retention-days=30",
               "app.notification.reminder-daily-cap=6",
               "app.notification.max-devices-per-user=10",
+              "app.notification.device-retention-days=60",
               "app.sync.settle-delay=2s",
               "app.sync.tombstone-retention=30d",
               "app.sync.max-future-skew=5m",

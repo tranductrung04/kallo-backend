@@ -1,0 +1,189 @@
+openapi: 3.1.0
+info:
+  title: Kallo SYS API
+  version: 1.0.0
+  description: Device, notification, attribution, offline sync, and WebSocket contracts.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: Devices
+  - name: Notifications
+  - name: Notification settings
+  - name: Sync
+  - name: Attributions
+paths:
+  /api/app/attributions:
+    get:
+      tags: [Attributions]
+      security: []
+      responses:
+        '200':
+          description: Third-party data attributions.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponseAttributions' }
+  /api/devices:
+    post:
+      tags: [Devices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterDeviceRequest' }
+      responses:
+        '200':
+          description: Registered device.
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/devices/{id}:
+    delete:
+      tags: [Devices]
+      parameters:
+        - { $ref: '#/components/parameters/DeviceId' }
+      responses:
+        '204': { description: Device removed. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 50, default: 20 } }
+        - { name: unreadOnly, in: query, schema: { type: boolean, default: false } }
+      responses:
+        '200': { description: Notification page. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      responses:
+        '200': { description: Unread count. }
+  /api/notifications/{id}/read:
+    put:
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/NotificationId' }
+      responses:
+        '204': { description: Marked read. }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/notifications/read-all:
+    put:
+      tags: [Notifications]
+      responses:
+        '204': { description: Marked all read. }
+  /api/notifications/{id}:
+    delete:
+      tags: [Notifications]
+      parameters:
+        - { $ref: '#/components/parameters/NotificationId' }
+      responses:
+        '204': { description: Soft deleted. }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/notification-settings:
+    get:
+      tags: [Notification settings]
+      responses:
+        '200': { description: Current settings. }
+    put:
+      tags: [Notification settings]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/NotificationSettingsRequest' } }
+      responses:
+        '200': { description: Updated settings. }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/sync/push:
+    post:
+      tags: [Sync]
+      requestBody:
+        required: true
+        content:
+          application/json: { schema: { $ref: '#/components/schemas/SyncPushRequest' } }
+      responses:
+        '200': { description: Per-operation sync results. }
+        '413': { description: Batch exceeds configured size. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+  /api/sync/pull:
+    get:
+      tags: [Sync]
+      parameters:
+        - { $ref: '#/components/parameters/Cursor' }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 1000, default: 500 } }
+      responses:
+        '200': { description: Changes since cursor. }
+        '409': { description: Full resync required. }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    DeviceId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    NotificationId: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    Cursor: { name: cursor, in: query, schema: { type: string } }
+  responses:
+    ValidationError:
+      description: Validation error.
+      content:
+        application/json: { schema: { $ref: '#/components/schemas/ApiErrorResponse' } }
+    NotFound:
+      description: Resource not found or belongs to another user.
+    TooManyRequests:
+      description: Rate limit exceeded. Redis failure is fail-open.
+      headers:
+        Retry-After: { schema: { type: integer, format: int64 } }
+  schemas:
+    RegisterDeviceRequest:
+      type: object
+      required: [token, platform]
+      properties:
+        token: { type: string, maxLength: 512 }
+        platform: { type: string, enum: [ANDROID, IOS] }
+        locale: { type: string, maxLength: 10 }
+        appVersion: { type: string, maxLength: 20 }
+    NotificationSettingsRequest:
+      type: object
+      required: [language, pushEnabled, waterReminderEnabled, waterStartTime, waterEndTime, waterIntervalMinutes, mealReminderEnabled, calorieAlertEnabled, calorieAlertThresholdPct, socialEnabled, dndEnabled, dndStartTime, dndEndTime]
+      properties:
+        language: { type: string, enum: [vi, en] }
+        pushEnabled: { type: boolean }
+        waterReminderEnabled: { type: boolean }
+        waterStartTime: { type: string, pattern: '^\\d{2}:\\d{2}$' }
+        waterEndTime: { type: string, pattern: '^\\d{2}:\\d{2}$' }
+        waterIntervalMinutes: { type: integer, minimum: 30, maximum: 720 }
+        mealReminderEnabled: { type: boolean }
+        mealBreakfastTime: { type: string, nullable: true }
+        mealLunchTime: { type: string, nullable: true }
+        mealDinnerTime: { type: string, nullable: true }
+        calorieAlertEnabled: { type: boolean }
+        calorieAlertThresholdPct: { type: integer, minimum: 100, maximum: 200 }
+        socialEnabled: { type: boolean }
+        dndEnabled: { type: boolean }
+        dndStartTime: { type: string, pattern: '^\\d{2}:\\d{2}$' }
+        dndEndTime: { type: string, pattern: '^\\d{2}:\\d{2}$' }
+    SyncPushRequest:
+      type: object
+      required: [operations]
+      properties:
+        operations:
+          type: array
+          minItems: 1
+          maxItems: 200
+          items: { $ref: '#/components/schemas/SyncOperation' }
+    SyncOperation:
+      type: object
+      required: [clientUuid, entityType, operation, updatedAt]
+      properties:
+        clientUuid: { type: string, format: uuid }
+        entityType: { type: string, enum: [WATER_LOG, WEIGHT_LOG, FOOD_LOG, ACTIVITY_LOG] }
+        operation: { type: string, enum: [UPSERT, DELETE] }
+        updatedAt: { type: string, format: date-time }
+        data: { type: object, additionalProperties: true }
+    ApiResponseAttributions: { type: object }
+    ApiErrorResponse: { type: object }

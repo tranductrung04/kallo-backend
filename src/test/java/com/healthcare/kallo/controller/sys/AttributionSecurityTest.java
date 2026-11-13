@@ -6,6 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.healthcare.kallo.config.AttributionProperties;
 import com.healthcare.kallo.config.GoogleProperties;
 import com.healthcare.kallo.config.JwtProperties;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import com.healthcare.kallo.config.SecurityConfig;
 import com.healthcare.kallo.controller.sys.AttributionController;
 import com.healthcare.kallo.security.auth.CustomAccessDeniedHandler;
@@ -22,7 +23,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(AttributionController.class)
 @AutoConfigureMockMvc
-@Import({SecurityConfig.class, AttributionSecurityTest.TestBeans.class})
+@Import({SecurityConfig.class, AttributionSecurityTest.TestBeans.class, RateLimitTestConfig.class})
 class AttributionSecurityTest {
   @Autowired private MockMvc mockMvc;
 

@@ -16,6 +16,8 @@ spring:
     redis:
       host: localhost
       port: 6379
+      timeout: ${DEV_REDIS_TIMEOUT:500ms}
+      connect-timeout: ${DEV_REDIS_CONNECT_TIMEOUT:500ms}
   elasticsearch:
     uris: http://localhost:9200
   mail:
@@ -23,5 +25,7 @@ spring:
     port: ${MAIL_PORT:1025}
 
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{request_id:-}] %logger{36} - %msg%n"
   level:
     org.hibernate.SQL: debug

@@ -7,8 +7,4 @@ import org.springframework.context.annotation.Bean;
 
 @Configuration
 @EnableScheduling
-public class SchedulingConfig {
-  @Bean
-  Clock clock() {
-    return Clock.systemUTC();
-  }}
+public class SchedulingConfig {}

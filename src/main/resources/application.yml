@@ -1,3 +1,6 @@
+server:
+  forward-headers-strategy: native
+
 spring:
   application:
     name: '@projectName@'
@@ -26,6 +29,10 @@ spring:
           connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT:3000}
           timeout: ${MAIL_SMTP_TIMEOUT:5000}
           writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT:5000}
+  data:
+    redis:
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:500ms}
+      connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:500ms}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -82,6 +89,7 @@ app:
     retention-days: ${APP_NOTIFICATION_RETENTION_DAYS:30}
     reminder-daily-cap: ${APP_NOTIFICATION_REMINDER_DAILY_CAP:6}
     max-devices-per-user: ${APP_NOTIFICATION_MAX_DEVICES_PER_USER:10}
+    device-retention-days: ${APP_NOTIFICATION_DEVICE_RETENTION_DAYS:60}
     reminder-catch-up: ${APP_NOTIFICATION_REMINDER_CATCH_UP:10m}
   sync:
     max-operations: ${APP_SYNC_MAX_OPERATIONS:200}
@@ -90,6 +98,13 @@ app:
     default-page: ${APP_SYNC_DEFAULT_PAGE:500}
     max-page: ${APP_SYNC_MAX_PAGE:1000}
     max-future-skew: ${APP_SYNC_MAX_FUTURE_SKEW:5m}
+  rate-limit:
+    devices-per-hour: ${APP_RATE_LIMIT_DEVICES_PER_HOUR:20}
+    sync-push-per-minute: ${APP_RATE_LIMIT_SYNC_PUSH_PER_MINUTE:30}
+    sync-pull-per-minute: ${APP_RATE_LIMIT_SYNC_PULL_PER_MINUTE:60}
+    notifications-per-minute: ${APP_RATE_LIMIT_NOTIFICATIONS_PER_MINUTE:120}
+    settings-per-minute: ${APP_RATE_LIMIT_SETTINGS_PER_MINUTE:30}
+    websocket-per-minute: ${APP_RATE_LIMIT_WEBSOCKET_PER_MINUTE:10}
   attribution:
     open-food-facts-url: ${APP_ATTRIBUTION_OFF_URL:https://world.openfoodfacts.org}
     open-food-facts-license: ${APP_ATTRIBUTION_OFF_LICENSE:ODbL-1.0}

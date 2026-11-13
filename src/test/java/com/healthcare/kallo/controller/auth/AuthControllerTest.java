@@ -13,6 +13,7 @@ import com.healthcare.kallo.dto.response.auth.UserSummary;
 import com.healthcare.kallo.service.auth.AuthService;
 import com.healthcare.kallo.service.auth.EmailVerificationService;
 import com.healthcare.kallo.service.auth.PasswordResetService;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,6 +24,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(value = AuthController.class, properties = "spring.profiles.active=test")
+@org.springframework.context.annotation.Import(RateLimitTestConfig.class)
 @AutoConfigureMockMvc(addFilters = false)
 class AuthControllerTest {
 

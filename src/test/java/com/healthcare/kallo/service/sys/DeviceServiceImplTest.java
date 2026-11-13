@@ -27,7 +27,7 @@ class DeviceServiceImplTest {
   void setUp() {
     service =
         new DeviceServiceImpl(
-            repository, new NotificationProperties(30, 6, 2, Duration.ofMinutes(10)));
+            repository, new NotificationProperties(30, 6, 2, 60, Duration.ofMinutes(10)));
   }
 
   @Test

@@ -502,7 +502,21 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 - AC1: Tắt mạng → ghi 3 log nước → bật mạng: cả 3 log xuất hiện trên server, không trùng.
 - AC2: Vượt calo ngày → người dùng nhận đúng một thông báo cảnh báo.
 
+**SYS Phase 8 vận hành:**
+
+- Rate limit dùng Redis cho các endpoint SYS và WebSocket handshake; phản hồi vượt ngưỡng là `429` kèm `Retry-After`.
+- Khi Redis rate limiter lỗi, hệ thống fail-open và ghi cảnh báo để ưu tiên availability.
+- `X-Request-Id` được nhận/sinh tại đầu request, đưa vào MDC và trả lại response; task async truyền MDC, task không có HTTP request sinh ID `async-<UUID>`.
+- Maintenance chạy 03:30 giờ `Asia/Ho_Chi_Minh`, xoá notification/device hết hạn và gọi cleanup tombstone theo từng handler trong transaction riêng.
+- WebSocket broker heartbeat dùng scheduler riêng; `@Scheduled` dùng scheduler pool riêng.
+- Reverse proxy phải được tin cậy khi dùng `server.forward-headers-strategy: native`; không expose app trực tiếp với forwarded headers không kiểm soát.
+- Đặc tả API: `docs/api-specs/sys.yaml`; test cases: `docs/tests/sys-test-cases.xlsx`; k6: `scripts/k6/sys-notifications-load.js`.
+
+**Trạng thái:** code hardening Phase 8 đã có; test tích hợp đầy đủ, benchmark k6 và thử reverse proxy thật vẫn là bước nghiệm thu.
+
+
 ### 4.9. Module FOODDATA — Dữ liệu món ăn (Backend)
+
 
 | Mã | Yêu cầu | Ưu tiên |
 |---|---|---|

@@ -15,6 +15,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -40,7 +41,32 @@ class ReminderEngineTest {
         .thenReturn(0L);
     engine = new ReminderEngine(
         users, settingsService, notifications, activity, notificationService,
-        new NotificationProperties(30, 6, 10, Duration.ofMinutes(10)));
+        new NotificationProperties(30, 6, 10, 60, Duration.ofMinutes(10)));
+  }
+
+  @Test
+  void processesOneHundredReminderCandidates() {
+    List<User> candidates = IntStream.range(0, 100).mapToObj(index -> {
+      User user = new User();
+      user.setId(UUID.randomUUID());
+      user.setEmailVerified(true);
+      user.setTimezone("Asia/Ho_Chi_Minh");
+      return user;
+    }).toList();
+    when(users.findReminderCandidates(any(), any())).thenReturn(candidates);
+    for (User user : candidates) {
+      when(settingsService.getOrCreate(user.getId())).thenReturn(new NotificationSettings());
+      when(notifications.countByUserIdAndTypesAndCreatedAtBetween(eq(user.getId()), any(), any(), any()))
+          .thenReturn(6L);
+    }
+
+    long started = System.nanoTime();
+    engine.run(Instant.parse("2026-11-12T07:05:00Z"));
+
+    assertThat(candidates).hasSize(100);
+    verify(settingsService, times(100)).getOrCreate(any());
+    verify(notificationService, never()).notify(any());
+    assertThat(System.nanoTime() - started).isPositive();
   }
 
   @Test

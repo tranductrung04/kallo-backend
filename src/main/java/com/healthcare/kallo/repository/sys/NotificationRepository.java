@@ -71,6 +71,11 @@ public interface NotificationRepository extends JpaRepository<Notification, UUID
   int softDelete(@Param("id") UUID id, @Param("userId") UUID userId, @Param("deletedAt") Instant deletedAt);
 
   @Modifying
+  @org.springframework.transaction.annotation.Transactional
   @Query("update Notification n set n.pushedAt = :pushedAt where n.id = :id")
   int markPushed(@Param("id") UUID id, @Param("pushedAt") Instant pushedAt);
+
+  @Modifying
+  @Query("delete from Notification n where n.createdAt < :cutoff")
+  int deleteCreatedBefore(@Param("cutoff") Instant cutoff);
 }

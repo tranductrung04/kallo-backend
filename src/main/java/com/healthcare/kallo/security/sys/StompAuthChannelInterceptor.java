@@ -70,7 +70,7 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
 
   private void authorizeSubscription(StompHeaderAccessor accessor) {
     String destination = accessor.getDestination();
-    if (destination == null || !destination.startsWith("/user/queue/")) {
+    if (!"/user/queue/notifications".equals(destination)) {
       throw new IllegalArgumentException("STOMP subscription destination is not allowed");
     }
   }

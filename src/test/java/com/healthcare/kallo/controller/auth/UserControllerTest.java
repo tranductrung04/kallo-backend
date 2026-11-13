@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.healthcare.kallo.controller.auth.UserController;
 import com.healthcare.kallo.exception.GlobalExceptionHandler;
 import com.healthcare.kallo.service.auth.UserService;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -26,6 +27,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(value = UserController.class, properties = "spring.profiles.active=test")
+@org.springframework.context.annotation.Import(RateLimitTestConfig.class)
 @AutoConfigureMockMvc(addFilters = false)
 class UserControllerTest {
   @Autowired MockMvc mockMvc;
