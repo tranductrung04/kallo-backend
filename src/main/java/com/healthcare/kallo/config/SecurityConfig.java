@@ -22,6 +22,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
 
@@ -109,6 +111,9 @@ public class SecurityConfig {
                     .authenticated()
                     .requestMatchers("/api/auth/verify-email", "/api/auth/resend-verification")
                     .authenticated()
+                    .requestMatchers("/api/admin/**")
+                    .access(AuthorizationManagers.allOf(
+                        AuthorityAuthorizationManager.hasRole("ADMIN"), emailVerifiedManager()))
                     .anyRequest().access(emailVerifiedManager()))
         .oauth2ResourceServer(
             o ->
