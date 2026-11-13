@@ -25,6 +25,18 @@ public interface StreakRepository extends JpaRepository<Streak, UUID> {
   @Modifying
   @Transactional
   @Query(value = """
+      UPDATE streaks s SET current_streak = 0, updated_at = now()
+      FROM users u
+      WHERE u.id = s.user_id
+        AND s.current_streak > 0
+        AND s.last_completed_date IS NOT NULL
+        AND s.last_completed_date < ((now() AT TIME ZONE u.timezone)::date - 1)
+      """, nativeQuery = true)
+  int resetExpiredCurrentStreaks();
+
+  @Modifying
+  @Transactional
+  @Query(value = """
       INSERT INTO streaks (user_id, current_streak, longest_streak, last_completed_date, updated_at)
       VALUES (:userId, :currentStreak, :longestStreak, CAST(:lastCompletedDate AS date), now())
       ON CONFLICT (user_id) DO UPDATE SET
