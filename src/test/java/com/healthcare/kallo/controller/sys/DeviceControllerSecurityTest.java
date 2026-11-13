@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 
 import com.healthcare.kallo.config.GoogleProperties;
 import com.healthcare.kallo.config.JwtProperties;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import com.healthcare.kallo.config.SecurityConfig;
 import com.healthcare.kallo.controller.sys.DeviceController;
 import com.healthcare.kallo.security.auth.CustomAccessDeniedHandler;
@@ -26,7 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(value = DeviceController.class, properties = "spring.profiles.active=test")
 @AutoConfigureMockMvc
-@Import({SecurityConfig.class, DeviceController.class, DeviceControllerSecurityTest.TestBeans.class})
+@Import({SecurityConfig.class, DeviceController.class, DeviceControllerSecurityTest.TestBeans.class, RateLimitTestConfig.class})
 class DeviceControllerSecurityTest {
   @Autowired private MockMvc mockMvc;
 

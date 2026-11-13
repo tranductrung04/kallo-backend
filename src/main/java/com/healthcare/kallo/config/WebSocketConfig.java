@@ -9,6 +9,7 @@ import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
+import com.healthcare.kallo.security.sys.WebSocketRateLimitInterceptor;
 
 @Configuration
 @EnableWebSocketMessageBroker
@@ -16,14 +17,17 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
   private final WebSocketProperties properties;
   private final StompAuthChannelInterceptor authInterceptor;
   private final ThreadPoolTaskScheduler brokerTaskScheduler;
+  private final WebSocketRateLimitInterceptor rateLimitInterceptor;
 
   public WebSocketConfig(
       WebSocketProperties properties,
       StompAuthChannelInterceptor authInterceptor,
-      @Qualifier("brokerTaskScheduler") ThreadPoolTaskScheduler brokerTaskScheduler) {
+      @Qualifier("brokerTaskScheduler") ThreadPoolTaskScheduler brokerTaskScheduler,
+      WebSocketRateLimitInterceptor rateLimitInterceptor) {
     this.properties = properties;
     this.authInterceptor = authInterceptor;
     this.brokerTaskScheduler = brokerTaskScheduler;
+    this.rateLimitInterceptor = rateLimitInterceptor;
   }
 
   @Override
@@ -39,6 +43,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
   @Override
   public void registerStompEndpoints(StompEndpointRegistry registry) {
     registry.addEndpoint("/ws")
+        .addInterceptors(rateLimitInterceptor)
         .setAllowedOriginPatterns(properties.allowedOrigins().toArray(String[]::new));
   }
 

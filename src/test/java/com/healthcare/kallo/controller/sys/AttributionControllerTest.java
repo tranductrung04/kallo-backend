@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.healthcare.kallo.config.AttributionProperties;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import com.healthcare.kallo.controller.sys.AttributionController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(value = AttributionController.class, properties = "spring.profiles.active=test")
 @AutoConfigureMockMvc(addFilters = false)
-@Import(AttributionControllerTest.PropertiesConfig.class)
+@Import({AttributionControllerTest.PropertiesConfig.class, RateLimitTestConfig.class})
 class AttributionControllerTest {
 
   @Autowired private MockMvc mockMvc;

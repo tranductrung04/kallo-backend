@@ -320,17 +320,17 @@ Mục tiêu: nhắc uống nước và nhắc ghi bữa ăn đúng giờ địa 
 
 ### 5.1 Khung bộ lập lịch và nhắc nước (≈ 1 ngày)
 
-- [x] `ReminderScheduler` với `@Scheduled(fixedDelay = 60s)` gọi `ReminderEngine.run(Instant now)`; mỗi người dùng xử lý trong `try/catch` riêng để một lỗi không dừng cả lượt.
-- [x] Chọn ứng viên theo trang (200 dòng/lượt): người dùng `ACTIVE`, `email_verified = true`, có dòng cài đặt, bật ít nhất một loại nhắc và có **ít nhất một thiết bị** (không có thiết bị thì không tạo mục trung tâm, vì nhắc không có push chỉ là rác).
-- [x] Tính khe giờ nhắc nước từ `water_start_time`, `water_end_time`, `water_interval_minutes` theo giờ địa phương của người dùng; một khe “đến hạn” khi `now` nằm trong `[khe, khe + reminder-catch-up]` (mặc định 10 phút) để lượt bị trễ hoặc khởi động lại vẫn bắn, quá cửa sổ thì bỏ, không bù. Khoá chống trùng `WATER_REMINDER:{date}:{HH:mm}`.
-- [x] Quy tắc bỏ qua: gặp DND (S6); lần uống nước gần nhất (`UserActivityPort.lastWaterLogAt`) cách chưa tới nửa `water_interval_minutes`; đã chạm trần nhắc nhở trong ngày (đếm thông báo nhóm `REMINDER` được tạo trong ngày địa phương, `reminder-daily-cap` = 6).
-- [x] Test mục tiêu cho cửa sổ tuỳ chỉnh, catch-up, DND, trần và hành động gần đây; kiểm thử tích hợp nhiều instance/thiết bị cần bổ sung cùng test database SYS.
+- [ ] `ReminderScheduler` với `@Scheduled(fixedDelay = 60s)` gọi `ReminderEngine.run(Instant now)`; mỗi người dùng xử lý trong `try/catch` riêng để một lỗi không dừng cả lượt.
+- [ ] Chọn ứng viên theo trang (200 dòng/lượt): người dùng `ACTIVE`, `email_verified = true`, có dòng cài đặt, bật ít nhất một loại nhắc và có **ít nhất một thiết bị** (không có thiết bị thì không tạo mục trung tâm, vì nhắc không có push chỉ là rác).
+- [ ] Tính khe giờ nhắc nước từ `water_start_time`, `water_end_time`, `water_interval_minutes` theo giờ địa phương của người dùng; một khe “đến hạn” khi `now` nằm trong `[khe, khe + reminder-catch-up]` (mặc định 10 phút) để lượt bị trễ hoặc khởi động lại vẫn bắn, quá cửa sổ thì bỏ, không bù. Khoá chống trùng `WATER_REMINDER:{date}:{HH:mm}`.
+- [ ] Quy tắc bỏ qua: gặp DND (S6); lần uống nước gần nhất (`UserActivityPort.lastWaterLogAt`) cách chưa tới nửa `water_interval_minutes`; đã chạm trần nhắc nhở trong ngày (đếm thông báo nhóm `REMINDER` được tạo trong ngày địa phương, `reminder-daily-cap` = 6).
+- [ ] Test mục tiêu cho cửa sổ tuỳ chỉnh, catch-up, DND, trần và hành động gần đây; kiểm thử tích hợp nhiều instance/thiết bị cần bổ sung cùng test database SYS.
 
 ### 5.2 Nhắc ghi bữa ăn theo giờ cố định (≈ 0,5 ngày)
 
-- [x] Giờ nhắc mặc định (cấu hình được): sáng 08:30, trưa 12:30, tối 19:30; giờ do người dùng đặt (`meal_*_time`) thắng. Khoá `MEAL_REMINDER:{date}:{MEAL}`. Chỉ nhắc khi `UserActivityPort.hasMealLog` trả `false`, tức là chưa có log của buổi đó; bữa phụ không nhắc.
-- [x] Cùng quy tắc DND, trần và thiết bị như 5.1. Mặc định 3 nhắc ăn + 3 nhắc nước đúng bằng trần 6, nên trần chỉ cắt khi người dùng tự thêm khe.
-- [x] Test mục tiêu cho giờ mặc định, bỏ qua bữa đã ghi và payload xác định loại bữa; test tích hợp lặp lại/cạnh tranh cần bổ sung cùng test database SYS.
+- [ ] Giờ nhắc mặc định (cấu hình được): sáng 08:30, trưa 12:30, tối 19:30; giờ do người dùng đặt (`meal_*_time`) thắng. Khoá `MEAL_REMINDER:{date}:{MEAL}`. Chỉ nhắc khi `UserActivityPort.hasMealLog` trả `false`, tức là chưa có log của buổi đó; bữa phụ không nhắc.
+- [ ] Cùng quy tắc DND, trần và thiết bị như 5.1. Mặc định 3 nhắc ăn + 3 nhắc nước đúng bằng trần 6, nên trần chỉ cắt khi người dùng tự thêm khe.
+- [ ] Test mục tiêu cho giờ mặc định, bỏ qua bữa đã ghi và payload xác định loại bữa; test tích hợp lặp lại/cạnh tranh cần bổ sung cùng test database SYS.
 
 ### 5.3 Giờ thói quen (≈ 0,5 ngày, có thể cắt)
 
@@ -345,8 +345,8 @@ Mục tiêu: dữ liệu ghi khi mất mạng được đẩy lên đúng một 
 
 ### 6.1 Hạ tầng và khung (≈ 0,75 ngày)
 
-- [x] `V5__sync_infrastructure.sql` dùng sequence tên `sync_seq`, `clock_timestamp()` cho `server_updated_at`, và trigger `BEFORE UPDATE`; soạn tài liệu “mẫu cột bắt buộc” ở mục Mô hình dữ liệu và gửi chủ NUTRI/ACT **trước khi** họ viết migration bảng log, vì thêm cột sau tốn công hơn.
-- [x] Khung: `SyncEntityType`, `SyncOperation`, `SyncApplyResult`, `SyncChange` và SPI:
+- [ ] `V5__sync_infrastructure.sql` dùng sequence tên `sync_seq`, `clock_timestamp()` cho `server_updated_at`, và trigger `BEFORE UPDATE`; soạn tài liệu “mẫu cột bắt buộc” ở mục Mô hình dữ liệu và gửi chủ NUTRI/ACT **trước khi** họ viết migration bảng log, vì thêm cột sau tốn công hơn.
+- [ ] Khung: `SyncEntityType`, `SyncOperation`, `SyncApplyResult`, `SyncChange` và SPI:
 
 ```java
 public interface SyncEntityHandler {
@@ -359,7 +359,7 @@ public interface SyncEntityHandler {
 
 `SyncApplyResult` cung cấp sẵn `applied()`, `unchanged()`, `conflictServerWins(data, serverUpdatedAt)` và `rejected(reason)`. `SyncOperationResponse` luôn trả cả `entityType` và `clientUuid`; `clientUuid` chỉ có giá trị duy nhất trong phạm vi một loại thực thể.
 
-- [x] `SyncRegistry` gom các bean `SyncEntityHandler` theo `type()`; thực thể chưa có handler trả `REJECTED` với lý do `UNKNOWN_ENTITY`, không ném lỗi cho cả lô.
+- [ ] `SyncRegistry` gom các bean `SyncEntityHandler` theo `type()`; thực thể chưa có handler trả `REJECTED` với lý do `UNKNOWN_ENTITY`, không ném lỗi cho cả lô.
 
 ### 6.2 Đẩy dữ liệu lên (≈ 1 ngày)
 
@@ -416,12 +416,33 @@ Mục tiêu: người dùng đang mở app thấy thông báo mới ngay mà kh�
 
 Mục tiêu: SYS chịu được lạm dụng và lỗi vận hành, đáp ứng NFR-PERF-01, NFR-SEC-04/05/06/08 và mục 9.7 SRS, rồi chứng minh mọi AC đạt. **Điều kiện tiên quyết:** `RateLimiter` của AUTH Phase 7 đã có trong repo; nếu chưa, hoàn thành phần đó trước hoặc tạm thời làm bản Redis tối thiểu dùng chung.
 
-- [ ] Giới hạn tần suất (dùng `RateLimiter` của AUTH, 429 kèm `Retry-After`): `POST /api/devices` 20/giờ/user, `POST /api/sync/push` 30/phút/user, `GET /api/sync/pull` 60/phút/user, `GET /api/notifications` 120/phút/user, `PUT /api/notification-settings` 30/phút/user, `/ws` 10 kết nối mới/phút/IP. Giới hạn theo user lấy từ token, không từ nội dung yêu cầu.
-- [ ] Nhật ký: mỗi lần gửi push ghi một dòng có `userId`, loại, kết quả (`SENT`/`INVALID_TOKEN`/`RETRY`) và độ trễ, kèm `request_id` (bộ lọc của AUTH Phase 7); không ghi nội dung thông báo, `data`, token đầy đủ hay số liệu sức khoẻ.
-- [ ] `SysMaintenanceJob` `@Scheduled(cron = "0 30 3 * * *", zone = "Asia/Ho_Chi_Minh")`: xoá cứng thông báo cũ hơn `retention-days`, thiết bị có `last_seen_at` cũ hơn 60 ngày, và gọi dọn tombstone của các handler.
-- [ ] Rà soát bảo mật: kiểm thử IDOR cho `notifications`, `devices`, `notification-settings`; chuyển chủ token thiết bị không lộ ai từng sở hữu; thân yêu cầu `sync/push` có chuỗi lạ (HTML, SQL) không gây lỗi; tệp service account FCM nằm ngoài Git (`git ls-files` không chứa), không có bí mật trong YAML.
-- [ ] Hiệu năng: k6 với ~100 người dùng đồng thời gọi `GET /api/notifications` p95 ≤ 500 ms (NFR-PERF-01); `POST /api/sync/push` lô 100 thao tác; lượt `ReminderEngine` cho 100 người dùng.
-- [ ] Tài liệu: `docs/api-specs/sys.yaml` (OpenAPI cùng kiểu `auth.yaml`); `docs/tests/sys-test-cases.xlsx` cùng kiểu `auth-test-cases.xlsx`; README (biến `PUSH_ENABLED`, `FCM_CREDENTIALS_PATH`, `APP_NOTIFICATION_*`, `APP_SYNC_*`, endpoint SYS, cách dùng `test-push`); SRS (mã lỗi mới `NOTIFICATION_NOT_FOUND`, `SYNC_BATCH_TOO_LARGE`, `FULL_RESYNC_REQUIRED`; chốt S1–S12; bổ sung thực thể `NotificationSettings`, `DeviceToken` theo thiết kế; hình dạng cuối của `sync/push` và `sync/pull` ở mục 8.2; endpoint `GET /api/app/attributions`).
+- [x] Giới hạn tần suất (dùng Redis `RateLimiter`, 429 kèm `Retry-After`; fail-open khi Redis lỗi): `POST /api/devices` 20/giờ/user, `POST /api/sync/push` 30/phút/user, `GET /api/sync/pull` 60/phút/user, `GET /api/notifications` 120/phút/user, `PUT /api/notification-settings` 30/phút/user, `/ws` 10 kết nối mới/phút/IP. Giới hạn theo user lấy từ token, không từ nội dung yêu cầu. Native forwarded headers yêu cầu proxy tin cậy.
+- [x] Nhật ký: mỗi lần gửi push ghi một dòng có `notificationId`, `userId`, loại, kết quả (`SENT`/`INVALID_TOKEN`/`RETRYABLE_FAILURE`), độ trễ và `request_id`; task async tự truyền MDC, luồng không có HTTP request sinh `async-<UUID>`; không ghi nội dung thông báo, `data`, token đầy đủ hay số liệu sức khoẻ.
+- [x] `SysMaintenanceJob` `@Scheduled(cron = "0 30 3 * * *", zone = "Asia/Ho_Chi_Minh")`: xoá cứng thông báo cũ hơn `retention-days`, thiết bị theo `device-retention-days` (mặc định 60 ngày), và gọi dọn tombstone của các handler trong transaction riêng; một handler lỗi không dừng handler khác. Chưa có handler thật ở SYS.
+- [x] Scheduler broker WebSocket tách khỏi scheduler `@Scheduled`: broker một luồng riêng, scheduled tasks dùng pool bốn luồng.
+- [x] Unit test rate limit, WebSocket 429, `RequestIdFilter`, `SysMaintenanceJob`, MDC decorator, push aggregate logging, Redis Lua/TTL bằng Testcontainers, và Spring Security filter order đã có. IDOR/payload integration, reverse-proxy thực tế và k6 against deployed users còn là nghiệm thu môi trường.
+- [x] Bổ sung `docs/api-specs/sys.yaml`, `docs/tests/sys-test-cases.xlsx`, README và cập nhật SRS.
+
+**Trạng thái test/docs:** workbook có cột `Status` (`automated`/`manual`/`planned`). Các case chưa có test được đánh dấu `planned`, không coi là nghiệm thu.
+- [ ] Thử thực tế qua reverse proxy, xác nhận `native` forward headers lấy đúng client IP.
+- [x] Chốt tên kết quả log retry: dùng `RETRYABLE_FAILURE`, khác nhãn SRS cũ `RETRY` để phân biệt lỗi tạm thời với retry nội bộ đã thực hiện.
+
+**Hành vi khi Redis rate limiter lỗi:** fail-open, ghi log cảnh báo và cho request/handshake đi tiếp. Chấp nhận giới hạn tạm thời không áp dụng để giữ availability API.
+
+**Trạng thái nghiệm thu:** phần code hardening đã xong; Phase 8 chưa nghiệm thu cho tới khi test, benchmark và tài liệu ở các dòng `[ ]` hoàn tất.
+
+**Cấu hình proxy:** `server.forward-headers-strategy: native` chỉ dùng sau reverse proxy tin cậy; không bật khi app nhận traffic Internet trực tiếp.
+
+**Kết quả log retry:** giữ `RETRYABLE_FAILURE` để phân biệt lỗi tạm thời với retry đã thực hiện nội bộ; tài liệu API/log dùng đúng nhãn này.
+
+**Ghi chú kiểm thử:** chưa có `SyncEntityHandler` thật trong SYS, nên cleanup tombstone hiện chỉ gọi handler khi module sở hữu đăng ký bean.
+
+**Không đổi tên commit thành `hardening` cho tới khi các mục test/tài liệu/k6 hoàn tất.**
+
+- [ ] Thử thực tế qua reverse proxy, xác nhận `native` forward headers lấy đúng client IP.
+- [ ] Rà soát bảo mật còn lại: kiểm thử IDOR/payload integration cho `notifications`, `devices`, `notification-settings`; xác nhận token thiết bị chuyển chủ không lộ chủ cũ; thử chuỗi HTML/SQL trong `sync/push`; tệp service account FCM nằm ngoài Git (`git ls-files` không chứa).
+- [ ] Nghiệm thu hiệu năng bằng k6 trên môi trường chạy thật với khoảng 100 user/token độc lập; `WATER_LOG` cần handler thật để đo đường áp dụng, không chỉ `UNKNOWN_ENTITY`; đo `ReminderEngine` bằng application timer hoặc test 100 user.
+- [x] Tài liệu: `docs/api-specs/sys.yaml`, `docs/tests/sys-test-cases.xlsx`, README và SRS đã cập nhật; các biến môi trường SYS, endpoint, mã lỗi, sync contract và WebSocket contract được mô tả.
 - [ ] Thử trên thiết bị thật cùng nhóm mobile: đăng ký thiết bị và nhận push (Android, và iOS nếu có), bật DND, nhận nhắc nước đúng giờ địa phương, vượt calo nhận đúng một thông báo, tắt mạng ghi 3 log nước rồi bật mạng, đổi ngôn ngữ thông báo.
 
 **Hoàn thành khi:** mọi dòng trong bảng truy vết bên dưới xanh (dòng phụ thuộc module khác được ghi rõ trạng thái “đã chạy với module thật” hoặc “đã chạy với giả lập, chờ module”); `./gradlew check` xanh; nhóm mobile xác nhận bốn luồng: push, trung tâm thông báo, nhắc nhở và đồng bộ ngoại tuyến chạy trên thiết bị thật.

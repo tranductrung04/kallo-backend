@@ -13,6 +13,7 @@ public record NotificationProperties(
     @Min(1) int retentionDays,
     @Min(1) int reminderDailyCap,
     @Min(1) int maxDevicesPerUser,
+    @Min(1) int deviceRetentionDays,
     @NotNull Duration reminderCatchUp) {
   @AssertTrue
   public boolean reminderCatchUpIsPositive() {

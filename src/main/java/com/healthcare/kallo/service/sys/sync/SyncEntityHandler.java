@@ -11,4 +11,8 @@ public interface SyncEntityHandler {
 
   List<SyncChange> changesSince(
       UUID userId, long sinceSeq, Instant settledBefore, int limitPlusOne);
+
+  default int cleanupTombstonesBefore(Instant cutoff) {
+    return 0;
+  }
 }

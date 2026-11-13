@@ -111,6 +111,8 @@ docker compose up -d postgres
 Ứng dụng chạy tại: http://localhost:8080  
 Flyway sẽ tự động chạy migration khi ứng dụng khởi động.
 
+
+
 ## Database & Migration
 
 Dự án dùng **Flyway** để quản lý schema; Hibernate chỉ validate, không tự sinh bảng:

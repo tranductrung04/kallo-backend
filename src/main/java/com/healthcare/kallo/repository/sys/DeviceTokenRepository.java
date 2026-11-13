@@ -16,6 +16,10 @@ public interface DeviceTokenRepository extends JpaRepository<DeviceToken, UUID> 
   void deleteByToken(String token);
 
   @org.springframework.data.jpa.repository.Modifying
+  @org.springframework.data.jpa.repository.Query("delete from DeviceToken d where d.lastSeenAt < :cutoff")
+  int deleteLastSeenBefore(@org.springframework.data.repository.query.Param("cutoff") Instant cutoff);
+
+  @org.springframework.data.jpa.repository.Modifying
   @org.springframework.data.jpa.repository.Query(
       value =
           """

@@ -5,6 +5,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.healthcare.kallo.controller.sys.DeviceTestController;
 import com.healthcare.kallo.service.sys.PushDispatcher;
+import com.healthcare.kallo.config.RateLimitTestConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -17,7 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
     controllers = DeviceTestController.class,
     properties = "spring.profiles.active=test")
 @AutoConfigureMockMvc(addFilters = false)
-@Import(DeviceTestController.class)
+@Import({DeviceTestController.class, RateLimitTestConfig.class})
 class DeviceTestControllerProfileTest {
   @Autowired private MockMvc mockMvc;
   @MockitoBean private PushDispatcher pushes;
