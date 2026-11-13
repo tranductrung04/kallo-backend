@@ -1,3 +1,6 @@
+server:
+  forward-headers-strategy: native
+
 spring:
   application:
     name: '@projectName@'
@@ -26,6 +29,10 @@ spring:
           connectiontimeout: ${MAIL_SMTP_CONNECTION_TIMEOUT:3000}
           timeout: ${MAIL_SMTP_TIMEOUT:5000}
           writetimeout: ${MAIL_SMTP_WRITE_TIMEOUT:5000}
+  data:
+    redis:
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:500ms}
+      connect-timeout: ${SPRING_DATA_REDIS_CONNECT_TIMEOUT:500ms}
   servlet:
     multipart:
       max-file-size: 2MB
@@ -45,6 +52,23 @@ app:
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
     resend-interval: ${APP_AUTH_RESEND_INTERVAL:60s}
     max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
+  act:
+    max-sync-batch-size: ${APP_ACT_MAX_SYNC_BATCH_SIZE:500}
+    sync-backfill-days: ${APP_ACT_SYNC_BACKFILL_DAYS:30}
+    manual-backfill-days: ${APP_ACT_MANUAL_BACKFILL_DAYS:365}
+    future-tolerance: ${APP_ACT_FUTURE_TOLERANCE:5m}
+    weight-min-kg: ${APP_ACT_WEIGHT_MIN_KG:20}
+    weight-max-kg: ${APP_ACT_WEIGHT_MAX_KG:300}
+    walking-met: ${APP_ACT_WALKING_MET:3.5}
+    walking-speed-kmh: ${APP_ACT_WALKING_SPEED_KMH:5}
+    stride-factor: ${APP_ACT_STRIDE_FACTOR:0.415}
+    fallback-cadence-spm: ${APP_ACT_FALLBACK_CADENCE_SPM:100}
+    step-source-priority: ${APP_ACT_STEP_SOURCE_PRIORITY:HEALTH_CONNECT,HEALTHKIT,DEVICE_SENSOR}
+    dedup-overlap-ratio: ${APP_ACT_DEDUP_OVERLAP_RATIO:0.8}
+    tombstone-retention: ${APP_ACT_TOMBSTONE_RETENTION:90d}
+    tombstone-cleanup-cron: ${APP_ACT_TOMBSTONE_CLEANUP_CRON:0 0 3 * * *}
+    route-max-bytes: ${APP_ACT_ROUTE_MAX_BYTES:102400}
+    gps-max-speed-kmh: ${APP_ACT_GPS_MAX_SPEED_KMH:60}
   google:
     client-ids: ${GOOGLE_CLIENT_ID}
     jwks-uri: ${GOOGLE_JWKS_URI}
@@ -55,6 +79,42 @@ app:
     bucket: ${STORAGE_BUCKET}
     public-endpoint: ${STORAGE_PUBLIC_ENDPOINT:http://localhost:9000}
     presigned-url-expiration: ${STORAGE_PRESIGNED_URL_EXPIRATION:15m}
+  push:
+    enabled: ${PUSH_ENABLED:false}
+    credentials-path: ${FCM_CREDENTIALS_PATH:}
+  websocket:
+    allowed-origins: ${APP_WEBSOCKET_ALLOWED_ORIGINS:*}
+    max-sessions-per-user: ${APP_WEBSOCKET_MAX_SESSIONS_PER_USER:5}
+  notification:
+    retention-days: ${APP_NOTIFICATION_RETENTION_DAYS:30}
+    reminder-daily-cap: ${APP_NOTIFICATION_REMINDER_DAILY_CAP:6}
+    max-devices-per-user: ${APP_NOTIFICATION_MAX_DEVICES_PER_USER:10}
+    device-retention-days: ${APP_NOTIFICATION_DEVICE_RETENTION_DAYS:60}
+    reminder-catch-up: ${APP_NOTIFICATION_REMINDER_CATCH_UP:10m}
+  sync:
+    max-operations: ${APP_SYNC_MAX_OPERATIONS:200}
+    settle-delay: ${APP_SYNC_SETTLE_DELAY:2s}
+    tombstone-retention: ${APP_SYNC_TOMBSTONE_RETENTION:30d}
+    default-page: ${APP_SYNC_DEFAULT_PAGE:500}
+    max-page: ${APP_SYNC_MAX_PAGE:1000}
+    max-future-skew: ${APP_SYNC_MAX_FUTURE_SKEW:5m}
+  rate-limit:
+    devices-per-hour: ${APP_RATE_LIMIT_DEVICES_PER_HOUR:20}
+    sync-push-per-minute: ${APP_RATE_LIMIT_SYNC_PUSH_PER_MINUTE:30}
+    sync-pull-per-minute: ${APP_RATE_LIMIT_SYNC_PULL_PER_MINUTE:60}
+    notifications-per-minute: ${APP_RATE_LIMIT_NOTIFICATIONS_PER_MINUTE:120}
+    settings-per-minute: ${APP_RATE_LIMIT_SETTINGS_PER_MINUTE:30}
+    websocket-per-minute: ${APP_RATE_LIMIT_WEBSOCKET_PER_MINUTE:10}
+  attribution:
+    open-food-facts-url: ${APP_ATTRIBUTION_OFF_URL:https://world.openfoodfacts.org}
+    open-food-facts-license: ${APP_ATTRIBUTION_OFF_LICENSE:ODbL-1.0}
+    open-food-facts-attribution: ${APP_ATTRIBUTION_OFF_TEXT:Data from Open Food Facts, licensed under the Open Database License (ODbL).}
+    nin-url: ${APP_ATTRIBUTION_NIN_URL:https://viendinhduong.vn/}
+    nin-license: ${APP_ATTRIBUTION_NIN_LICENSE:Vietnamese Food Composition Table terms}
+    nin-attribution: ${APP_ATTRIBUTION_NIN_TEXT:Dữ liệu từ Viện Dinh dưỡng Quốc gia / Data from the Vietnam National Institute of Nutrition.}
+    fao-infoods-url: ${APP_ATTRIBUTION_FAO_INFOODS_URL:https://www.fao.org/infoods}
+    fao-infoods-license: ${APP_ATTRIBUTION_FAO_INFOODS_LICENSE:FAO/INFOODS terms of use}
+    fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
   game:
     daily-goal:
       min-meals: ${APP_GAME_DAILY_GOAL_MIN_MEALS:2}

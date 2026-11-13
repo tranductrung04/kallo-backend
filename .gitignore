@@ -51,3 +51,5 @@ logs/
 application-dev.properties
 *.pem
 *.key
+*service-account*.json
+firebase*.json

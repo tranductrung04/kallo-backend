@@ -36,6 +36,15 @@ public enum ErrorCode {
   CHALLENGE_NOT_JOINABLE(HttpStatus.CONFLICT, "Challenge is not joinable"),
   INVALID_FILE(HttpStatus.BAD_REQUEST, "Invalid file"),
   PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Payload is too large"),
+  ACTIVITY_TYPE_UNKNOWN(HttpStatus.BAD_REQUEST, "Activity type is unknown"),
+  WEIGHT_REQUIRED(HttpStatus.UNPROCESSABLE_ENTITY, "Weight is required"),
+  RECORD_DELETED(HttpStatus.CONFLICT, "Record has been deleted"),
+  INVALID_TIME_RANGE(HttpStatus.BAD_REQUEST, "Invalid time range"),
+  SYNC_BATCH_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Sync batch is too large"),
+  TIMESTAMP_OUT_OF_RANGE(HttpStatus.BAD_REQUEST, "Timestamp is out of range"),
+  NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "Notification not found"),
+  DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "Device not found"),
+  FULL_RESYNC_REQUIRED(HttpStatus.CONFLICT, "Full resynchronization is required"),
   INVALID_DELETE_CONFIRMATION(HttpStatus.UNAUTHORIZED, "Account deletion confirmation is invalid"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
