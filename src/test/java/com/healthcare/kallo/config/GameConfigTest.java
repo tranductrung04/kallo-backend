@@ -28,7 +28,7 @@ class GameConfigTest {
         new GameProperties.DailyGoal(meals, tolerance),
         new GameProperties.Streak(400),
         new GameProperties.Leaderboard(ZoneId.of("Asia/Ho_Chi_Minh"), false, Duration.ofMillis(500)),
-        new GameProperties.Friend(200, 50, Duration.ofHours(24), 20),
+        new GameProperties.Friend(200, 50, Duration.ofHours(24), 20, Duration.ofHours(1)),
         new GameProperties.Search(3, 20),
         new GameProperties.Challenge(Duration.ofDays(1)),
         new GameProperties.Ws(3, List.of()));

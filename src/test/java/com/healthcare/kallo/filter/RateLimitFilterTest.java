@@ -3,7 +3,12 @@ package com.healthcare.kallo.filter;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.*;
 
+import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.config.RateLimitProperties;
+import java.time.Duration;
+import java.time.ZoneId;
+import java.util.List;
+
 import com.healthcare.kallo.service.auth.RateLimiter;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
@@ -29,7 +34,7 @@ class RateLimitFilterTest {
       int count = calls.incrementAndGet();
       return count <= 30 ? RateLimiter.Result.permit() : RateLimiter.Result.rejected(17);
     };
-    RateLimitFilter filter = new RateLimitFilter(limiter, properties, new tools.jackson.databind.ObjectMapper());
+    RateLimitFilter filter = new RateLimitFilter(limiter, properties, gameProperties(), new tools.jackson.databind.ObjectMapper());
     SecurityContextHolder.getContext().setAuthentication(authentication());
 
     for (int i = 1; i <= 31; i++) {
@@ -54,7 +59,7 @@ class RateLimitFilterTest {
   @Test
   void limiterFailureFailsOpen() throws Exception {
     RateLimiter limiter = (key, limit, window) -> { throw new IllegalStateException("redis down"); };
-    RateLimitFilter filter = new RateLimitFilter(limiter, properties, new tools.jackson.databind.ObjectMapper());
+    RateLimitFilter filter = new RateLimitFilter(limiter, properties, gameProperties(), new tools.jackson.databind.ObjectMapper());
     SecurityContextHolder.getContext().setAuthentication(authentication());
     MockHttpServletRequest request = new MockHttpServletRequest("POST", "/api/sync/push");
     request.setServletPath("/api/sync/push");
@@ -65,6 +70,14 @@ class RateLimitFilterTest {
 
     verify(chain).doFilter(request, response);
     assertThat(response.getStatus()).isEqualTo(200);
+  }
+
+  private GameProperties gameProperties() {
+    return new GameProperties(new GameProperties.DailyGoal(2, 10), new GameProperties.Streak(400),
+        new GameProperties.Leaderboard(ZoneId.of("Asia/Ho_Chi_Minh"), false, Duration.ofMillis(500)),
+        new GameProperties.Friend(200, 50, Duration.ofHours(24), 20, Duration.ofHours(1)),
+        new GameProperties.Search(3, 20), new GameProperties.Challenge(Duration.ofDays(1)),
+        new GameProperties.Ws(3, List.of()));
   }
 
   private UsernamePasswordAuthenticationToken authentication() {
