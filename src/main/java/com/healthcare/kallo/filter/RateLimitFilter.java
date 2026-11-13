@@ -2,6 +2,7 @@ package com.healthcare.kallo.filter;
 
 import com.healthcare.kallo.common.ApiResponse;
 import com.healthcare.kallo.common.ErrorCode;
+import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.config.RateLimitProperties;
 import com.healthcare.kallo.security.auth.CurrentUser;
 import com.healthcare.kallo.service.auth.RateLimiter;
@@ -10,9 +11,11 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
@@ -43,11 +46,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
   }
 
   private final RateLimitProperties properties;
+  private final GameProperties gameProperties;
   private final ObjectMapper objectMapper;
 
-  public RateLimitFilter(RateLimiter limiter, RateLimitProperties properties, ObjectMapper objectMapper) {
+  @Autowired
+  public RateLimitFilter(RateLimiter limiter, RateLimitProperties properties, GameProperties gameProperties,
+      ObjectMapper objectMapper) {
     this.limiter = limiter;
     this.properties = properties;
+    this.gameProperties = gameProperties;
     this.objectMapper = objectMapper;
   }
 
@@ -115,6 +122,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
     if ("PUT".equals(method) && "/api/notification-settings".equals(path)) {
       return new Limit("notification-settings", properties.settingsPerMinute(), properties.minute());
+    }
+    if ("POST".equals(method) && "/api/friends/requests".equals(path) && gameProperties != null) {
+      return new Limit("friend-requests", gameProperties.friend().requestsPerHour(), gameProperties.friend().requestWindow());
     }
     return null;
   }

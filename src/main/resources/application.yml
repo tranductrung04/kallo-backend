@@ -115,3 +115,27 @@ app:
     fao-infoods-url: ${APP_ATTRIBUTION_FAO_INFOODS_URL:https://www.fao.org/infoods}
     fao-infoods-license: ${APP_ATTRIBUTION_FAO_INFOODS_LICENSE:FAO/INFOODS terms of use}
     fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
+  game:
+    daily-goal:
+      min-meals: ${APP_GAME_DAILY_GOAL_MIN_MEALS:2}
+      calorie-tolerance-percent: ${APP_GAME_DAILY_GOAL_CALORIE_TOLERANCE_PERCENT:10}
+    streak:
+      window-days: ${APP_GAME_STREAK_WINDOW_DAYS:400}
+    leaderboard:
+      zone: ${APP_GAME_LEADERBOARD_ZONE:Asia/Ho_Chi_Minh}
+      steps-enabled: ${APP_GAME_LEADERBOARD_STEPS_ENABLED:false}
+      push-debounce: ${APP_GAME_LEADERBOARD_PUSH_DEBOUNCE:500ms}
+    friend:
+      max-friends: ${APP_GAME_FRIEND_MAX_FRIENDS:200}
+      max-pending-out: ${APP_GAME_FRIEND_MAX_PENDING_OUT:50}
+      decline-cooldown: ${APP_GAME_FRIEND_DECLINE_COOLDOWN:24h}
+      requests-per-hour: ${APP_GAME_FRIEND_REQUESTS_PER_HOUR:20}
+      request-window: ${APP_GAME_FRIEND_REQUEST_WINDOW:1h}
+    search:
+      min-length: ${APP_GAME_SEARCH_MIN_LENGTH:3}
+      max-results: ${APP_GAME_SEARCH_MAX_RESULTS:20}
+    challenge:
+      expiry-grace: ${APP_GAME_CHALLENGE_EXPIRY_GRACE:1d}
+    ws:
+      max-sessions-per-user: ${APP_GAME_WS_MAX_SESSIONS_PER_USER:3}
+      allowed-origins: ${APP_GAME_WS_ALLOWED_ORIGINS:}
