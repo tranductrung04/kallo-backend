@@ -24,6 +24,14 @@ class UserDayResolverTest {
   }
 
   @Test
+  void resolvesSameInstantAgainstChangedTimezone() {
+    UserDayResolver resolver = resolver();
+
+    assertThat(resolver.resolve("Asia/Ho_Chi_Minh", INSTANT)).hasToString("2026-11-14");
+    assertThat(resolver.resolve("America/Los_Angeles", INSTANT)).hasToString("2026-11-13");
+  }
+
+  @Test
   void resolvesZoneIdWithoutUserEntity() {
     UserDayResolver resolver = resolver();
 
@@ -34,6 +42,11 @@ class UserDayResolverTest {
   @Test
   void handlesDaylightSavingTime() {
     UserDayResolver resolver = resolver();
+
+    assertThat(resolver.resolve("America/New_York", Instant.parse("2026-11-01T05:59:00Z")))
+        .hasToString("2026-11-01");
+    assertThat(resolver.resolve("America/New_York", Instant.parse("2026-11-01T06:01:00Z")))
+        .hasToString("2026-11-01");
 
     assertThat(resolver.resolve("America/New_York", Instant.parse("2026-03-08T06:59:00Z")))
         .hasToString("2026-03-08");
