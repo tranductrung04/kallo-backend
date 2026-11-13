@@ -98,7 +98,7 @@ flowchart LR
 
 | Ai | Việc | Ghi chú |
 | --- | --- | --- |
-| Chủ sở hữu `DailySummary` (NUTRI, ACT, REPORT) | Phát `DailyProgressChangedEvent(userId, localDate)` sau commit mỗi khi log bữa ăn, nước, hoạt động, bước chân hoặc cân nặng của ngày đó được thêm, sửa, xoá, kể cả log đồng bộ ngoại tuyến cho ngày cũ | Lớp sự kiện đặt ở `common/event` để module nguồn không phải import GAME |
+| Chủ sở hữu `DailySummary` (NUTRI, ACT, REPORT) | Phát `DailyProgressChangedEvent(userId, localDate)` sau commit mỗi khi log bữa ăn, nước, hoạt động, bước chân hoặc cân nặng của ngày đó được thêm, sửa, xoá, kể cả log đồng bộ ngoại tuyến cho ngày cũ | Lớp sự kiện đặt ở `event/game` theo quy ước event của repo; module nguồn chỉ import hợp đồng sự kiện dùng chung này. |
 | Cùng người trên | Cài `DailyProgressProvider` đọc `DailySummary` và mục tiêu từ `UserHealthProfile` | Giao diện nằm ở `service/game`, theo đúng tiền lệ `ProfileStatusProvider` nằm ở `service/auth` |
 | Cùng người trên | Cung cấp `mealsLogged` = số **buổi ăn khác nhau** (sáng, trưa, tối, phụ) có ít nhất một log trong ngày | `DailySummary` ở SRS §6.1 chưa có trường này; thêm cột hoặc tính từ `UserFoodLog` |
 | Người làm SYS (SRS Q6) | Cài `NotificationService` và FCM để Phase 7a ghi thông báo và gửi đẩy | Chưa có thì Phase 7a chỉ đẩy qua WebSocket |
@@ -324,11 +324,11 @@ Mã lỗi mới thêm vào `ErrorCode` ở Phase 0:
 Mục tiêu: các quyết định đã chốt, hợp đồng liên module đã được xác nhận bằng lời, có khung gói và cấu hình để các phase sau chỉ còn viết nghiệp vụ.
 
 - [ ] Họp 30 phút với nhóm: chốt G1, G5, G6 (SRS Q4, Q5) hoặc ghi rõ "dùng mặc định chờ giảng viên"; xác nhận bảng "Hợp đồng với module khác" (ai phát sự kiện, ai cài cổng, `mealsLogged` lấy ở đâu, ai sở hữu WebSocket, số phiên bản Flyway kế tiếp); ghi kết quả vào mục "Quyết định" của file này.
-- [ ] Tạo khung gói: `controller/game`, `service/game` (+ `impl`), `model/game` (+ `enums`), `repository/game`, `dto/request/game`, `dto/response/game`, và `common/event` cho lớp sự kiện dùng chung.
+- [ ] Tạo khung gói: `controller/game`, `service/game` (+ `impl`), `model/game` (+ `enums`), `repository/game`, `dto/request/game`, `dto/response/game`, và `event/game` cho lớp sự kiện dùng chung.
 - [ ] `config/GameProperties` dạng `@ConfigurationProperties("app.game")` + `@Validated` (ngưỡng > 0, múi giờ hợp lệ) với các khoá: `daily-goal.min-meals` (2), `daily-goal.calorie-tolerance` (0,10), `streak-window-days` (400), `leaderboard.zone` (`Asia/Ho_Chi_Minh`), `leaderboard.steps-enabled` (false), `leaderboard.push-debounce` (500ms), `friend.max-friends` (200), `friend.max-pending-out` (50), `friend.decline-cooldown` (24h), `friend.requests-per-hour` (20), `search.min-length` (3), `search.max-results` (20), `challenge.expiry-grace` (1d), `ws.max-sessions-per-user` (3), `ws.allowed-origins`. Mọi giá trị đọc từ biến môi trường `APP_GAME_*` có giá trị mặc định, để CI không cần khai thêm; cập nhật `application.yml`, `application-test.yml`, `.env.example`, `docker-compose.yml`.
 - [ ] `ErrorCode`: thêm bảy mã ở bảng trên.
 - [ ] `AsyncConfig`: thêm executor `gameTaskExecutor` (core 2, max 4, queue 200, tiền tố `kallo-game-`) theo mẫu `mailTaskExecutor`; thêm `@EnableScheduling` (class cấu hình riêng).
-- [ ] Cổng liên module: record `DailyProgress`, interface `DailyProgressProvider` (`find`, `findRange`, `sumSteps`) ở `service/game`, bean mặc định rỗng bằng `ConditionalDailyProgressProvider` theo mẫu `ConditionalProfileStatusProvider`; `DailyProgressChangedEvent(userId, localDate)` ở `common/event`.
+- [ ] Cổng liên module: record `DailyProgress`, interface `DailyProgressProvider` (`find`, `findRange`, `sumSteps`) ở `service/game`, bean mặc định rỗng bằng `ConditionalDailyProgressProvider` theo mẫu `ConditionalProfileStatusProvider`; `DailyProgressChangedEvent(userId, localDate)` ở `event/game`.
 - [ ] `UserDayResolver` (hôm nay của người dùng, đổi `Instant` sang ngày địa phương theo `users.timezone`), dùng `Clock` tiêm được như `EmailVerificationService` để kiểm thử.
 - [ ] `DailyGoalPolicy` (G1) cùng unit test ngay: 1 bữa so với 2 bữa; calo đúng −10% và +10% (đạt) và lệch hơn (không đạt); `calorieGoal` null.
 - [ ] `SecurityConfig`: thêm `requestMatchers("/api/admin/**").hasRole("ADMIN")` **trước** dòng `anyRequest()`. Repo chưa bật `@EnableMethodSecurity` nên dùng matcher thay cho `@PreAuthorize`.

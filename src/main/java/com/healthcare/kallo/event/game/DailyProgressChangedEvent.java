@@ -1,4 +1,4 @@
-package com.healthcare.kallo.common.event;
+package com.healthcare.kallo.event.game;
 
 import java.time.LocalDate;
 import java.util.UUID;
