@@ -2,9 +2,9 @@ package com.healthcare.kallo.repository.game;
 
 import com.healthcare.kallo.model.game.Streak;
 import java.time.LocalDate;
-import java.util.UUID;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import jakarta.persistence.LockModeType;
@@ -16,11 +16,32 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.transaction.annotation.Transactional;
 
 public interface StreakRepository extends JpaRepository<Streak, UUID> {
+  @Modifying
+  @Transactional
+  @Query(value = """
+      INSERT INTO streaks (user_id, current_streak, longest_streak, updated_at)
+      VALUES (:userId, 0, 0, now())
+      ON CONFLICT (user_id) DO NOTHING
+      """, nativeQuery = true)
+  int insertIfAbsent(@Param("userId") UUID userId);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select s from Streak s where s.userId = :userId")
   Optional<Streak> findByUserIdForUpdate(@Param("userId") UUID userId);
 
   Slice<Streak> findByCurrentStreakGreaterThan(int value, Pageable pageable);
+
+  @Modifying
+  @Transactional
+  @Query(value = """
+      UPDATE streaks s SET current_streak = 0, updated_at = now()
+      FROM users u
+      WHERE u.id = s.user_id
+        AND s.current_streak > 0
+        AND s.last_completed_date IS NOT NULL
+        AND s.last_completed_date < ((now() AT TIME ZONE u.timezone)::date - 1)
+      """, nativeQuery = true)
+  int resetExpiredCurrentStreaks();
 
   @Modifying
   @Transactional
