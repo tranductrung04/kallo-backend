@@ -43,7 +43,7 @@ public interface StreakRepository extends JpaRepository<Streak, UUID> {
       """, nativeQuery = true)
   int resetExpiredCurrentStreaks();
 
-  @Modifying
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Transactional
   @Query(value = """
       INSERT INTO streaks (user_id, current_streak, longest_streak, last_completed_date, updated_at)

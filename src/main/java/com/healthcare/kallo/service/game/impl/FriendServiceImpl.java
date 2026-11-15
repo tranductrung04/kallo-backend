@@ -3,7 +3,6 @@ package com.healthcare.kallo.service.game.impl;
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.GameProperties;
-import com.healthcare.kallo.service.game.FriendsCountBadgeHook;
 import com.healthcare.kallo.dto.request.game.RespondFriendRequest;
 import com.healthcare.kallo.dto.request.game.SendFriendRequest;
 import com.healthcare.kallo.dto.response.game.FriendPageResponse;
@@ -19,6 +18,8 @@ import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.game.FriendshipRepository;
 import com.healthcare.kallo.repository.game.UserGameSettingsRepository;
 import com.healthcare.kallo.service.auth.StorageService;
+import com.healthcare.kallo.event.game.FriendAcceptedEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -34,18 +35,19 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
   private final UserRepository users;
   private final StorageService storage;
   private final GameProperties properties;
-  private final FriendsCountBadgeHook badges;
+  private final ApplicationEventPublisher events;
   private final Clock clock;
   private final java.time.Duration avatarExpiration = java.time.Duration.ofMinutes(15);
 
   public FriendServiceImpl(FriendshipRepository friendships, UserGameSettingsRepository settings,
-      UserRepository users, StorageService storage, GameProperties properties, FriendsCountBadgeHook badges, Clock clock) {
+      UserRepository users, StorageService storage, GameProperties properties,
+      ApplicationEventPublisher events, Clock clock) {
     this.friendships = friendships;
     this.settings = settings;
     this.users = users;
     this.storage = storage;
     this.properties = properties;
-    this.badges = badges;
+    this.events = events;
     this.clock = clock;
   }
 
@@ -69,8 +71,8 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
         enforceAcceptedLimits(userId, target.getId());
         friendship.setStatus(FriendshipStatus.ACCEPTED);
         friendship.setRespondedAt(now);
-        badges.onAccepted(userId);
-        badges.onAccepted(target.getId());
+        onAccepted(userId);
+        onAccepted(target.getId());
         return response(friendship);
       }
       if (friendship.getRequester().getId().equals(userId)
@@ -115,8 +117,8 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
     if ("ACCEPT".equals(request.action())) {
       enforceAcceptedLimits(friendship.getRequester().getId(), friendship.getAddressee().getId());
       friendship.setStatus(FriendshipStatus.ACCEPTED);
-      badges.onAccepted(friendship.getRequester().getId());
-      badges.onAccepted(friendship.getAddressee().getId());
+      onAccepted(friendship.getRequester().getId());
+      onAccepted(friendship.getAddressee().getId());
     } else {
       friendship.setStatus(FriendshipStatus.DECLINED);
     }
@@ -158,6 +160,10 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
   @Transactional
   public void unfriend(UUID userId, UUID friendUserId) {
     friendships.deleteAcceptedPair(userId, friendUserId, friendUserId, userId);
+  }
+
+  private void onAccepted(UUID userId) {
+    events.publishEvent(new FriendAcceptedEvent(userId));
   }
 
   private void enforceLimits(UUID requester, UUID target) {
