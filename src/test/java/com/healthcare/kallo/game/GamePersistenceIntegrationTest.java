@@ -64,6 +64,7 @@ class GamePersistenceIntegrationTest extends ActIntegrationTestBase {
   @Autowired MockMvc mockMvc;
   @Autowired ApplicationEventPublisher events;
   @Autowired TransactionTemplate transactions;
+  @Autowired com.healthcare.kallo.service.game.BadgeService badgeService;
   @MockitoBean DailyProgressProvider progress;
 
   @Test
@@ -137,9 +138,136 @@ class GamePersistenceIntegrationTest extends ActIntegrationTestBase {
   }
 
   @Test
+  void streakBadgeIsEarnedAfterSevenDayRecomputeAndKeepsOnePointLedgerRow() {
+    User user = verifiedUser("game-badge-streak-7");
+    LocalDate today = LocalDate.now(ZoneId.of(user.getTimezone()));
+    streaks.upsert(user.getId(), 6, 6, today.minusDays(6));
+    when(progress.findRange(any(), any(), any())).thenReturn(java.util.stream.IntStream.rangeClosed(0, 6)
+        .mapToObj(offset -> new DailyProgress(today.minusDays(offset), 2, 2_000, 2_000, 0, null, 0, null))
+        .toList());
+
+    streakService.recompute(user.getId());
+    streakService.recompute(user.getId());
+
+    Badge badge = badges.findByCode("STREAK_7").orElseThrow();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_badges where user_id = ? and badge_id = ?", Long.class,
+        user.getId(), badge.getId())).isOne();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from point_transactions where user_id = ? and source_type = ? and source_id = ?",
+        Long.class, user.getId(), PointSource.BADGE.name(), badge.getId())).isOne();
+  }
+
+  @Test
+  void earnedStreakBadgeRemainsAfterStreakBreaks() {
+    User user = verifiedUser("game-badge-retained");
+    Badge badge = badges.findByCode("STREAK_7").orElseThrow();
+    UserBadge earned = new UserBadge();
+    earned.setUser(user);
+    earned.setBadge(badge);
+    userBadges.saveAndFlush(earned);
+
+    when(progress.findRange(any(), any(), any())).thenReturn(List.of());
+    streakService.recompute(user.getId());
+
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_badges where user_id = ? and badge_id = ?", Long.class,
+        user.getId(), badge.getId())).isOne();
+  }
+
+  @Test
+  void concurrentBadgeGrantsCreateOneBadgeAndOnePoint() throws Exception {
+    User user = verifiedUser("game-badge-concurrent");
+    Badge badge = badges.findByCode("FIRST_LOG").orElseThrow();
+    int workers = 2;
+    CountDownLatch ready = new CountDownLatch(workers);
+    CountDownLatch start = new CountDownLatch(1);
+    var executor = Executors.newFixedThreadPool(workers);
+    try {
+      var futures = java.util.stream.IntStream.range(0, workers)
+          .mapToObj(index -> executor.submit(() -> {
+            ready.countDown();
+            start.await();
+            badgeService.grant(user.getId(), badge.getId());
+            return null;
+          }))
+          .toList();
+      assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+      start.countDown();
+      futures.forEach(future -> {
+        try {
+          future.get(10, TimeUnit.SECONDS);
+        } catch (Exception exception) {
+          throw new AssertionError(exception);
+        }
+      });
+    } finally {
+      executor.shutdownNow();
+    }
+
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_badges where user_id = ? and badge_id = ?", Long.class,
+        user.getId(), badge.getId())).isOne();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from point_transactions where user_id = ? and source_type = ? and source_id = ?",
+        Long.class, user.getId(), PointSource.BADGE.name(), badge.getId())).isOne();
+  }
+
+  @Test
+  void firstFriendBadgeIsEarnedAfterAcceptance() throws Exception {
+    User requester = verifiedUser("game-friend-requester");
+    User addressee = verifiedUser("game-friend-addressee");
+    Friendship friendship = friendship(requester, addressee);
+    friendship = friendships.saveAndFlush(friendship);
+
+    mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put(
+            "/api/friends/requests/" + friendship.getId())
+        .header("Authorization", "Bearer " + accessToken(addressee))
+        .contentType("application/json")
+        .content("{\"action\":\"ACCEPT\"}"))
+        .andExpect(status().isOk());
+
+    awaitBadge(requester.getId(), "FIRST_FRIEND");
+    awaitBadge(addressee.getId(), "FIRST_FRIEND");
+  }
+
+  @Test
+  void inactiveBadgeCannotBeGranted() {
+    User user = verifiedUser("game-badge-inactive");
+    Badge badge = badges.findByCode("WEIGHT_GOAL_REACHED").orElseThrow();
+
+    assertThat(badgeService.grant(user.getId(), badge.getId())).isFalse();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_badges where user_id = ? and badge_id = ?", Long.class,
+        user.getId(), badge.getId())).isZero();
+  }
+
+  @Test
+  void badgeListMarksEarnedBadgesAndExcludesInactiveBadges() throws Exception {
+    User user = verifiedUser("game-badge-api");
+    Badge badge = badges.findByCode("FIRST_LOG").orElseThrow();
+    UserBadge earned = new UserBadge();
+    earned.setUser(user);
+    earned.setBadge(badge);
+    userBadges.saveAndFlush(earned);
+
+    mockMvc.perform(get("/api/badges").header("Authorization", "Bearer " + accessToken(user)))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.length()").value(7))
+        .andExpect(jsonPath("$.data[0].code").value("FIRST_LOG"))
+        .andExpect(jsonPath("$.data[0].earned").value(true))
+        .andExpect(jsonPath("$.data[1].code").value("STREAK_7"))
+        .andExpect(jsonPath("$.data[2].code").value("STREAK_30"))
+        .andExpect(jsonPath("$.data[3].code").value("STREAK_100"))
+        .andExpect(jsonPath("$.data[4].code").value("FIRST_FRIEND"))
+        .andExpect(jsonPath("$.data[5].code").value("CHALLENGER_1"))
+        .andExpect(jsonPath("$.data[6].code").value("CHALLENGER_5"));
+  }
+
+  @Test
   void recomputeIsIdempotentAndHandlesNullProviderData() {
     User user = verifiedUser("game-streak-idempotent");
-    when(progress.findRange(any(), any(), any())).thenReturn(null);
+    when(progress.findRange(any(), any(), any())).thenReturn(List.of());
 
     streakService.recompute(user.getId());
     streakService.recompute(user.getId());
@@ -331,6 +459,19 @@ class GamePersistenceIntegrationTest extends ActIntegrationTestBase {
     point.setSourceType(PointSource.BADGE);
     point.setSourceId(sourceId);
     return point;
+  }
+
+  private void awaitBadge(UUID userId, String code) throws InterruptedException {
+    UUID badgeId = badges.findByCode(code).orElseThrow().getId();
+    long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (jdbc.queryForObject(
+            "select count(*) from user_badges where user_id = ? and badge_id = ?",
+            Long.class, userId, badgeId) == 0 && System.nanoTime() < deadline) {
+      Thread.sleep(25);
+    }
+    assertThat(jdbc.queryForObject(
+        "select count(*) from user_badges where user_id = ? and badge_id = ?",
+        Long.class, userId, badgeId)).isOne();
   }
 
   private long count(String table, UUID userId) {

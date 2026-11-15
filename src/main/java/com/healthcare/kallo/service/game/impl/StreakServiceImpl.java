@@ -14,6 +14,9 @@ import com.healthcare.kallo.service.game.DailyProgressProvider;
 import com.healthcare.kallo.service.game.StreakCalculator;
 import com.healthcare.kallo.service.game.StreakService;
 import com.healthcare.kallo.service.game.UserDayResolver;
+import com.healthcare.kallo.model.game.enums.BadgeRuleType;
+import com.healthcare.kallo.service.game.BadgeService;
+import java.util.Set;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
@@ -30,9 +33,11 @@ public class StreakServiceImpl implements StreakService {
   private final UserDayResolver days;
   private final GameProperties properties;
   private final StreakCalculator calculator;
+  private final BadgeService badges;
 
   public StreakServiceImpl(StreakRepository streaks, UserRepository users, DailyProgressProvider progress,
-      DailyGoalPolicy goalPolicy, UserDayResolver days, GameProperties properties, StreakCalculator calculator) {
+      DailyGoalPolicy goalPolicy, UserDayResolver days, GameProperties properties, StreakCalculator calculator,
+      BadgeService badges) {
     this.streaks = streaks;
     this.users = users;
     this.progress = progress;
@@ -40,6 +45,7 @@ public class StreakServiceImpl implements StreakService {
     this.days = days;
     this.properties = properties;
     this.calculator = calculator;
+    this.badges = badges;
   }
 
   @Override
@@ -61,6 +67,7 @@ public class StreakServiceImpl implements StreakService {
     }
     StreakCalculator.Result result = calculator.calculate(metDates, today, storedLongest);
     streaks.upsert(userId, result.currentStreak(), result.longestStreak(), result.lastCompletedDate());
+    badges.evaluate(userId, Set.of(BadgeRuleType.STREAK_DAYS, BadgeRuleType.FIRST_LOG));
   }
 
   @Override

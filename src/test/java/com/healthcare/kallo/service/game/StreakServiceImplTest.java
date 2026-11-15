@@ -33,6 +33,7 @@ class StreakServiceImplTest {
   @Mock StreakRepository streaks;
   @Mock UserRepository users;
   @Mock DailyProgressProvider progress;
+  @Mock BadgeService badges;
   private StreakServiceImpl service;
   private User user;
 
@@ -53,7 +54,7 @@ class StreakServiceImplTest {
         new GameProperties.Challenge(java.time.Duration.ofDays(1)),
         new GameProperties.Ws(3, List.of()));
     service = new StreakServiceImpl(streaks, users, progress, new DailyGoalPolicy(2, 10), resolver,
-        properties, new StreakCalculator());
+        properties, new StreakCalculator(), badges);
   }
 
   @Test
@@ -74,6 +75,9 @@ class StreakServiceImplTest {
     order.verify(streaks).insertIfAbsent(USER_ID);
     order.verify(streaks).findByUserIdForUpdate(USER_ID);
     verify(streaks).upsert(USER_ID, 3, 3, TODAY);
+    verify(badges).evaluate(eq(USER_ID), eq(java.util.Set.of(
+        com.healthcare.kallo.model.game.enums.BadgeRuleType.STREAK_DAYS,
+        com.healthcare.kallo.model.game.enums.BadgeRuleType.FIRST_LOG)));
   }
 
   @Test

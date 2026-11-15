@@ -14,6 +14,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface UserChallengeRepository extends JpaRepository<UserChallenge, UUID> {
   Optional<UserChallenge> findByUserIdAndChallengeId(UUID userId, UUID challengeId);
+
+  long countByUserIdAndStatus(UUID userId, ChallengeStatus status);
   @Query("""
       select uc from UserChallenge uc
       join fetch uc.challenge c
