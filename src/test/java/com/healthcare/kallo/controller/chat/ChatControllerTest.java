@@ -12,6 +12,8 @@ import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.RateLimitTestConfig;
 import com.healthcare.kallo.service.chat.ChatService;
+import com.healthcare.kallo.service.chat.ChatSseService;
+import com.healthcare.kallo.config.ChatProperties;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,6 +31,8 @@ import org.springframework.test.web.servlet.MockMvc;
 class ChatControllerTest {
   @Autowired MockMvc mockMvc;
   @MockitoBean ChatService chat;
+  @MockitoBean ChatSseService sse;
+  @MockitoBean ChatProperties properties;
 
   @Test
   void rejectsOversizedMessageBeforeService() throws Exception {

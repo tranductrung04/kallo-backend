@@ -131,6 +131,8 @@ app:
       per-day: ${CHAT_RATE_LIMIT_PER_DAY:200}
     pending-timeout: ${CHAT_PENDING_TIMEOUT_SECONDS:120}s
     retention-days: ${CHAT_RETENTION_DAYS:30}
+    sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
+    sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
   game:
     daily-goal:
       min-meals: ${APP_GAME_DAILY_GOAL_MIN_MEALS:2}

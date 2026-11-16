@@ -98,6 +98,75 @@ public class ChatService {
     return reply(saved.userMessage(), saved.assistantMessage());
   }
 
+  public void streamMessage(UUID userId, SendMessageRequest request, ChatResponseStreamHandler handler) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
+    String content = safety.validateAndNormalizeInput(request.content(), properties.maxMessageLength());
+    ChatTxService.SavedMessage saved;
+    try {
+      saved = tx.findExistingMessage(userId, request);
+      if (saved != null) {
+        if (saved.alreadyAnswered()) {
+          handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
+          handler.onDelta(saved.assistantMessage().getContent());
+          handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(saved.conversation().getId(),
+              ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
+          return;
+        }
+        rateLimiter.check(userId);
+        saved = tx.retryFailed(saved);
+      } else {
+        rateLimiter.check(userId);
+        saved = tx.saveUserMessage(userId, request, content);
+      }
+    } catch (DataIntegrityViolationException exception) {
+      if (tx.isIdempotencyViolation(exception)) saved = tx.retryExistingMessage(userId, request);
+      else throw tx.mapIntegrityViolation(exception);
+    }
+    if (saved.alreadyAnswered()) {
+      handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
+      handler.onDelta(saved.assistantMessage().getContent());
+      handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(saved.conversation().getId(),
+          ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
+      return;
+    }
+    handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
+    ChatTxService.SavedMessage active = saved;
+    StringBuilder contentBuilder = new StringBuilder();
+    long started = System.nanoTime();
+    try {
+      ChatAiRequest aiRequest = contextBuilder.build(userId, active.conversation().getId(), active.userMessage(),
+          properties.historyWindow()).streaming();
+      aiClient.stream(aiRequest, new ChatAiStreamHandler() {
+        @Override
+        public void onDelta(String text) {
+          if (text != null && !text.isEmpty()) {
+            contentBuilder.append(text);
+            handler.onDelta(text);
+          }
+        }
+
+        @Override
+        public void onComplete(ChatAiStreamResult result) {
+          String checked = safety.validateOutput(contentBuilder.toString());
+          ChatAiReply reply = new ChatAiReply(checked, result.suggestedFoods(), result.promptTokens(),
+              result.completionTokens(), result.modelVersion());
+          if (!tx.completeAssistant(active.assistantMessage(), checked, reply,
+              TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))) {
+            throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, active.userMessage().getId());
+          }
+          handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
+              ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
+        }
+      });
+    } catch (BusinessException exception) {
+      tx.markFailed(active.assistantMessage(), exception.getErrorCode().name());
+      throw exception;
+    } catch (RuntimeException exception) {
+      tx.markFailed(active.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
+      throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, active.userMessage().getId());
+    }
+  }
+
   @Transactional(readOnly = true)
   public ConversationPageResponse listConversations(UUID userId, int page, int size) {
     if (page < 0 || size < 1 || size > 100) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
