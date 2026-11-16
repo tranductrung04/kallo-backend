@@ -47,6 +47,10 @@ public enum ErrorCode {
   DEVICE_NOT_FOUND(HttpStatus.NOT_FOUND, "Device not found"),
   FULL_RESYNC_REQUIRED(HttpStatus.CONFLICT, "Full resynchronization is required"),
   INVALID_DELETE_CONFIRMATION(HttpStatus.UNAUTHORIZED, "Account deletion confirmation is invalid"),
+  CHAT_AI_INVALID_RESPONSE(HttpStatus.BAD_GATEWAY, "AI service returned an invalid response"),
+  CHAT_AI_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI service timed out"),
+  CHAT_AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI service is temporarily unavailable"),
+  CHAT_CONVERSATION_BUSY(HttpStatus.CONFLICT, "Conversation already has a pending message"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

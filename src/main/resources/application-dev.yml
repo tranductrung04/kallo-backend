@@ -24,6 +24,11 @@ spring:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
 
+app:
+  chat:
+    ai:
+      mock-enabled: ${CHAT_AI_MOCK_ENABLED:true}
+
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{request_id:-}] %logger{36} - %msg%n"
