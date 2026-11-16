@@ -16,7 +16,7 @@ import org.mockito.Mockito;
 
 class ChatContextBuilderTest {
   private final ChatMessageRepository messages = Mockito.mock(ChatMessageRepository.class);
-  private final ChatContextBuilder builder = new ChatContextBuilder(messages);
+  private final ChatContextBuilder builder = new ChatContextBuilder(messages, userId -> ChatContextData.empty());
 
   @Test
   void excludesPendingAndFailedRowsAndEndsWithCurrentUser() {
@@ -28,7 +28,7 @@ class ChatContextBuilderTest {
     when(messages.findByConversationIdAndStatusOrderByCreatedAtDescIdDesc(any(), any(), any()))
         .thenReturn(List.of(pendingAssistant, failedAssistant, oldUser));
 
-    ChatAiRequest request = builder.build(conversationId, current, 3);
+    ChatAiRequest request = builder.build(UUID.randomUUID(), conversationId, current, 3);
 
     assertThat(request.messages()).extracting(ChatAiRequest.ChatHistoryMessage::content)
         .containsExactly("old user", "current");

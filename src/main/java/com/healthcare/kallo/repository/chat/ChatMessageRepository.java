@@ -44,6 +44,12 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
   int failPending(@Param("id") UUID id, @Param("metadata") java.util.Map<String, Object> metadata);
 
   @Modifying
+  @Query("update ChatMessage m set m.status = 'FAILED', m.metadata = :metadata "
+      + "where m.status = 'PENDING' and m.createdAt < :cutoff")
+  int failExpiredPending(@Param("cutoff") Instant cutoff,
+      @Param("metadata") java.util.Map<String, Object> metadata);
+
+  @Modifying
   @Query("update ChatMessage m set m.status = 'PENDING', m.metadata = null where m.id = :id and m.status = 'FAILED'")
   int retryFailed(@Param("id") UUID id);
 

@@ -79,7 +79,7 @@ public class ChatService {
     long latencyMs;
     try {
       long started = System.nanoTime();
-      generated = aiClient.generate(contextBuilder.build(saved.conversation().getId(), saved.userMessage(),
+      generated = aiClient.generate(contextBuilder.build(userId, saved.conversation().getId(), saved.userMessage(),
           properties.historyWindow()));
       checked = safety.validateOutput(generated.content());
       latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
