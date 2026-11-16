@@ -10,12 +10,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class ChatContextBuilder {
   private final ChatMessageRepository messages;
+  private final ChatContextProvider contextProvider;
 
-  public ChatContextBuilder(ChatMessageRepository messages) {
+  public ChatContextBuilder(ChatMessageRepository messages, ChatContextProvider contextProvider) {
     this.messages = messages;
+    this.contextProvider = contextProvider;
   }
 
-  public ChatAiRequest build(UUID conversationId, ChatMessage currentUserMessage, int historyWindow) {
+  public ChatAiRequest build(UUID userId, UUID conversationId, ChatMessage currentUserMessage, int historyWindow) {
     int oldMessageLimit = Math.max(0, historyWindow - 1);
     var history = messages.findByConversationIdAndStatusOrderByCreatedAtDescIdDesc(
         conversationId, ChatMessageStatus.COMPLETED, PageRequest.of(0, historyWindow));
@@ -27,8 +29,9 @@ public class ChatContextBuilder {
       ordered = new java.util.ArrayList<>(ordered.subList(ordered.size() - oldMessageLimit, ordered.size()));
     }
     ordered.add(currentUserMessage);
-    return new ChatAiRequest(conversationId, ordered.stream()
+    ChatAiRequest request = new ChatAiRequest(conversationId, ordered.stream()
         .map(m -> new ChatAiRequest.ChatHistoryMessage(m.getRole().name().toLowerCase(), m.getContent()))
         .toList());
+    return request.withContext(contextProvider.get(userId));
   }
 }

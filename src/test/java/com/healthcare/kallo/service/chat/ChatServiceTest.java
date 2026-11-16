@@ -87,7 +87,7 @@ class ChatServiceTest {
     assistant.setConversation(conversation);
     when(tx.saveUserMessage(eq(userId), any(), eq("hello")))
         .thenReturn(new ChatTxService.SavedMessage(conversation, user, assistant, false));
-    when(context.build(any(), any(), eq(12))).thenReturn(new ChatAiRequest(conversationId,
+    when(context.build(any(), any(), any(), eq(12))).thenReturn(new ChatAiRequest(conversationId,
         List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
     when(ai.generate(any())).thenReturn(new ChatAiReply("", List.of(), null, null, "mock"));
 

@@ -159,6 +159,12 @@ public class ChatTxService {
     return messages.failPending(assistant.getId(), Map.of("reason", reason)) > 0;
   }
 
+  @Transactional
+  public int failExpiredPendingMessages() {
+    return messages.failExpiredPending(Instant.now().minus(properties.pendingTimeout()),
+        Map.of("reason", "PENDING_TIMEOUT"));
+  }
+
   private SavedMessage existingReply(Conversation conversation, UUID clientMessageId) {
     var userMessage = messages.findByConversationIdAndClientMessageId(conversation.getId(), clientMessageId)
         .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_CONVERSATION_BUSY));
