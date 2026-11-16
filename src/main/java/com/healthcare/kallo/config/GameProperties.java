@@ -41,10 +41,12 @@ public record GameProperties(
       @Min(1) @Max(50) int maxPendingOut,
       @NotNull Duration declineCooldown,
       @Min(1) int requestsPerHour,
-      @NotNull Duration requestWindow) {
+      @NotNull Duration requestWindow,
+      @NotNull Duration declinedRetention) {
     public Friend {
       requirePositive(declineCooldown, "friend.decline-cooldown");
       requirePositive(requestWindow, "friend.request-window");
+      requirePositive(declinedRetention, "friend.declined-retention");
     }
   }
 

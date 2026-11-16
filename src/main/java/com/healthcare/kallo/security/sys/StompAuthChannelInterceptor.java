@@ -1,6 +1,7 @@
 package com.healthcare.kallo.security.sys;
 
 import com.healthcare.kallo.config.WebSocketProperties;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import com.healthcare.kallo.model.auth.enums.UserStatus;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.service.sys.WebSocketSessionRegistry;
@@ -25,15 +26,17 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
   private final WebSocketProperties properties;
   private final WebSocketSessionRegistry sessions;
   private final UserRepository users;
+  private final GameAuditLogger audit;
 
   @Autowired
   public StompAuthChannelInterceptor(
       JwtDecoder jwtDecoder, WebSocketProperties properties, WebSocketSessionRegistry sessions,
-      UserRepository users) {
+      UserRepository users, GameAuditLogger audit) {
     this.jwtDecoder = jwtDecoder;
     this.properties = properties;
     this.sessions = sessions;
     this.users = users;
+    this.audit = audit;
   }
 
   @Override
@@ -55,12 +58,14 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
   private void authenticate(StompHeaderAccessor accessor) {
     String authorization = accessor.getFirstNativeHeader("Authorization");
     if (authorization == null || !authorization.startsWith("Bearer ")) {
+      audit.websocket("websocket_connect_rejected", null, accessor.getSessionId(), "missing_bearer");
       throw new IllegalArgumentException("STOMP CONNECT requires Bearer token");
     }
     Jwt jwt;
     try {
       jwt = jwtDecoder.decode(authorization.substring(7));
     } catch (JwtException | IllegalArgumentException e) {
+      audit.websocket("websocket_connect_rejected", null, accessor.getSessionId(), "invalid_bearer");
       throw new IllegalArgumentException("Invalid STOMP bearer token", e);
     }
     if (!Boolean.TRUE.equals(jwt.getClaim("email_verified"))) {

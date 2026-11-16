@@ -1,0 +1,38 @@
+@baseUrl = http://localhost:8080
+@token = replace-with-access-token
+
+### Game settings
+GET {{baseUrl}}/api/users/me/game-settings
+Authorization: Bearer {{token}}
+
+### Search users
+GET {{baseUrl}}/api/users/search?q=ann
+Authorization: Bearer {{token}}
+
+### Send friend request by user ID
+POST {{baseUrl}}/api/friends/requests
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "userId": "00000000-0000-0000-0000-000000000000"
+}
+
+### List friends
+GET {{baseUrl}}/api/friends?page=0&size=50
+Authorization: Bearer {{token}}
+
+### List friend leaderboard
+GET {{baseUrl}}/api/leaderboard/friends?metric=POINTS
+Authorization: Bearer {{token}}
+
+### WebSocket STOMP flow
+# Connect WebSocket client to ws://localhost:8080/ws.
+# Send CONNECT with:
+# accept-version:1.2
+# host:localhost
+# Authorization:Bearer <access-token>
+# Subscribe:
+# /user/queue/game-events
+# /user/queue/leaderboard
+# Client SEND frames are rejected. Refresh expired JWT, reconnect, resubscribe.

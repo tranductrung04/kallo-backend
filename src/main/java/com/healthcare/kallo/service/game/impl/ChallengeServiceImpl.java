@@ -14,6 +14,7 @@ import com.healthcare.kallo.repository.game.ChallengeRepository;
 import com.healthcare.kallo.repository.game.UserChallengeRepository;
 import com.healthcare.kallo.service.game.BadgeService;
 import com.healthcare.kallo.service.game.ChallengeMetricEvaluator;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import com.healthcare.kallo.service.game.ChallengeService;
 import com.healthcare.kallo.service.game.DailyGoalPolicy;
 import com.healthcare.kallo.service.game.DailyProgress;
@@ -43,12 +44,13 @@ public class ChallengeServiceImpl implements ChallengeService {
   private final PointService points;
   private final BadgeService badges;
   private final ApplicationEventPublisher events;
+  private final GameAuditLogger audit;
   private final java.time.Clock clock;
 
   public ChallengeServiceImpl(ChallengeRepository challenges, UserChallengeRepository userChallenges,
       UserRepository users, DailyProgressProvider progress, DailyGoalPolicy dailyGoalPolicy,
       UserDayResolver days, PointService points, BadgeService badges, ApplicationEventPublisher events,
-      java.time.Clock clock) {
+      GameAuditLogger audit, java.time.Clock clock) {
     this.challenges = challenges;
     this.userChallenges = userChallenges;
     this.users = users;
@@ -58,6 +60,7 @@ public class ChallengeServiceImpl implements ChallengeService {
     this.points = points;
     this.badges = badges;
     this.events = events;
+    this.audit = audit;
     this.clock = clock;
   }
 
@@ -155,6 +158,7 @@ public class ChallengeServiceImpl implements ChallengeService {
       UUID badgeId = challenge.getBadge() == null ? null : challenge.getBadge().getId();
       if (badgeId != null) badges.grant(userId, badgeId);
       badges.evaluate(userId, java.util.Set.of(BadgeRuleType.CHALLENGES_COMPLETED));
+      audit.challenge("challenge_completed", userId, challenge.getId());
       events.publishEvent(new ChallengeCompletedEvent(userId, challenge.getId(),
           challenge.getPointsReward(), badgeId));
     }

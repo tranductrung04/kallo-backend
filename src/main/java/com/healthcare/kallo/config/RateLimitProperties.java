@@ -10,10 +10,12 @@ public record RateLimitProperties(
     int syncPullPerMinute,
     int notificationsPerMinute,
     int settingsPerMinute,
-    int websocketPerMinute) {
+    int websocketPerMinute,
+    int searchPerMinute) {
   public RateLimitProperties {
     if (devicesPerHour < 1 || syncPushPerMinute < 1 || syncPullPerMinute < 1
-        || notificationsPerMinute < 1 || settingsPerMinute < 1 || websocketPerMinute < 1) {
+        || notificationsPerMinute < 1 || settingsPerMinute < 1 || websocketPerMinute < 1
+        || searchPerMinute < 1) {
       throw new IllegalArgumentException("Rate limits must be positive");
     }
   }

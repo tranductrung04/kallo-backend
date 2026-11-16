@@ -2,6 +2,7 @@ package com.healthcare.kallo.security.sys;
 
 import com.healthcare.kallo.config.RateLimitProperties;
 import com.healthcare.kallo.service.auth.RateLimiter;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import java.net.InetSocketAddress;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
@@ -20,6 +21,7 @@ public class WebSocketRateLimitInterceptor implements HandshakeInterceptor {
   private static final long UNAVAILABLE_LOG_INTERVAL_MILLIS = 30_000L;
   private final AtomicLong lastUnavailableLog = new AtomicLong();
   private final RateLimiter limiter;
+  private final GameAuditLogger audit;
 
   private void logUnavailable(RuntimeException exception) {
     long now = System.currentTimeMillis();
@@ -32,9 +34,11 @@ public class WebSocketRateLimitInterceptor implements HandshakeInterceptor {
 
   private final RateLimitProperties properties;
 
-  public WebSocketRateLimitInterceptor(RateLimiter limiter, RateLimitProperties properties) {
+  public WebSocketRateLimitInterceptor(RateLimiter limiter, RateLimitProperties properties,
+      GameAuditLogger audit) {
     this.limiter = limiter;
     this.properties = properties;
+    this.audit = audit;
   }
 
   @Override
@@ -55,11 +59,13 @@ public class WebSocketRateLimitInterceptor implements HandshakeInterceptor {
           properties.minute());
     } catch (RuntimeException e) {
       logUnavailable(e);
+      audit.websocket("websocket_handshake_rate_limiter_unavailable", null, null, e.getClass().getSimpleName());
       return true;
     }
     if (result.allowed()) return true;
     response.setStatusCode(HttpStatus.TOO_MANY_REQUESTS);
     response.getHeaders().set("Retry-After", Long.toString(result.retryAfterSeconds()));
+    audit.websocket("websocket_handshake_rate_limited", null, null, ip);
     return false;
   }
 

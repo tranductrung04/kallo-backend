@@ -1,10 +1,11 @@
 package com.healthcare.kallo.service.game;
 
+import com.healthcare.kallo.config.GameProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.dto.response.game.LeaderboardResponse;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.game.UserGameSettings;
@@ -23,6 +24,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import static com.healthcare.kallo.config.GamePropertiesFixture.defaults;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -43,14 +45,10 @@ class LeaderboardServiceImplTest {
 
   @BeforeEach
   void setUp() {
-    GameProperties properties = new GameProperties(
-        new GameProperties.DailyGoal(2, 10),
-        new GameProperties.Streak(400),
-        new GameProperties.Leaderboard(ZoneId.of("Asia/Ho_Chi_Minh"), false, Duration.ofMillis(1)),
-        new GameProperties.Friend(200, 50, Duration.ofHours(24), 20, Duration.ofHours(1)),
-        new GameProperties.Search(3, 20),
-        new GameProperties.Challenge(Duration.ofDays(1)),
-        new GameProperties.Ws(3, List.of()));
+    GameProperties properties = defaults();
+    properties = new GameProperties(properties.dailyGoal(), properties.streak(),
+        new GameProperties.Leaderboard(properties.leaderboard().zone(), false, Duration.ofMillis(1)),
+        properties.friend(), properties.search(), properties.challenge(), properties.ws());
     service = new LeaderboardServiceImpl(friendships, users, settings, streaks, points, progress, storage,
         properties, Clock.fixed(Instant.parse("2026-11-16T03:00:00Z"), ZoneId.of("UTC")),
         new UserDayResolver(Clock.fixed(Instant.parse("2026-11-16T03:00:00Z"), ZoneId.of("UTC"))));

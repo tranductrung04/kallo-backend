@@ -2,6 +2,7 @@ import org.apache.tools.ant.filters.ReplaceTokens
 
 plugins {
 	id 'java'
+	id 'jacoco'
 	id 'org.springframework.boot' version '4.1.1'
 	id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -62,6 +63,44 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.register('gameJacocoTestReport', JacocoReport) {
+	dependsOn test
+	reports {
+		xml.required = true
+		html.required = true
+	}
+	classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
+		include 'com/healthcare/kallo/service/game/**/*.class'
+		include 'com/healthcare/kallo/service/game/impl/**/*.class'
+	})
+	sourceDirectories.setFrom(files(sourceSets.main.allSource.srcDirs))
+	executionData.setFrom(fileTree(layout.buildDirectory).include('jacoco/test.exec', 'jacoco/test/*.exec'))
+}
+
+tasks.register('gameJacocoTestCoverageVerification', JacocoCoverageVerification) {
+	dependsOn test
+	classDirectories.setFrom(files(sourceSets.main.output).asFileTree.matching {
+		include 'com/healthcare/kallo/service/game/**/*.class'
+		include 'com/healthcare/kallo/service/game/impl/**/*.class'
+	})
+	executionData.setFrom(fileTree(layout.buildDirectory).include('jacoco/test.exec', 'jacoco/test/*.exec'))
+	violationRules {
+		rule {
+			element = 'BUNDLE'
+			limit {
+				counter = 'LINE'
+				value = 'COVEREDRATIO'
+				minimum = 0.60
+			}
+		}
+	}
+}
+
+tasks.named('check') {
+	dependsOn 'gameJacocoTestCoverageVerification'
+}
+
 
 processResources {
 	filesMatching('application*.yml') {
