@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -18,6 +19,7 @@ public class WebSocketSessionRegistry {
   private static final Logger log = LoggerFactory.getLogger(WebSocketSessionRegistry.class);
 
   private final Object monitor = new Object();
+  private final AtomicLong sequence = new AtomicLong();
   private final Map<UUID, Map<String, Session>> sessions = new HashMap<>();
   private final Map<String, UUID> usersBySession = new HashMap<>();
   private final Map<String, WebSocketSession> sockets = new HashMap<>();
@@ -28,21 +30,53 @@ public class WebSocketSessionRegistry {
   }
 
   public boolean register(UUID userId, String sessionId, Instant expiresAt, int maxSessions) {
+    return registerInternal(userId, sessionId, expiresAt, maxSessions, false);
+  }
+
+  public boolean registerWithEviction(UUID userId, String sessionId, Instant expiresAt, int maxSessions) {
+    WebSocketSession evictedSocket = null;
+    String evictedId = null;
+    synchronized (monitor) {
+      UUID registeredUser = usersBySession.get(sessionId);
+      if (registeredUser != null) return registeredUser.equals(userId);
+      Map<String, Session> userSessions = sessions.computeIfAbsent(userId, ignored -> new HashMap<>());
+      if (userSessions.size() >= maxSessions) {
+        evictedId = userSessions.entrySet().stream()
+            .min(Map.Entry.comparingByValue(java.util.Comparator.comparingLong(Session::sequence)))
+            .map(Map.Entry::getKey).orElse(null);
+        if (evictedId != null) {
+          evictedSocket = sockets.get(evictedId);
+          removeLocked(userId, evictedId);
+        }
+      }
+      userSessions = sessions.computeIfAbsent(userId, ignored -> new HashMap<>());
+      userSessions.put(sessionId, new Session(expiresAt, sequence.incrementAndGet()));
+      usersBySession.put(sessionId, userId);
+      WebSocketSession socket = pendingSockets.remove(sessionId);
+      if (socket != null) sockets.put(sessionId, socket);
+    }
+    if (evictedId != null) close(evictedId, evictedSocket);
+    return true;
+  }
+
+  private boolean registerInternal(UUID userId, String sessionId, Instant expiresAt, int maxSessions,
+      boolean evictOldest) {
+    if (evictOldest) return registerWithEviction(userId, sessionId, expiresAt, maxSessions);
     if (userId == null || sessionId == null || expiresAt == null || maxSessions < 1) return false;
     synchronized (monitor) {
       UUID registeredUser = usersBySession.get(sessionId);
       if (registeredUser != null) return registeredUser.equals(userId);
-
       Map<String, Session> userSessions = sessions.computeIfAbsent(userId, ignored -> new HashMap<>());
       if (userSessions.size() >= maxSessions) return false;
-
-      userSessions.put(sessionId, new Session(expiresAt));
+      userSessions.put(sessionId, new Session(expiresAt, sequence.incrementAndGet()));
       usersBySession.put(sessionId, userId);
       WebSocketSession socket = pendingSockets.remove(sessionId);
       if (socket != null) sockets.put(sessionId, socket);
       return true;
     }
   }
+
+
 
   public void attach(String sessionId, WebSocketSession socket) {
     if (sessionId == null || socket == null) return;
@@ -107,7 +141,16 @@ public class WebSocketSessionRegistry {
     if (userSessions.isEmpty()) sessions.remove(userId);
   }
 
-  private record Session(Instant expiresAt) {}
+  private void close(String sessionId, WebSocketSession socket) {
+    if (socket == null || !socket.isOpen()) return;
+    try {
+      socket.close(CloseStatus.POLICY_VIOLATION);
+    } catch (IOException e) {
+      log.debug("Failed to close evicted WebSocket session {}", sessionId, e);
+    }
+  }
+
+  private record Session(Instant expiresAt, long sequence) {}
 
   private record ExpiredSession(String sessionId, WebSocketSession socket) {}
 }

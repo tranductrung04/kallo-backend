@@ -2,6 +2,7 @@ package com.healthcare.kallo.repository.game;
 
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.game.UserGameSettings;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,6 +15,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface UserGameSettingsRepository extends JpaRepository<UserGameSettings, UUID> {
   Optional<UserGameSettings> findByFriendCode(String friendCode);
+
+  List<UserGameSettings> findByUserIdIn(Collection<UUID> userIds);
 
   @Query("select u from User u join UserGameSettings s on s.userId = u.id where u.id <> :userId and u.status = com.healthcare.kallo.model.auth.enums.UserStatus.ACTIVE and u.emailVerified = true and s.friendCode = :friendCode")
   Optional<User> findActiveVerifiedByFriendCode(@Param("userId") UUID userId, @Param("friendCode") String friendCode);

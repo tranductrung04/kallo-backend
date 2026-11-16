@@ -1,9 +1,11 @@
 package com.healthcare.kallo.repository.auth;
 
 import com.healthcare.kallo.model.auth.User;
-import java.util.*;
-import java.util.UUID;
 import java.time.Instant;
+import java.util.Collection;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -36,6 +38,8 @@ public interface UserRepository extends JpaRepository<User, UUID> {
   boolean existsByNormalizedEmail(@Param("email") String email);
 
   Optional<User> findByGoogleSub(String googleSub);
+
+  List<User> findByIdIn(Collection<UUID> ids);
 
   @Modifying
   @Transactional

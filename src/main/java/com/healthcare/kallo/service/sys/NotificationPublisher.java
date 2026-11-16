@@ -4,7 +4,6 @@ import com.healthcare.kallo.event.sys.NotificationCreatedEvent;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,11 +13,11 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Component
 public class NotificationPublisher {
   private static final Logger log = LoggerFactory.getLogger(NotificationPublisher.class);
-  private final SimpMessagingTemplate messaging;
+  private final RealtimePublisher realtime;
   private final NotificationQuery notifications;
 
-  public NotificationPublisher(SimpMessagingTemplate messaging, NotificationQuery notifications) {
-    this.messaging = messaging;
+  public NotificationPublisher(RealtimePublisher realtime, NotificationQuery notifications) {
+    this.realtime = realtime;
     this.notifications = notifications;
   }
 
@@ -27,14 +26,12 @@ public class NotificationPublisher {
   public void onNotificationCreated(NotificationCreatedEvent event) {
     try {
       long unreadCount = notifications.unreadCount(event.userId());
-      messaging.convertAndSendToUser(
-          event.userId().toString(),
-          "/queue/notifications",
-          new NotificationCreatedMessage("NOTIFICATION_CREATED", event.notificationId(), unreadCount));
+      realtime.sendToUser(event.userId(), "/queue/notifications", "NOTIFICATION_CREATED",
+          new NotificationCreatedMessage(event.notificationId(), unreadCount));
     } catch (RuntimeException e) {
       log.error("Failed to publish WebSocket notification {}", event.notificationId(), e);
     }
   }
 
-  public record NotificationCreatedMessage(String type, UUID id, long unreadCount) {}
+  public record NotificationCreatedMessage(UUID id, long unreadCount) {}
 }
