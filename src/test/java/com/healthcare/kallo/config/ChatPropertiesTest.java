@@ -30,10 +30,10 @@ class ChatPropertiesTest {
   }
 
   @Test
-  void realAiRequiresApiKey() {
+  void realAiMayStartWithUnavailableFallbackBeforePhaseTwoClient() {
     runner
         .withPropertyValues("app.chat.ai.mock-enabled=false")
-        .run(context -> assertThat(context).hasFailed());
+        .run(context -> assertThat(context).hasNotFailed());
   }
 
   @Test

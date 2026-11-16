@@ -108,6 +108,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
       path = request.getRequestURI().substring(contextPath.length());
     }
     String method = request.getMethod();
+    if ("POST".equals(method) && "/api/chat/conversations".equals(path)) {
+      return new Limit("chat-conversations", properties.settingsPerMinute(), properties.minute());
+    }
     if ("POST".equals(method) && "/api/devices".equals(path)) {
       return new Limit("devices", properties.devicesPerHour(), properties.hour());
     }
