@@ -117,7 +117,7 @@ app:
     fao-infoods-license: ${APP_ATTRIBUTION_FAO_INFOODS_LICENSE:FAO/INFOODS terms of use}
     fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
   chat:
-    enabled: ${CHAT_ENABLED:true}
+    enabled: ${CHAT_ENABLED:false}
     ai:
       base-url: ${AI_SERVICE_URL:http://localhost:8000}
       api-key: ${AI_SERVICE_API_KEY:}

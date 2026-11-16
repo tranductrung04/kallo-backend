@@ -3,9 +3,9 @@ package com.healthcare.kallo.config;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
-import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.AssertTrue;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -21,9 +21,10 @@ public record ChatProperties(
     @NotNull Duration pendingTimeout,
     @Min(1) int retentionDays) {
 
-  @AssertTrue(message = "app.chat.ai.api-key is required when chat is enabled and mock AI is disabled")
-  public boolean hasApiKeyWhenRealAiEnabled() {
-    return !enabled || ai == null || ai.mockEnabled() || (ai.apiKey() != null && !ai.apiKey().isBlank());
+  @AssertTrue(message = "app.chat.pending-timeout must be at least AI read-timeout")
+  public boolean hasValidPendingTimeout() {
+    return ai == null || ai.readTimeout() == null || pendingTimeout == null
+        || pendingTimeout.compareTo(ai.readTimeout()) >= 0;
   }
 
   public record Ai(

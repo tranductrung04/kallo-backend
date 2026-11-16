@@ -32,9 +32,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
   @ExceptionHandler(BusinessException.class)
   public ResponseEntity<ApiResponse<?>> business(BusinessException e) {
-    return ResponseEntity.status(e.getErrorCode().status())
-        .body(ApiResponse.errorListDataMessages(
-            e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails()));
+    ResponseEntity.BodyBuilder response = ResponseEntity.status(e.getErrorCode().status());
+    if (e.getErrorCode() == ErrorCode.TOO_MANY_REQUESTS && e.getDetails() instanceof Number retryAfter) {
+      response.header(HttpHeaders.RETRY_AFTER, Long.toString(Math.max(1, retryAfter.longValue())));
+    }
+    return response.body(ApiResponse.errorListDataMessages(
+        e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails()));
   }
 
   @Override
