@@ -31,6 +31,30 @@ public interface UserChallengeRepository extends JpaRepository<UserChallenge, UU
 
   @Query("""
       select uc from UserChallenge uc
+      join fetch uc.user
+      join fetch uc.challenge c
+      left join fetch c.badge
+      where uc.status = :status and c.active = true
+      order by uc.id
+      """)
+  List<UserChallenge> findByStatusWithChallenge(@Param("status") ChallengeStatus status,
+      org.springframework.data.domain.Pageable pageable);
+
+  @Query("""
+      select uc from UserChallenge uc
+      join fetch uc.user
+      join fetch uc.challenge c
+      left join fetch c.badge
+      where uc.status = :status and c.active = true and uc.id > :after
+      order by uc.id
+      """)
+  List<UserChallenge> findByStatusWithChallengeAfter(@Param("status") ChallengeStatus status,
+      @Param("after") UUID after, org.springframework.data.domain.Pageable pageable);
+
+  boolean existsByChallengeId(UUID challengeId);
+
+  @Query("""
+      select uc from UserChallenge uc
       join fetch uc.challenge c
       left join fetch c.badge
       where uc.user.id = :userId and uc.status = :status
