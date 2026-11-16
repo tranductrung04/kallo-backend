@@ -46,7 +46,8 @@ class ChatServiceTest {
   void setUp() {
     ChatProperties properties = new ChatProperties(true,
         new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), true),
-        12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30);
+        12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30,
+        Duration.ofSeconds(60), 15);
     service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx);
   }
 

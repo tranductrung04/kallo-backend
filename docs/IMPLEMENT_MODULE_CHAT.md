@@ -714,10 +714,12 @@ test/...
 
 ### Phase 3 – Streaming (2–3 ngày)
 
-- [ ] `stream()` trong `ChatAiClient`, relay SSE từ AI service.
-- [ ] `POST /api/chat/messages/stream` với `SseEmitter`, heartbeat, xử lý ngắt kết nối.
+- [x] `stream()` trong `ChatAiClient`, relay SSE từ AI service.
+- [x] `POST /api/chat/messages/stream` với `SseEmitter`, heartbeat, xử lý ngắt kết nối.
 - [ ] Cơ chế `replace` khi guardrail đầu ra phát hiện vi phạm.
-- [ ] Hướng dẫn mobile (polyfill/`fetch` streaming) trong tài liệu API.
+- [x] Hướng dẫn mobile (polyfill/`fetch` streaming) trong tài liệu API.
+- [ ] Spike mobile 1–2 ngày: `expo/fetch` và XHR trên Android + iOS thật, qua reverse proxy deploy; đo `first delta` p95.
+- [x] REST đồng bộ là fallback khi SSE lỗi; app vẫn chat được, mất hiệu ứng hiện chữ dần.
 - [ ] Test streaming (WireMock SSE / test client), kiểm thử qua reverse proxy.
 
 **Hoàn thành khi:** token đầu tiên hiển thị p95 ≤ 2 s; ngắt kết nối không để lại tin `PENDING`.
@@ -837,6 +839,8 @@ test/...
 6. **Hạn mức** theo gói (miễn phí/trả phí) có áp dụng không?
 7. Mobile ưu tiên **SSE hay WebSocket** cho streaming (cần spike kỹ thuật)?
 8. Ngôn ngữ hỗ trợ: chỉ tiếng Việt hay thêm tiếng Anh?
+
+**Q7 đã chốt:** dùng SSE cho streaming chatbot, không dùng WebSocket. Trước Phase 3 cần spike 1–2 ngày với mobile: thử `expo/fetch` và XHR trên Android + iOS thật, qua đúng reverse proxy deploy, đo `first delta` p95. REST đồng bộ (`POST /api/chat/messages`) là fallback bắt buộc khi SSE lỗi; app vẫn chat được, chỉ mất hiệu ứng hiện chữ dần.
 
 ---
 

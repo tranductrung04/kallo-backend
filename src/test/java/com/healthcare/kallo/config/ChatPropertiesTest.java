@@ -22,7 +22,9 @@ class ChatPropertiesTest {
               "app.chat.rate-limit.per-minute=10",
               "app.chat.rate-limit.per-day=200",
               "app.chat.pending-timeout=120s",
-              "app.chat.retention-days=30");
+              "app.chat.retention-days=30",
+              "app.chat.sse-timeout=60s",
+              "app.chat.sse-heartbeat-seconds=15");
 
   @Test
   void mockAiMayOmitApiKey() {

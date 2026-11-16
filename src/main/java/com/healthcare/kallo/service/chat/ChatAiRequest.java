@@ -32,6 +32,11 @@ public record ChatAiRequest(UUID conversationId, String locale, ChatSystemContex
         new ChatSystemContext(context.profile(), context.today(), context.allergies()), messages, options);
   }
 
+  public ChatAiRequest streaming() {
+    return new ChatAiRequest(conversationId, locale, systemContext, messages,
+        new ChatOptions(options.maxTokens(), true));
+  }
+
   public String lastUserMessage() {
     if (messages.isEmpty() || !"user".equals(messages.getLast().role())) {
       throw new IllegalArgumentException("Chat request must end with user message");

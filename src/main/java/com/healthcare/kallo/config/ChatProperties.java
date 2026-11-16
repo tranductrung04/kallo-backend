@@ -19,7 +19,9 @@ public record ChatProperties(
     @Min(1) @Max(2000) int maxMessageLength,
     @Valid @NotNull RateLimit rateLimit,
     @NotNull Duration pendingTimeout,
-    @Min(1) int retentionDays) {
+    @Min(1) int retentionDays,
+    @NotNull Duration sseTimeout,
+    @Min(1) int sseHeartbeatSeconds) {
 
   @AssertTrue(message = "app.chat.pending-timeout must be at least AI read-timeout")
   public boolean hasValidPendingTimeout() {

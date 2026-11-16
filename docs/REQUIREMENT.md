@@ -52,7 +52,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 **Trong phạm vi:**
 
 1. Ứng dụng di động (React Native / Expo) cho Android và iOS.
-2. Backend chính (Java Spring Boot) cung cấp RESTful API và WebSocket.
+2. Backend chính (Java Spring Boot) cung cấp RESTful API; SSE dùng cho streaming chatbot, WebSocket giữ cho tính năng xã hội/bảng xếp hạng.
 3. Dịch vụ AI (Python FastAPI) chạy mô hình YOLO định dạng ONNX.
 4. Cơ sở dữ liệu PostgreSQL, Elasticsearch (tìm kiếm món ăn), Redis (rate limit) và lưu trữ tệp đối tượng (Object Storage — MinIO).
 5. Quy trình thu thập dữ liệu, huấn luyện, đánh giá mô hình nhận diện món ăn trên tập VietFood68.
@@ -137,7 +137,7 @@ Người dùng Việt Nam muốn kiểm soát cân nặng và ăn uống lành m
 │  Mobile App (RN / Expo)  │
 │  TypeScript              │
 └───────┬─────────┬────────┘
-        │ REST    │ WebSocket
+        │ REST    │ SSE / WebSocket
         ▼         ▼
 ┌──────────────────────────────────────────┐        ┌────────────────────┐
 │ Backend chính — Java Spring Boot         │───────▶│ FCM (push)         │
@@ -178,14 +178,14 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | Biểu đồ | Victory Native hoặc Recharts Native |
 | Cảm biến & phần cứng | expo-sensors, expo-location, vision-camera-code-scanner |
 | Đồng bộ sức khoẻ | react-native-health-connect (Android), react-native-health (iOS) |
-| **Backend chính** | Java 21+, Spring Boot 4.x, Spring Security + JWT + Google OAuth2, Spring Data JPA/Hibernate, Spring WebSocket, SpringDoc OpenAPI (Swagger UI) `[README]` |
+| **Backend chính** | Java 21+, Spring Boot 4.x, Spring Security + JWT + Google OAuth2, Spring Data JPA/Hibernate, Spring WebSocket, SSE cho chatbot, SpringDoc OpenAPI (Swagger UI) `[README]` |
 | Build & migration | Gradle (dùng Gradle Wrapper `./gradlew`), Flyway `[README]` |
 | Gửi email | SMTP (`MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`) cho email khôi phục mật khẩu `[README]` và email xác minh email `(*)` |
 | Kiểm thử & đóng gói | JUnit 5, Mockito, Testcontainers; Docker, Docker Compose `[README]` |
 | **CSDL & lưu trữ** | PostgreSQL 15+; Object Storage tương thích S3 cho ảnh món ăn và ảnh đại diện, triển khai bằng **MinIO** (đề cương ghi chung là “Cloud Object Storage”) `[README]` |
 | **Tìm kiếm & Đệm** | **Elasticsearch** (tìm kiếm món ăn tiếng Việt có/không dấu, gợi ý khi gõ) `[README]` `(*)`; **Redis** (rate limit cho SYS và WebSocket) `[README]` |
 | **AI** | YOLO (YOLOv11m) huấn luyện trên VietFood68; ONNX / ONNX Runtime; Python + FastAPI |
-| **Thời gian thực** | WebSocket |
+| **Thời gian thực** | SSE cho streaming chatbot; WebSocket cho tính năng xã hội và bảng xếp hạng |
 | **Thông báo đẩy** | Firebase Cloud Messaging + Expo Notifications |
 
 > Lưu ý `(*)`: Google Fit REST API đang được Google ngừng hỗ trợ, nên phần đồng bộ trên Android dùng **Health Connect** như đề cương đã chọn (`react-native-health-connect`); “Google Fit” trong yêu cầu được hiểu là dữ liệu bước chân/nhịp tim đọc qua Health Connect.
@@ -397,7 +397,7 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 |---|---|---|
 | FR-CHAT-01 | Người dùng trò chuyện với chatbot qua giao diện hội thoại; hội thoại được lưu (Conversation / ChatMessage). | M |
 | FR-CHAT-02 | Chatbot trả lời **dựa trên hồ sơ và lịch sử ăn uống** của chính người dùng (mục tiêu, dị ứng, calo đã nạp, macro, cân nặng gần đây). | M |
-| FR-CHAT-03 | Hỗ trợ truyền phản hồi theo thời gian thực (streaming) qua WebSocket. | S |
+| FR-CHAT-03 | Hỗ trợ truyền phản hồi theo thời gian thực (streaming) qua SSE; REST đồng bộ là đường dự phòng khi SSE không khả dụng. | S |
 | FR-CHAT-04 | Hiển thị lịch sử hội thoại, tạo cuộc hội thoại mới, xoá hội thoại. | M |
 | FR-CHAT-05 | Câu hỏi gợi ý nhanh (ví dụ “Hôm nay tôi còn bao nhiêu calo?”, “Gợi ý bữa tối”). `(*)` | C |
 | FR-CHAT-06 | Giới hạn phạm vi: từ chối/chuyển hướng câu hỏi y khoa chuyên sâu, kèm lời nhắc tham khảo bác sĩ. `(*)` | M |

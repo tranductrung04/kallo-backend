@@ -28,6 +28,8 @@ app:
   chat:
     ai:
       mock-enabled: ${CHAT_AI_MOCK_ENABLED:true}
+    sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
+    sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
 
 logging:
   pattern:
