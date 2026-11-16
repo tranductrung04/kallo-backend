@@ -1,0 +1,675 @@
+openapi: 3.1.0
+info:
+  title: Kallo GAME API
+  version: 1.1.0
+  description: REST and STOMP contracts for streaks, badges, challenges, friends, privacy, and leaderboards.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: Game settings
+  - name: Friends
+  - name: Streak
+  - name: Badges
+  - name: Challenges
+  - name: Leaderboard
+  - name: Admin badges
+  - name: Admin challenges
+paths:
+  /api/users/me/game-settings:
+    get:
+      tags: [Game settings]
+      responses:
+        '200': { $ref: '#/components/responses/GameSettings' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    put:
+      tags: [Game settings]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GameSettingsRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/GameSettings' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/users/search:
+    get:
+      tags: [Friends]
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema: { type: string, minLength: 3 }
+      responses:
+        '200': { $ref: '#/components/responses/UserSearch' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /api/friends/requests:
+    post:
+      tags: [Friends]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SendFriendRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/FriendRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    get:
+      tags: [Friends]
+      parameters:
+        - name: direction
+          in: query
+          schema: { type: string, enum: [incoming, outgoing], default: incoming }
+      responses:
+        '200': { $ref: '#/components/responses/FriendRequestList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/friends/requests/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    put:
+      tags: [Friends]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RespondFriendRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/FriendRequest' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Friends]
+      responses:
+        '204': { description: Cancelled pending request. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/friends:
+    get:
+      tags: [Friends]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: size
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200': { $ref: '#/components/responses/FriendPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/friends/{friendUserId}:
+    parameters:
+      - name: friendUserId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Friends]
+      responses:
+        '204': { description: Unfriended; idempotent. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/streak:
+    get:
+      tags: [Streak]
+      responses:
+        '200': { $ref: '#/components/responses/Streak' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/badges:
+    get:
+      tags: [Badges]
+      responses:
+        '200': { $ref: '#/components/responses/BadgeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/challenges:
+    get:
+      tags: [Challenges]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [available, joined, completed] }
+      responses:
+        '200': { $ref: '#/components/responses/ChallengeList' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/challenges/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    get:
+      tags: [Challenges]
+      responses:
+        '200': { $ref: '#/components/responses/Challenge' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /api/challenges/{id}/join:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    post:
+      tags: [Challenges]
+      responses:
+        '201': { $ref: '#/components/responses/Challenge' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/leaderboard/friends:
+    get:
+      tags: [Leaderboard]
+      parameters:
+        - name: metric
+          in: query
+          schema: { type: string, enum: [STREAK, POINTS, STEPS], default: POINTS }
+      responses:
+        '200': { $ref: '#/components/responses/Leaderboard' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /api/admin/badges:
+    get:
+      tags: [Admin badges]
+      responses:
+        '200': { $ref: '#/components/responses/AdminBadgeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin badges]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BadgeRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AdminBadge' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/badges/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    put:
+      tags: [Admin badges]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BadgeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminBadge' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/challenges:
+    get:
+      tags: [Admin challenges]
+      responses:
+        '200': { $ref: '#/components/responses/AdminChallengeList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Admin challenges]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChallengeRequest' }
+      responses:
+        '201': { $ref: '#/components/responses/AdminChallenge' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /api/admin/challenges/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    put:
+      tags: [Admin challenges]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChallengeRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/AdminChallenge' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    GameSettings:
+      description: Current or updated privacy settings.
+      content: { application/json: { schema: { $ref: '#/components/schemas/GameSettingsEnvelope' } } }
+    UserSearch:
+      description: Matching verified, active users.
+      content: { application/json: { schema: { $ref: '#/components/schemas/UserSearchEnvelope' } } }
+    FriendRequest:
+      description: Friend request state.
+      content: { application/json: { schema: { $ref: '#/components/schemas/FriendRequestEnvelope' } } }
+    FriendRequestList:
+      description: Pending friend requests.
+      content: { application/json: { schema: { $ref: '#/components/schemas/FriendRequestListEnvelope' } } }
+    FriendPage:
+      description: Friends without email or absolute weight.
+      content: { application/json: { schema: { $ref: '#/components/schemas/FriendPageEnvelope' } } }
+    Streak:
+      description: Current and longest streak.
+      content: { application/json: { schema: { $ref: '#/components/schemas/StreakEnvelope' } } }
+    BadgeList:
+      description: Active badges and earned state.
+      content: { application/json: { schema: { $ref: '#/components/schemas/BadgeListEnvelope' } } }
+    Challenge:
+      description: Challenge details and current participation.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeEnvelope' } } }
+    ChallengeList:
+      description: Challenges and current participation.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChallengeListEnvelope' } } }
+    Leaderboard:
+      description: Friends leaderboard with privacy-filtered metrics.
+      content: { application/json: { schema: { $ref: '#/components/schemas/LeaderboardEnvelope' } } }
+    AdminBadge:
+      description: Badge administration result.
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminBadgeEnvelope' } } }
+    AdminBadgeList:
+      description: Badge administration list.
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminBadgeListEnvelope' } } }
+    AdminChallenge:
+      description: Challenge administration result.
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminChallengeEnvelope' } } }
+    AdminChallengeList:
+      description: Challenge administration list.
+      content: { application/json: { schema: { $ref: '#/components/schemas/AdminChallengeListEnvelope' } } }
+    BadRequest:
+      description: Invalid request.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unauthorized:
+      description: Missing or invalid bearer token.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Email unverified or insufficient admin role.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: Resource is absent or belongs to another user.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Conflict:
+      description: State or limit conflict, including FRIEND_LIMIT_REACHED.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    TooManyRequests:
+      description: Rate limit exceeded. Redis failure is fail-open.
+      headers:
+        Retry-After:
+          description: Seconds until another request may be attempted.
+          schema: { type: integer, format: int64 }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    ApiResponse:
+      type: object
+      required: [success, data, error]
+      properties:
+        success: { type: boolean }
+        data: {}
+        error:
+          oneOf:
+            - { $ref: '#/components/schemas/ApiError' }
+            - { type: 'null' }
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { type: 'null' }
+    GameSettingsRequest:
+      type: object
+      required: [discoverable, shareStreak, sharePoints, shareSteps]
+      properties:
+        discoverable: { type: boolean }
+        shareStreak: { type: boolean }
+        sharePoints: { type: boolean }
+        shareSteps: { type: boolean }
+    GameSettings:
+      type: object
+      required: [friendCode, discoverable, shareStreak, sharePoints, shareSteps]
+      properties:
+        friendCode: { type: string, minLength: 8, maxLength: 8 }
+        discoverable: { type: boolean }
+        shareStreak: { type: boolean }
+        sharePoints: { type: boolean }
+        shareSteps: { type: boolean }
+    UserSummary:
+      type: object
+      required: [id, displayName, relationship]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        relationship: { type: string, enum: [NONE, PENDING_OUT, PENDING_IN, FRIENDS] }
+    Friend:
+      type: object
+      required: [id, displayName, since]
+      properties:
+        id: { type: string, format: uuid }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        since: { type: string, format: date-time }
+    FriendRequest:
+      type: object
+      required: [id, requester, addressee, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        requester: { $ref: '#/components/schemas/UserSummary' }
+        addressee: { $ref: '#/components/schemas/UserSummary' }
+        status: { type: string, enum: [PENDING, ACCEPTED, DECLINED] }
+        createdAt: { type: string, format: date-time }
+        respondedAt: { type: [string, 'null'], format: date-time }
+    FriendPage:
+      type: object
+      required: [items, page, size, hasNext]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Friend' } }
+        page: { type: integer }
+        size: { type: integer }
+        hasNext: { type: boolean }
+    Streak:
+      type: object
+      required: [currentStreak, longestStreak, todayCompleted, atRisk]
+      properties:
+        currentStreak: { type: integer }
+        longestStreak: { type: integer }
+        lastCompletedDate: { type: [string, 'null'], format: date }
+        todayCompleted: { type: boolean }
+        atRisk: { type: boolean }
+    Badge:
+      type: object
+      required: [id, code, name, description, points, earned]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        description: { type: string }
+        iconKey: { type: [string, 'null'] }
+        points: { type: integer }
+        earned: { type: boolean }
+        earnedAt: { type: [string, 'null'], format: date-time }
+    Challenge:
+      type: object
+      required: [id, title, description, metric, target, startDate, endDate, pointsReward, joined, progress, daysLeft]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        description: { type: string }
+        metric: { type: string, enum: [WATER_GOAL_DAYS, CALORIE_GOAL_DAYS, LOG_DAYS, STEPS_TOTAL] }
+        target: { type: integer }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        pointsReward: { type: integer }
+        badgeId: { type: [string, 'null'], format: uuid }
+        joined: { type: boolean }
+        progress: { type: integer }
+        status: { type: [string, 'null'], enum: [ACTIVE, COMPLETED, EXPIRED, null] }
+        daysLeft: { type: integer }
+    LeaderboardEntry:
+      type: object
+      required: [userId, displayName, rank, value]
+      properties:
+        userId: { type: string, format: uuid }
+        displayName: { type: string }
+        avatarUrl: { type: [string, 'null'], format: uri }
+        rank: { type: integer, format: int64 }
+        value: { type: integer, format: int64 }
+    Leaderboard:
+      type: object
+      required: [metric, period, me, entries]
+      properties:
+        metric: { type: string, enum: [STREAK, POINTS, STEPS] }
+        period:
+          type: object
+          required: [from, to]
+          properties:
+            from: { type: string, format: date-time }
+            to: { type: string, format: date-time }
+        me: { $ref: '#/components/schemas/LeaderboardEntry' }
+        entries: { type: array, items: { $ref: '#/components/schemas/LeaderboardEntry' } }
+    AdminBadge:
+      type: object
+      required: [id, code, name, description, ruleType, points, active, sortOrder]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        iconKey: { type: [string, 'null'], maxLength: 200 }
+        ruleType: { type: string, enum: [STREAK_DAYS, FIRST_LOG, FRIENDS_COUNT, CHALLENGES_COMPLETED, WEIGHT_GOAL_REACHED, CHALLENGE] }
+        threshold: { type: [integer, 'null'] }
+        points: { type: integer, minimum: 0 }
+        active: { type: boolean }
+        sortOrder: { type: integer, minimum: 0 }
+    BadgeRequest:
+      type: object
+      required: [code, name, description, ruleType, points, active, sortOrder]
+      properties:
+        code: { type: string, maxLength: 50 }
+        name: { type: string, maxLength: 100 }
+        description: { type: string, maxLength: 500 }
+        iconKey: { type: [string, 'null'], maxLength: 200 }
+        ruleType: { type: string, enum: [STREAK_DAYS, FIRST_LOG, FRIENDS_COUNT, CHALLENGES_COMPLETED, WEIGHT_GOAL_REACHED, CHALLENGE] }
+        threshold: { type: [integer, 'null'] }
+        points: { type: integer, minimum: 0 }
+        active: { type: boolean }
+        sortOrder: { type: integer, minimum: 0 }
+    AdminChallenge:
+      type: object
+      required: [id, title, description, metric, target, startDate, endDate, pointsReward, active]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        metric: { type: string, enum: [WATER_GOAL_DAYS, CALORIE_GOAL_DAYS, LOG_DAYS, STEPS_TOTAL] }
+        target: { type: integer, minimum: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        pointsReward: { type: integer, minimum: 0 }
+        badgeId: { type: [string, 'null'], format: uuid }
+        active: { type: boolean }
+    ChallengeRequest:
+      type: object
+      required: [title, description, metric, targetValue, startDate, endDate, pointsReward, active]
+      properties:
+        title: { type: string, maxLength: 150 }
+        description: { type: string, maxLength: 1000 }
+        metric: { type: string, enum: [WATER_GOAL_DAYS, CALORIE_GOAL_DAYS, LOG_DAYS, STEPS_TOTAL] }
+        targetValue: { type: integer, minimum: 1 }
+        startDate: { type: string, format: date }
+        endDate: { type: string, format: date }
+        pointsReward: { type: integer, minimum: 0 }
+        badgeId: { type: [string, 'null'], format: uuid }
+        active: { type: boolean }
+    SendFriendRequest:
+      oneOf:
+        - type: object
+          required: [friendCode]
+          properties:
+            friendCode: { type: string, pattern: '^[2-9A-HJKMNP-Z2-9a-hjkmnp-z]{8}$' }
+          additionalProperties: false
+        - type: object
+          required: [userId]
+          properties:
+            userId: { type: string, format: uuid }
+          additionalProperties: false
+    RespondFriendRequest:
+      type: object
+      required: [action]
+      properties:
+        action: { type: string, enum: [ACCEPT, DECLINE] }
+    GameSettingsEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/GameSettings' } } }]
+    UserSearchEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/UserSummary' } } } }]
+    FriendRequestEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/FriendRequest' } } }]
+    FriendRequestListEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/FriendRequest' } } } }]
+    FriendPageEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/FriendPage' } } }]
+    StreakEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/Streak' } } }]
+    BadgeListEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Badge' } } } }]
+    ChallengeEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/Challenge' } } }]
+    ChallengeListEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Challenge' } } } }]
+    LeaderboardEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/Leaderboard' } } }]
+    AdminBadgeEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdminBadge' } } }]
+    AdminBadgeListEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/AdminBadge' } } } }]
+    AdminChallengeEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { $ref: '#/components/schemas/AdminChallenge' } } }]
+    AdminChallengeListEnvelope:
+      allOf: [{ $ref: '#/components/schemas/ApiResponse' }, { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/AdminChallenge' } } } }]
+x-websocket:
+  endpoint: /ws
+  protocol: STOMP 1.2 over WebSocket
+  authentication:
+    connectHeader:
+      Authorization: Bearer <JWT>
+    requirements: [email_verified=true, active user, UUID JWT subject]
+  limits:
+    handshakesPerMinutePerIp: 10
+    rejectedStatus: 429
+    retryAfterHeader: true
+  client:
+    subscribeOnly: true
+    sendFrames: rejected
+    allowedDestinations:
+      - /user/queue/notifications
+      - /user/queue/leaderboard
+      - /user/queue/game-events
+  serverEnvelope:
+    type: object
+    required: [type, version, ts, payload]
+    properties:
+      type: { type: string }
+      version: { type: integer, const: 1 }
+      ts: { type: string, format: date-time }
+      payload: {}
+  events:
+    - destination: /user/queue/game-events
+      types: [FRIEND_REQUEST_RECEIVED, FRIEND_REQUEST_ACCEPTED, BADGE_EARNED, CHALLENGE_COMPLETED, CHALLENGE_ENDING_SOON]
+      payloads:
+        FRIEND_REQUEST_RECEIVED:
+          type: object
+          required: [requestId, user]
+          properties:
+            requestId: { type: string, format: uuid }
+            user:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+        FRIEND_REQUEST_ACCEPTED:
+          type: object
+          required: [user]
+          properties:
+            user:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+        BADGE_EARNED:
+          type: object
+          required: [badge, points]
+          properties:
+            badge:
+              type: object
+              required: [id]
+              properties:
+                id: { type: string, format: uuid }
+                code: { type: string }
+                name: { type: string }
+                iconKey: { type: [string, 'null'] }
+            points: { type: integer }
+        CHALLENGE_COMPLETED:
+          type: object
+          required: [challengeId, title, pointsAwarded, badge]
+          properties:
+            challengeId: { type: string, format: uuid }
+            title: { type: string }
+            pointsAwarded: { type: integer }
+            badge: { type: [string, 'null'], format: uuid }
+        CHALLENGE_ENDING_SOON:
+          type: object
+          required: [challengeId, title, endDate]
+          properties:
+            challengeId: { type: string, format: uuid }
+            title: { type: string }
+            endDate: { type: string, format: date }
+    - destination: /user/queue/leaderboard
+      types: [LEADERBOARD_UPDATE]
+      payloads:
+        LEADERBOARD_UPDATE:
+          type: object
+          required: [metric, userId, value]
+          properties:
+            metric: { type: string, enum: [STREAK, POINTS, STEPS] }
+            userId: { type: string, format: uuid }
+            value: { type: integer, format: int64 }

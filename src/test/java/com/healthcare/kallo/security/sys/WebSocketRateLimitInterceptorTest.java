@@ -19,7 +19,7 @@ class WebSocketRateLimitInterceptorTest {
   void rejectedHandshakeReturns429AndRetryAfter() {
     RateLimiter limiter = (key, limit, window) -> RateLimiter.Result.rejected(12);
     var interceptor = new WebSocketRateLimitInterceptor(
-        limiter, new RateLimitProperties(20, 30, 60, 120, 30, 10));
+        limiter, new RateLimitProperties(20, 30, 60, 120, 30, 10, 30), new com.healthcare.kallo.service.game.GameAuditLogger());
     ServerHttpRequest request = mock(ServerHttpRequest.class);
     ServerHttpResponse response = mock(ServerHttpResponse.class);
     when(request.getRemoteAddress()).thenReturn(new InetSocketAddress("192.0.2.10", 1234));
@@ -37,7 +37,7 @@ class WebSocketRateLimitInterceptorTest {
   void limiterFailureFailsOpen() {
     RateLimiter limiter = (key, limit, window) -> { throw new IllegalStateException("redis down"); };
     var interceptor = new WebSocketRateLimitInterceptor(
-        limiter, new RateLimitProperties(20, 30, 60, 120, 30, 10));
+        limiter, new RateLimitProperties(20, 30, 60, 120, 30, 10, 30), new com.healthcare.kallo.service.game.GameAuditLogger());
     ServerHttpRequest request = mock(ServerHttpRequest.class);
     ServerHttpResponse response = mock(ServerHttpResponse.class);
 

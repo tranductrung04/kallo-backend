@@ -18,6 +18,7 @@ import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.game.FriendshipRepository;
 import com.healthcare.kallo.repository.game.UserGameSettingsRepository;
 import com.healthcare.kallo.service.auth.StorageService;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import com.healthcare.kallo.event.game.FriendAcceptedEvent;
 import org.springframework.context.ApplicationEventPublisher;
 import java.time.Clock;
@@ -37,11 +38,12 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
   private final GameProperties properties;
   private final ApplicationEventPublisher events;
   private final Clock clock;
+  private final GameAuditLogger audit;
   private final java.time.Duration avatarExpiration = java.time.Duration.ofMinutes(15);
 
   public FriendServiceImpl(FriendshipRepository friendships, UserGameSettingsRepository settings,
       UserRepository users, StorageService storage, GameProperties properties,
-      ApplicationEventPublisher events, Clock clock) {
+      ApplicationEventPublisher events, Clock clock, GameAuditLogger audit) {
     this.friendships = friendships;
     this.settings = settings;
     this.users = users;
@@ -49,6 +51,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
     this.properties = properties;
     this.events = events;
     this.clock = clock;
+    this.audit = audit;
   }
 
   @Override
@@ -74,6 +77,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
         onAccepted(userId);
         onAccepted(target.getId());
         onRequestAccepted(friendship.getRequester().getId(), friendship.getAddressee().getId());
+        audit.friend("friend_request_accepted", userId, target.getId());
         return response(friendship);
       }
       if (friendship.getRequester().getId().equals(userId)
@@ -91,6 +95,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
     Friendship saved = friendships.saveAndFlush(created);
     events.publishEvent(new com.healthcare.kallo.event.game.FriendRequestReceivedEvent(
         target.getId(), saved.getId(), requester.getId()));
+    audit.friend("friend_request_created", userId, target.getId());
     return response(saved);
   }
 
@@ -126,6 +131,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
       onRequestAccepted(friendship.getRequester().getId(), friendship.getAddressee().getId());
     } else {
       friendship.setStatus(FriendshipStatus.DECLINED);
+      audit.friend("friend_request_declined", userId, friendship.getRequester().getId());
     }
     friendship.setRespondedAt(Instant.now(clock));
     return response(friendship);
@@ -138,6 +144,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
     if (!friendship.getRequester().getId().equals(userId) || friendship.getStatus() != FriendshipStatus.PENDING)
       throw new BusinessException(ErrorCode.NOT_FOUND);
     friendships.delete(friendship);
+    audit.friend("friend_request_cancelled", userId, friendship.getAddressee().getId());
   }
 
   @Override

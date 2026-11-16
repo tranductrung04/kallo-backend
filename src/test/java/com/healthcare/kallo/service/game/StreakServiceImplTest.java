@@ -5,7 +5,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
-import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.dto.response.game.StreakResponse;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.game.Streak;
@@ -19,6 +18,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import static com.healthcare.kallo.config.GamePropertiesFixture.defaults;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -46,14 +46,7 @@ class StreakServiceImplTest {
     when(users.findById(USER_ID)).thenReturn(Optional.of(user));
     var clock = Clock.fixed(Instant.parse("2026-11-13T17:00:00Z"), ZoneOffset.UTC);
     var resolver = new UserDayResolver(clock);
-    var properties = new GameProperties(
-        new GameProperties.DailyGoal(2, 10),
-        new GameProperties.Streak(400),
-        new GameProperties.Leaderboard(java.time.ZoneId.of("Asia/Ho_Chi_Minh"), false, java.time.Duration.ofMillis(500)),
-        new GameProperties.Friend(200, 50, java.time.Duration.ofHours(24), 20, java.time.Duration.ofHours(1)),
-        new GameProperties.Search(3, 20),
-        new GameProperties.Challenge(java.time.Duration.ofDays(1)),
-        new GameProperties.Ws(3, List.of()));
+    var properties = defaults();
     service = new StreakServiceImpl(streaks, users, progress, new DailyGoalPolicy(2, 10), resolver,
         properties, new StreakCalculator(), badges, leaderboard);
   }

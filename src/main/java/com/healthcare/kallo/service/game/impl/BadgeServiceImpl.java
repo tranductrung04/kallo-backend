@@ -16,6 +16,7 @@ import com.healthcare.kallo.repository.game.StreakRepository;
 import com.healthcare.kallo.repository.game.UserBadgeRepository;
 import com.healthcare.kallo.repository.game.UserChallengeRepository;
 import com.healthcare.kallo.service.game.BadgeRule;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import com.healthcare.kallo.service.game.BadgeRuleContext;
 import com.healthcare.kallo.service.game.BadgeService;
 import com.healthcare.kallo.service.game.PointService;
@@ -46,12 +47,13 @@ public class BadgeServiceImpl implements BadgeService {
   private final UserDayResolver days;
   private final GameProperties properties;
   private final ApplicationEventPublisher events;
+  private final GameAuditLogger audit;
   private final Map<BadgeRuleType, BadgeRule> rules;
 
   public BadgeServiceImpl(BadgeRepository badges, UserBadgeRepository userBadges, PointService points,
       UserRepository users, StreakRepository streaks, FriendshipRepository friendships,
       UserChallengeRepository userChallenges, DailyProgressProvider progress, UserDayResolver days,
-      GameProperties properties, ApplicationEventPublisher events, List<BadgeRule> rules) {
+      GameProperties properties, ApplicationEventPublisher events, GameAuditLogger audit, List<BadgeRule> rules) {
     this.badges = badges;
     this.userBadges = userBadges;
     this.points = points;
@@ -63,6 +65,7 @@ public class BadgeServiceImpl implements BadgeService {
     this.days = days;
     this.properties = properties;
     this.events = events;
+    this.audit = audit;
     this.rules = rules.stream().collect(Collectors.toUnmodifiableMap(BadgeRule::type, Function.identity()));
   }
 
@@ -105,6 +108,7 @@ public class BadgeServiceImpl implements BadgeService {
     points.award(userId, com.healthcare.kallo.model.game.enums.PointSource.BADGE,
         badge.getId(), badge.getPoints());
     events.publishEvent(new BadgeEarnedEvent(userId, badge.getId(), badge.getPoints()));
+    audit.badge("badge_earned", userId, badge.getId());
     return true;
   }
 

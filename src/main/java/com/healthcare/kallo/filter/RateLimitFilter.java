@@ -126,6 +126,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
     if ("POST".equals(method) && "/api/friends/requests".equals(path) && gameProperties != null) {
       return new Limit("friend-requests", gameProperties.friend().requestsPerHour(), gameProperties.friend().requestWindow());
     }
+    if ("GET".equals(method) && "/api/users/search".equals(path)) {
+      return new Limit("user-search", properties.searchPerMinute(), properties.minute());
+    }
     return null;
   }
 

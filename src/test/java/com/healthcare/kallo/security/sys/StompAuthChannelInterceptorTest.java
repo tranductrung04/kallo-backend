@@ -36,7 +36,8 @@ class StompAuthChannelInterceptorTest {
   }
   private final StompAuthChannelInterceptor interceptor =
       new StompAuthChannelInterceptor(
-          decoder, new WebSocketProperties(List.of("*"), 3), sessions, users);
+          decoder, new WebSocketProperties(List.of("*"), 3), sessions, users,
+          new com.healthcare.kallo.service.game.GameAuditLogger());
 
   @Test
   void connectWithoutBearerTokenIsRejected() {

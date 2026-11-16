@@ -5,6 +5,7 @@ import static org.mockito.Mockito.*;
 
 import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.config.RateLimitProperties;
+import static com.healthcare.kallo.config.GamePropertiesFixture.defaults;
 import java.time.Duration;
 import java.time.ZoneId;
 import java.util.List;
@@ -20,7 +21,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 
 class RateLimitFilterTest {
-  private final RateLimitProperties properties = new RateLimitProperties(20, 30, 60, 120, 30, 10);
+  private final RateLimitProperties properties = new RateLimitProperties(20, 30, 60, 120, 30, 10, 30);
 
   @AfterEach
   void clearSecurityContext() {
@@ -73,11 +74,7 @@ class RateLimitFilterTest {
   }
 
   private GameProperties gameProperties() {
-    return new GameProperties(new GameProperties.DailyGoal(2, 10), new GameProperties.Streak(400),
-        new GameProperties.Leaderboard(ZoneId.of("Asia/Ho_Chi_Minh"), false, Duration.ofMillis(500)),
-        new GameProperties.Friend(200, 50, Duration.ofHours(24), 20, Duration.ofHours(1)),
-        new GameProperties.Search(3, 20), new GameProperties.Challenge(Duration.ofDays(1)),
-        new GameProperties.Ws(3, List.of()));
+    return defaults();
   }
 
   private UsernamePasswordAuthenticationToken authentication() {

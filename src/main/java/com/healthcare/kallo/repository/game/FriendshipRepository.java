@@ -67,4 +67,9 @@ public interface FriendshipRepository extends JpaRepository<Friendship, UUID> {
   @org.springframework.data.jpa.repository.Query("delete from Friendship f where f.status = com.healthcare.kallo.model.game.enums.FriendshipStatus.ACCEPTED and ((f.requester.id = :firstRequester and f.addressee.id = :firstAddressee) or (f.requester.id = :secondRequester and f.addressee.id = :secondAddressee))")
   int deleteAcceptedPair(@Param("firstRequester") UUID firstRequester, @Param("firstAddressee") UUID firstAddressee,
       @Param("secondRequester") UUID secondRequester, @Param("secondAddressee") UUID secondAddressee);
+
+  @org.springframework.data.jpa.repository.Modifying
+  @org.springframework.transaction.annotation.Transactional
+  @org.springframework.data.jpa.repository.Query("delete from Friendship f where f.status = com.healthcare.kallo.model.game.enums.FriendshipStatus.DECLINED and f.respondedAt < :cutoff")
+  int deleteDeclinedBefore(@Param("cutoff") java.time.Instant cutoff);
 }

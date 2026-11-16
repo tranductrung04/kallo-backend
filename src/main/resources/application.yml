@@ -105,6 +105,7 @@ app:
     notifications-per-minute: ${APP_RATE_LIMIT_NOTIFICATIONS_PER_MINUTE:120}
     settings-per-minute: ${APP_RATE_LIMIT_SETTINGS_PER_MINUTE:30}
     websocket-per-minute: ${APP_RATE_LIMIT_WEBSOCKET_PER_MINUTE:10}
+    search-per-minute: ${APP_RATE_LIMIT_SEARCH_PER_MINUTE:30}
   attribution:
     open-food-facts-url: ${APP_ATTRIBUTION_OFF_URL:https://world.openfoodfacts.org}
     open-food-facts-license: ${APP_ATTRIBUTION_OFF_LICENSE:ODbL-1.0}
@@ -131,6 +132,7 @@ app:
       decline-cooldown: ${APP_GAME_FRIEND_DECLINE_COOLDOWN:24h}
       requests-per-hour: ${APP_GAME_FRIEND_REQUESTS_PER_HOUR:20}
       request-window: ${APP_GAME_FRIEND_REQUEST_WINDOW:1h}
+      declined-retention: ${APP_GAME_FRIEND_DECLINED_RETENTION:30d}
     search:
       min-length: ${APP_GAME_SEARCH_MIN_LENGTH:3}
       max-results: ${APP_GAME_SEARCH_MAX_RESULTS:20}

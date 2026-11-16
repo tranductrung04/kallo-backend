@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.healthcare.kallo.common.BusinessException;
-import com.healthcare.kallo.config.GameProperties;
 import com.healthcare.kallo.event.game.ChallengeCompletedEvent;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.game.Challenge;
@@ -19,7 +18,9 @@ import com.healthcare.kallo.model.game.enums.ChallengeStatus;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.game.ChallengeRepository;
 import com.healthcare.kallo.repository.game.UserChallengeRepository;
+import com.healthcare.kallo.service.game.GameAuditLogger;
 import com.healthcare.kallo.service.game.impl.ChallengeServiceImpl;
+
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -27,6 +28,7 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import static com.healthcare.kallo.config.GamePropertiesFixture.defaults;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -59,19 +61,11 @@ class ChallengeServiceImplTest {
     user.setId(USER_ID);
     user.setTimezone("Asia/Ho_Chi_Minh");
     when(users.findById(USER_ID)).thenReturn(Optional.of(user));
-    var properties = new GameProperties(
-        new GameProperties.DailyGoal(2, 10),
-        new GameProperties.Streak(400),
-        new GameProperties.Leaderboard(java.time.ZoneId.of("Asia/Ho_Chi_Minh"), false,
-            java.time.Duration.ofMillis(500)),
-        new GameProperties.Friend(200, 50, java.time.Duration.ofHours(24), 20,
-            java.time.Duration.ofHours(1)),
-        new GameProperties.Search(3, 20),
-        new GameProperties.Challenge(java.time.Duration.ofDays(1)),
-        new GameProperties.Ws(3, List.of()));
+    var properties = defaults();
     var clock = Clock.fixed(Instant.parse("2026-11-17T05:00:00Z"), ZoneOffset.UTC);
     service = new ChallengeServiceImpl(challenges, userChallenges, users, progress,
-        new DailyGoalPolicy(2, 10), new UserDayResolver(clock), points, badges, events, clock);
+        new DailyGoalPolicy(2, 10), new UserDayResolver(clock), points, badges, events,
+        org.mockito.Mockito.mock(GameAuditLogger.class), clock);
 
     challenge = new Challenge();
     challenge.setId(CHALLENGE_ID);
