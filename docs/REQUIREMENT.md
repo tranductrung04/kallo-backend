@@ -6,7 +6,7 @@
 |---|---|
 | Loại tài liệu | Software Requirements Specification (SRS) |
 | Tên ứng dụng | **Kallo** (theo đề cương) / **Kallo** (theo README, tên repo và package của backend) — cần thống nhất, xem Q11 |
-| Phiên bản tài liệu | 1.2 (bản nháp, đã đối chiếu README của repository backend; đã chốt Q2 — tra cứu mã vạch theo cách lai; bổ sung xác minh email bằng OTP ở module AUTH) |
+| Phiên bản tài liệu | 1.3 (đã đối chiếu README của repository backend; đã chốt Q2 — tra cứu mã vạch theo cách lai; bổ sung xác minh email bằng OTP ở module AUTH; đã chốt Q12 — sử dụng Elasticsearch cho tìm kiếm món ăn và ghi nhận Redis cho rate limit) |
 
 > **Quy ước đọc tài liệu**
 > - Nội dung **không** có dấu `(*)` được lấy trực tiếp từ Đề cương đồ án.
@@ -54,7 +54,7 @@ Xây dựng ứng dụng di động **Kallo** đóng vai trò **trợ lý sức 
 1. Ứng dụng di động (React Native / Expo) cho Android và iOS.
 2. Backend chính (Java Spring Boot) cung cấp RESTful API và WebSocket.
 3. Dịch vụ AI (Python FastAPI) chạy mô hình YOLO định dạng ONNX.
-4. Cơ sở dữ liệu PostgreSQL và lưu trữ tệp đối tượng (Object Storage — MinIO).
+4. Cơ sở dữ liệu PostgreSQL, Elasticsearch (tìm kiếm món ăn), Redis (rate limit) và lưu trữ tệp đối tượng (Object Storage — MinIO).
 5. Quy trình thu thập dữ liệu, huấn luyện, đánh giá mô hình nhận diện món ăn trên tập VietFood68.
 6. Tài khoản và xác thực (module AUTH): đăng ký bằng Email hoặc Google, **xác minh email bắt buộc bằng mã OTP ngay sau khi đăng ký bằng Email** `(*)`, khôi phục mật khẩu, quản lý phiên bằng JWT.
 
@@ -117,7 +117,7 @@ Người dùng Việt Nam muốn kiểm soát cân nặng và ăn uống lành m
 ### 2.3. Môi trường vận hành
 
 - Thiết bị: điện thoại Android (Health Connect) và iOS (HealthKit); yêu cầu camera, kết nối mạng (có hỗ trợ ngoại tuyến một phần). `(*)` Phiên bản tối thiểu: Android 8.0+ (Health Connect cần Android 9+ hoặc ứng dụng Health Connect), iOS 15+.
-- Máy chủ: Backend Spring Boot, dịch vụ AI FastAPI, PostgreSQL 15+, Object Storage (MinIO); đóng gói Docker / Docker Compose. `[README]`
+- Máy chủ: Backend Spring Boot, dịch vụ AI FastAPI, PostgreSQL 15+, Elasticsearch, Redis, Object Storage (MinIO); đóng gói Docker / Docker Compose. `[README]`
 
 ### 2.4. Giả định và ràng buộc chính
 
@@ -144,23 +144,30 @@ Người dùng Việt Nam muốn kiểm soát cân nặng và ăn uống lành m
 │ Spring Security + JWT + Google OAuth2    │        └────────────────────┘
 │ Spring Data JPA / Hibernate              │        ┌────────────────────┐
 │                                          │───────▶│ Google OAuth2      │
-└───────┬───────────────┬──────────────────┘        └────────────────────┘
-        │               │ HTTP nội bộ (JSON)        ┌────────────────────┐
-        │               ▼                           │ Open Food Facts    │
-        │      ┌───────────────────────────┐        │ (mã vạch, dự phòng)│
-        │      │ AI Service — Python FastAPI│       └────────────────────┘
-        │      │ YOLOv11m (ONNX Runtime)    │
-        │      │ Tính khẩu phần + tra dinh  │
-        │      │ dưỡng → trả JSON           │
-        │      └───────────────────────────┘
-        ▼
+└───┬──────────┬──────────┬──────────┬─────┘        └────────────────────┘
+    │          │          │          │              ┌────────────────────┐
+    │          │          │          └─────────────▶│ Open Food Facts    │
+    │          │          │ HTTP nội bộ (JSON)      │ (mã vạch, dự phòng)│
+    │          │          ▼                         └────────────────────┘
+    │          │   ┌───────────────────────────┐
+    │          │   │ AI Service — Python FastAPI│
+    │          │   │ YOLOv11m (ONNX Runtime)   │
+    │          │   │ Tính khẩu phần + tra dinh │
+    │          │   │ dưỡng → trả JSON          │
+    │          │   └───────────────────────────┘
+    │          ▼
+    │   ┌───────────────────────┐   ┌──────────────────────────┐
+    │   │ Elasticsearch         │   │ Redis                    │
+    │   │ (tìm kiếm món ăn)     │   │ (rate limit)             │
+    │   └───────────────────────┘   └──────────────────────────┘
+    ▼
 ┌───────────────────┐   ┌──────────────────────────┐
 │ PostgreSQL        │   │ Object Storage (MinIO)   │
 │ (dữ liệu ứng dụng)│   │ (ảnh món ăn, avatar)     │
 └───────────────────┘   └──────────────────────────┘
 ```
 
-Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều phối, lưu dữ liệu và gọi AI Service khi cần nhận diện. `(*)` Mobile **không** gọi trực tiếp AI Service để tập trung xác thực và kiểm soát tải tại một cổng. Tương tự, mobile **không** gọi trực tiếp Open Food Facts: khi quét mã vạch, Backend chính tra CSDL nội bộ trước, chỉ gọi Open Food Facts (HTTPS, có timeout) nếu chưa có và lưu đệm kết quả (xem FR-FD-07a/07b). `(*)`
+Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều phối, lưu dữ liệu gốc trên PostgreSQL, đồng bộ dữ liệu món ăn và truy vấn tìm kiếm qua Elasticsearch, kiểm soát giới hạn tần suất qua Redis, và gọi AI Service khi cần nhận diện. `(*)` Mobile **không** gọi trực tiếp AI Service hay Elasticsearch để tập trung xác thực, phân quyền món tuỳ chỉnh và kiểm soát tải tại một cổng. Tương tự, mobile **không** gọi trực tiếp Open Food Facts: khi quét mã vạch, Backend chính tra CSDL nội bộ trước, chỉ gọi Open Food Facts (HTTPS, có timeout) nếu chưa có và lưu đệm kết quả (xem FR-FD-07a/07b). `(*)`
 
 ### 3.2. Công nghệ sử dụng
 
@@ -176,13 +183,14 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | Gửi email | SMTP (`MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD`) cho email khôi phục mật khẩu `[README]` và email xác minh email `(*)` |
 | Kiểm thử & đóng gói | JUnit 5, Mockito, Testcontainers; Docker, Docker Compose `[README]` |
 | **CSDL & lưu trữ** | PostgreSQL 15+; Object Storage tương thích S3 cho ảnh món ăn và ảnh đại diện, triển khai bằng **MinIO** (đề cương ghi chung là “Cloud Object Storage”) `[README]` |
+| **Tìm kiếm & Đệm** | **Elasticsearch** (tìm kiếm món ăn tiếng Việt có/không dấu, gợi ý khi gõ) `[README]` `(*)`; **Redis** (rate limit cho SYS và WebSocket) `[README]` |
 | **AI** | YOLO (YOLOv11m) huấn luyện trên VietFood68; ONNX / ONNX Runtime; Python + FastAPI |
 | **Thời gian thực** | WebSocket |
 | **Thông báo đẩy** | Firebase Cloud Messaging + Expo Notifications |
 
 > Lưu ý `(*)`: Google Fit REST API đang được Google ngừng hỗ trợ, nên phần đồng bộ trên Android dùng **Health Connect** như đề cương đã chọn (`react-native-health-connect`); “Google Fit” trong yêu cầu được hiểu là dữ liệu bước chân/nhịp tim đọc qua Health Connect.
 >
-> Lưu ý `[README]`: phần ghi chú cấu hình của README có nhắc `PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD` và `PROD_ES_URIS` (Redis, Elasticsearch) nhưng bảng công nghệ chưa liệt kê hai thành phần này. Tài liệu này **chưa** coi chúng là bắt buộc — xem Q12.
+> Lưu ý `[README]` (đã chốt Q12): **Elasticsearch** (`PROD_ES_URIS`) được sử dụng chính thức cho tìm kiếm món ăn; **Redis** (`PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD`) được sử dụng cho rate limit (xem mục 4.8).
 
 ### 3.3. Nguyên tắc kiến trúc `(*)`
 
@@ -191,6 +199,7 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 3. AI Service tách riêng để có thể mở rộng/huấn luyện lại mô hình độc lập với Backend.
 4. Mọi dữ liệu phát sinh khi ngoại tuyến phải có khoá định danh phía client (UUID) để đồng bộ idempotent.
 5. Tính toán tổng hợp hàng ngày (DailySummary) được lưu sẵn để dashboard và biểu đồ truy vấn nhanh.
+6. Dữ liệu món ăn lấy PostgreSQL làm nguồn chân lý (source of truth); Elasticsearch đóng vai trò chỉ mục tìm kiếm đồng bộ từ PostgreSQL, có cơ chế dự phòng truy vấn PostgreSQL nếu Elasticsearch tạm thời gián đoạn.
 
 ### 3.4. Tổ chức mã nguồn, cấu hình và triển khai Backend `[README]`
 
@@ -199,13 +208,13 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | Thư mục / gói | Vai trò |
 |---|---|
 | `common/` | Hằng số, response wrapper, tiện ích dùng chung |
-| `config/` | Cấu hình Security, CORS, WebSocket, OpenAPI, Storage, FCM |
+| `config/` | Cấu hình Security, CORS, WebSocket, OpenAPI, Storage, FCM, Elasticsearch `(*)` |
 | `controller/` | REST controller (chỉ nhận/ trả dữ liệu, không chứa nghiệp vụ) `(*)` |
 | `dto/` | Request / Response DTO (không trả trực tiếp entity ra ngoài) `(*)` |
-| `entity/` | JPA entity |
+| `entity/` | JPA entity (và document mapping cho Elasticsearch `(*)`) |
 | `exception/` | Exception tuỳ chỉnh và global exception handler |
-| `mapper/` | Chuyển đổi Entity ↔ DTO |
-| `repository/` | Spring Data JPA repository |
+| `mapper/` | Chuyển đổi Entity ↔ DTO (và Entity ↔ ES Document `(*)`) |
+| `repository/` | Spring Data JPA repository (và Elasticsearch repository/client `(*)`) |
 | `service/` + `service/impl/` | Nghiệp vụ: interface và cài đặt |
 | `resources/db/migration/` | Flyway: `V1__init_schema.sql`, `V2__...` |
 | `resources/application*.yml` | Cấu hình `application.yml`, `application-dev.yml`, `application-prod.yml` |
@@ -213,10 +222,10 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 **Profile và cách chạy:**
 
 - Hai profile: `dev` (chạy local, mặc định) và `prod` (Docker Compose đặt `SPRING_PROFILES_ACTIVE=prod`).
-- Yêu cầu: JDK 21+, PostgreSQL 15+ (hoặc qua Docker), Docker & Docker Compose (tuỳ chọn); không cần cài Gradle riêng.
+- Yêu cầu: JDK 21+, PostgreSQL 15+, Elasticsearch, Redis (hoặc qua Docker), Docker & Docker Compose (tuỳ chọn); không cần cài Gradle riêng.
 - Lệnh chính: `./gradlew clean build`, `./gradlew bootRun --args='--spring.profiles.active=dev'`, `./gradlew test`, `./gradlew check`.
 - Ứng dụng chạy tại `http://localhost:8080`; Flyway tự chạy migration khi khởi động.
-- Docker Compose chạy stack backend + PostgreSQL (`docker compose up -d`); cấu hình `PROD_*` được `docker-compose.yml` thiết lập sẵn.
+- Docker Compose chạy stack backend + PostgreSQL + Elasticsearch + Redis (`docker compose up -d`); cấu hình `PROD_*` được `docker-compose.yml` thiết lập sẵn.
 
 **Biến môi trường chính:**
 
@@ -241,7 +250,9 @@ Luồng chính: Mobile gọi Backend chính; Backend chính xác thực, điều
 | `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY`, `STORAGE_SECRET_KEY` | Bucket và khoá truy cập | bắt buộc |
 | `MAIL_HOST`, `MAIL_USERNAME`, `MAIL_PASSWORD` | SMTP gửi email OTP (xác minh email, khôi phục mật khẩu) | bắt buộc |
 | `OTP_HMAC_SECRET` `(*)` | Khoá HMAC dùng để băm mã OTP trước khi lưu | bắt buộc, ≥ 32 byte |
-| `PROD_REDIS_PASSWORD` | Mật khẩu Redis (nếu dùng) | trống — xem Q12 |
+| `ES_URIS` / `PROD_ES_URIS` `[README]` | Địa chỉ kết nối Elasticsearch (dev / prod) | `http://localhost:9200` |
+| `ES_USERNAME`, `ES_PASSWORD` `(*)` | Tài khoản xác thực Elasticsearch (nếu bật bảo mật) | tuỳ chọn ở dev |
+| `PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD` `[README]` | Host và mật khẩu Redis (rate limit) | bắt buộc nếu bật prod/rate limit |
 
 **Quy tắc cấu hình:**
 
@@ -328,7 +339,7 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 | FR-NUT-01 | Ghi nhật ký bữa ăn theo 4 buổi: **Sáng, Trưa, Tối, Bữa phụ**. | M |
 | FR-NUT-02 | Chụp/chọn ảnh món ăn → gọi AI → hiển thị danh sách món nhận diện kèm độ tin cậy, khẩu phần ước lượng, calo và macro. | M |
 | FR-NUT-03 | Người dùng xác nhận, sửa món/khẩu phần hoặc thêm/bỏ món trước khi lưu log. | M |
-| FR-NUT-04 | Tra cứu món ăn theo tên (tìm kiếm không phân biệt dấu, gợi ý khi gõ). | M |
+| FR-NUT-04 | Tra cứu món ăn theo tên (tìm kiếm không phân biệt dấu, gợi ý khi gõ) qua Elasticsearch. | M |
 | FR-NUT-05 | Quét mã vạch thực phẩm đóng gói để tra cứu và ghi log. | M |
 | FR-NUT-06 | Tạo, sửa, xoá **món ăn tuỳ chỉnh** (tên, khẩu phần chuẩn, calo, Protein/Carbs/Fat, ảnh). | M |
 | FR-NUT-07 | Xem nhật ký theo ngày: danh sách món theo buổi, tổng calo/macro đã nạp, calo còn lại. | M |
@@ -345,6 +356,7 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 - Calo/macro của log = giá trị trên 100 g (hoặc trên khẩu phần chuẩn) × lượng ăn; **lưu snapshot** giá trị dinh dưỡng tại thời điểm ghi để thay đổi dữ liệu món về sau không làm sai lịch sử. `(*)`
 - Khi ghi/sửa/xoá log, hệ thống cập nhật `DailySummary` của ngày tương ứng.
 - Ảnh vượt dung lượng giới hạn được nén phía client trước khi tải lên (ví dụ cạnh dài ≤ 1280 px, ≤ 2 MB). `(*)`
+- Tìm kiếm món theo tên (FR-NUT-04, FR-FD-03) truy vấn trên chỉ mục **Elasticsearch** (hỗ trợ tiếng Việt có/không dấu, gợi ý tiền tố khi gõ, tìm gần đúng khi gõ sai nhẹ và xếp hạng theo độ phù hợp); chỉ trả về món hệ thống hoặc món tuỳ chỉnh thuộc về chính người dùng; tự động chuyển sang truy vấn dự phòng trên PostgreSQL nếu Elasticsearch tạm thời không khả dụng. `(*)`
 - Quét mã vạch tra theo thứ tự: **CSDL nội bộ → Open Food Facts (do Backend gọi) →** nếu cả hai không có (hoặc thiếu calo/macro) thì cho phép người dùng tạo món mới từ mã vạch đó (liên kết với FR-NUT-06, FR-FD-07a/07b). Log tạo từ mã vạch có nguồn `BARCODE`. `(*)`
 
 **Tiêu chí chấp nhận:**
@@ -355,6 +367,7 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 - AC4: Quét mã vạch hợp lệ **có trong CSDL nội bộ** trả kết quả trong ≤ 1 giây. `(*)`
 - AC5: Mã vạch chưa có ở CSDL nội bộ nhưng có ở Open Food Facts trả kết quả trong ≤ 3 giây (timeout gọi OFF mặc định 2 giây); lần quét sau cùng mã đó lấy từ CSDL nội bộ. `(*)`
 - AC6: Open Food Facts lỗi, quá thời gian hoặc không có sản phẩm → ứng dụng không bị treo, hiển thị thông báo và nút "Tạo món từ mã vạch này". `(*)`
+- AC7: Tìm kiếm `"pho bo"` và `"phở bò"` qua Elasticsearch đều trả về đúng các món Phở bò liên quan; món tuỳ chỉnh vừa tạo có thể tìm thấy ngay và không hiển thị cho tài khoản khác. `(*)`
 
 ### 4.4. Module PLAN — Lập kế hoạch bữa ăn và trợ lý AI
 
@@ -522,12 +535,21 @@ Mã yêu cầu có dạng `FR-<module>-<số>`. Mỗi module gồm: mô tả, da
 |---|---|---|
 | FR-FD-01 | Lưu danh mục món ăn: tên (VN/không dấu), nhóm món, khẩu phần chuẩn, calo, Protein/Carbs/Fat trên khẩu phần và/hoặc 100 g, ảnh, mã vạch (nếu có), nguồn dữ liệu. | M |
 | FR-FD-02 | Phân biệt món **hệ thống** (chuẩn, 68 món VietFood68 + dữ liệu thu thập) và món **tuỳ chỉnh** (thuộc về một người dùng). | M |
-| FR-FD-03 | Tìm kiếm món: theo tên (không dấu), theo nhóm, theo mã vạch; phân trang. | M |
+| FR-FD-03 | Tìm kiếm món: theo tên (có/không dấu, gợi ý tự động) qua Elasticsearch, theo nhóm, theo mã vạch; phân trang. | M |
 | FR-FD-04 | Truy xuất chất gây dị ứng/nhãn dị ứng của món để lọc thực đơn và cảnh báo. `(*)` | M |
 | FR-FD-05 | Giá tham khảo (VNĐ/khẩu phần) phục vụ gợi ý thực đơn theo ngân sách. `(*)` | S |
 | FR-FD-06 | Quy trình nhập/ cập nhật dữ liệu dinh dưỡng hàng loạt (CSV/JSON) cho nhóm phát triển. `(*)` | S |
 | FR-FD-07a | Tra cứu mã vạch trong CSDL nội bộ (món hệ thống và món người dùng có mã vạch); trả `source` của món. `(*)` | M |
 | FR-FD-07b | Nếu CSDL nội bộ chưa có, Backend gọi Open Food Facts theo mã vạch, chuẩn hoá dữ liệu và lưu đệm vào `Food` (`source = OFF`); nếu vẫn không có thì trả 404 để mobile gợi ý tạo món từ mã vạch. `(*)` | S |
+| FR-FD-08 | Đồng bộ dữ liệu món ăn từ PostgreSQL sang chỉ mục Elasticsearch khi khởi tạo/seed, nhập hàng loạt, thêm/sửa/xoá món hệ thống, món tuỳ chỉnh hoặc lưu đệm món từ Open Food Facts. `(*)` | M |
+
+**Quy tắc nghiệp vụ cho tìm kiếm và đồng bộ Elasticsearch (FR-FD-03, FR-FD-08) `(*)`:**
+
+- Chỉ mục `foods` trên Elasticsearch lưu các trường phục vụ tìm kiếm và lọc: `id`, `name`, `name_unaccented`, `category`, `owner_user_id`, `source`, `verified`, `deleted` (hoặc xoá document khi soft-delete), cùng các thông tin hiển thị ngắn gọn (calo, khẩu phần chuẩn, ảnh) hoặc truy vấn theo `id` từ PostgreSQL.
+- Bộ phân tích (analyzer) hỗ trợ bỏ dấu tiếng Việt (ASCII folding / custom Vietnamese analyzer), phân tách từ/tiền tố (edge n-gram hoặc search-as-you-type) cho gợi ý khi gõ, và fuzzy matching có kiểm soát cho lỗi gõ nhẹ.
+- Bộ lọc quyền truy cập bắt buộc ở mọi truy vấn tìm kiếm: chỉ trả về món hệ thống (`owner_user_id = null`) hoặc món tuỳ chỉnh có `owner_user_id` trùng người dùng hiện tại.
+- Đồng bộ chỉ mục thực hiện sau khi giao dịch PostgreSQL commit thành công (sự kiện ứng dụng nội bộ / outbox); nhập hàng loạt (FR-FD-06) hỗ trợ bulk indexing và có lệnh/job tái lập chỉ mục (reindex) toàn phần khi cần.
+- Nếu Elasticsearch không khả dụng hoặc quá thời gian (timeout mặc định 1000 ms), Backend ghi cảnh báo và tự động chuyển sang truy vấn dự phòng trên PostgreSQL.
 
 **Quy tắc nghiệp vụ cho FR-FD-07a/07b `(*)`** (quyết định Q2, cách C — lai):
 
@@ -695,8 +717,8 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 
 - Khoá chính UUID hoặc bigint; các bảng log có `client_uuid` duy nhất theo user để đồng bộ idempotent.
 - Thời gian lưu UTC; ngày thống kê tính theo múi giờ người dùng.
-- Xoá mềm (soft delete) cho log để phục vụ đồng bộ; xoá cứng khi người dùng xoá tài khoản.
-- Chỉ mục: (user_id, logged_at) cho các bảng log; (user_id, date) cho DailySummary; chỉ mục tìm kiếm không dấu cho Food (ví dụ `pg_trgm`); chỉ mục duy nhất cho `Food.barcode` và khoá chính `barcode` của `BarcodeMiss`.
+- Xoá mềm (soft delete) cho log (và món ăn nếu cần đồng bộ) để phục vụ đồng bộ; xoá cứng khi người dùng xoá tài khoản (đồng thời xoá document món tuỳ chỉnh tương ứng khỏi Elasticsearch).
+- Chỉ mục: (user_id, logged_at) cho các bảng log; (user_id, date) cho DailySummary; chỉ mục tìm kiếm chính cho `Food` triển khai trên **Elasticsearch** (index `foods`, phân tích tiếng Việt có/không dấu, tiền tố gợi ý khi gõ, lọc theo `owner_user_id` và `category`), kèm chỉ mục dự phòng trên PostgreSQL (`pg_trgm`) cho `Food.name` / `Food.name_unaccented`; chỉ mục duy nhất cho `Food.barcode` và khoá chính `barcode` của `BarcodeMiss`.
 - Lược đồ quản lý bằng **Flyway** (`classpath:db/migration`, tên tệp `V<số phiên bản>__<mô_tả>.sql`); Hibernate đặt `ddl-auto: validate` (chỉ kiểm tra, không tự sinh bảng); **không sửa** migration đã chạy, chỉ tạo phiên bản mới `[README]`.
 - Ràng buộc kiểm tra: lượng calo/macro không âm; cân nặng, chiều cao nằm trong miền hợp lý.
 
@@ -707,10 +729,10 @@ Lược đồ dữ liệu ban đầu theo đề cương gồm các thực thể 
 
 ### 6.5. Dữ liệu ban đầu (seed)
 
-- 68 món VietFood68 kèm calo, Protein, Carbs, Fat, khẩu phần chuẩn, nhóm món.
+- 68 món VietFood68 kèm calo, Protein, Carbs, Fat, khẩu phần chuẩn, nhóm món (được đồng bộ vào Elasticsearch sau khi seed).
 - Danh mục hoạt động và hệ số MET `(*)`.
 - Danh mục chất dị ứng chuẩn `(*)`.
-- (Tuỳ chọn, mức C) Tập con Open Food Facts Việt Nam nhập sẵn: chỉ sản phẩm có mã vạch và đủ calo/macro; ghi `source = OFF`. `(*)`
+- (Tuỳ chọn, mức C) Tập con Open Food Facts Việt Nam nhập sẵn: chỉ sản phẩm có mã vạch và đủ calo/macro; ghi `source = OFF` (và đồng bộ vào Elasticsearch). `(*)`
 - Bộ huy hiệu và thử thách mẫu `(*)`.
 
 ---
@@ -770,7 +792,7 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 |---|---|
 | auth | `POST /auth/register` ✔, `POST /auth/login` ✔, `POST /auth/google` ✔, `POST /auth/forgot-password` ✔, `POST /auth/refresh`, `POST /auth/logout`, `POST /auth/reset-password`, `POST /auth/change-password`, `POST /auth/verify-email`, `POST /auth/resend-verification` |
 | users / profile | `GET /users/me/profile` ✔ (BMI, TDEE, mục tiêu calo), `PUT /users/me/profile`, `GET/PUT /users/me`, `POST /users/me/avatar`, `DELETE /users/me` |
-| foods | `GET /foods/barcode/{code}` ✔ (tra CSDL nội bộ → Open Food Facts → 404; response có `source`; 404 thì mobile hiện nút "Tạo món từ mã vạch này"), `GET /foods?query=&category=&page=`, `GET /foods/{id}`, `POST/PUT/DELETE /foods/custom` |
+| foods | `GET /foods/barcode/{code}` ✔ (tra CSDL nội bộ → Open Food Facts → 404; response có `source`; 404 thì mobile hiện nút "Tạo món từ mã vạch này"), `GET /foods?query=&category=&page=` (tìm kiếm qua Elasticsearch), `GET /foods/{id}`, `POST/PUT/DELETE /foods/custom` |
 | food-logs | `POST /food-logs` ✔, `POST /food-logs/recognize` ✔ (ảnh → AI), `GET /food-logs?date=`, `PUT/DELETE /food-logs/{id}` |
 | water | `GET /water-logs?date=`, `POST /water-logs`, `DELETE /water-logs/{id}` |
 | weight | `GET /weight-logs?from=&to=`, `POST /weight-logs`, `PUT/DELETE /weight-logs/{id}` |
@@ -797,7 +819,7 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 
 | Mã | Yêu cầu |
 |---|---|
-| NFR-PERF-01 | 95% API thông thường phản hồi ≤ 500 ms (không tính nhận diện ảnh và chatbot) với tải mục tiêu. |
+| NFR-PERF-01 | 95% API thông thường (bao gồm tìm kiếm món ăn qua Elasticsearch) phản hồi ≤ 500 ms (không tính nhận diện ảnh và chatbot) với tải mục tiêu. |
 | NFR-PERF-02 | Nhận diện ảnh: tổng thời gian từ lúc gửi đến lúc có kết quả ≤ 5 giây (mạng 4G). |
 | NFR-PERF-03 | Dashboard hiển thị ≤ 2 giây; mở ứng dụng đến màn hình dùng được ≤ 3 giây (khởi động nguội trên thiết bị tầm trung). |
 | NFR-PERF-04 | Hệ thống đáp ứng tối thiểu 100 người dùng đồng thời trong môi trường thử nghiệm. |
@@ -810,11 +832,11 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 | NFR-SEC-01 | Toàn bộ giao tiếp qua HTTPS/WSS. |
 | NFR-SEC-02 | Mật khẩu băm BCrypt (hoặc Argon2); không ghi log dữ liệu nhạy cảm. |
 | NFR-SEC-03 | JWT ký bằng khoá bí mật cấu hình ngoài mã nguồn; refresh token có thể thu hồi. |
-| NFR-SEC-04 | Phân quyền theo vai trò; mỗi API chỉ truy cập dữ liệu của chính người dùng (kiểm tra quyền sở hữu tài nguyên, chống IDOR). |
-| NFR-SEC-05 | Kiểm tra và làm sạch dữ liệu đầu vào; tham số hoá truy vấn (JPA) chống SQL injection; giới hạn kích thước và kiểm tra loại tệp tải lên. |
+| NFR-SEC-04 | Phân quyền theo vai trò; mỗi API chỉ truy cập dữ liệu của chính người dùng (kiểm tra quyền sở hữu tài nguyên, chống IDOR); truy vấn Elasticsearch phải lọc chặt theo `owner_user_id` đối với món tuỳ chỉnh. |
+| NFR-SEC-05 | Kiểm tra và làm sạch dữ liệu đầu vào; tham số hoá truy vấn (JPA) chống SQL injection và vô hiệu hoá ký tự/cú pháp truy vấn đặc biệt khi tìm kiếm trên Elasticsearch; giới hạn kích thước và kiểm tra loại tệp tải lên. |
 | NFR-SEC-06 | Giới hạn tần suất (rate limit) cho đăng nhập, đăng ký, quên mật khẩu, gửi lại mã xác minh email, nhận diện ảnh và chatbot. |
-| NFR-SEC-07 | AI Service chỉ truy cập được từ mạng nội bộ/Backend. |
-| NFR-SEC-08 | Bí mật (khoá Google, FCM, Object Storage, DB, JWT, SMTP) quản lý bằng biến môi trường/secret manager; **không** commit `.env`, file service account FCM hay thông tin nhạy cảm lên Git `[README]`. |
+| NFR-SEC-07 | AI Service, Elasticsearch và Redis chỉ truy cập được từ mạng nội bộ/Backend. |
+| NFR-SEC-08 | Bí mật (khoá Google, FCM, Object Storage, DB, JWT, SMTP, Elasticsearch, Redis) quản lý bằng biến môi trường/secret manager; **không** commit `.env`, file service account FCM hay thông tin nhạy cảm lên Git `[README]`. |
 | NFR-SEC-09 | Mã vạch được kiểm tra định dạng trước khi gọi ra ngoài; lời gọi Open Food Facts chỉ do Backend thực hiện, có timeout và giới hạn tần suất; không gửi dữ liệu định danh người dùng. `(*)` |
 
 ### 9.3. Quyền riêng tư và dữ liệu sức khoẻ `(*)`
@@ -829,9 +851,9 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 ### 9.4. Độ tin cậy và khả dụng `(*)`
 
 - Không mất dữ liệu người dùng ghi khi ngoại tuyến (lưu cục bộ bền vững đến khi đồng bộ).
-- Mục tiêu khả dụng 99% trong môi trường demo; có `health check` cho Backend và AI Service.
-- Sao lưu CSDL định kỳ; có thể khôi phục.
-- Xử lý lỗi nhã nhặn khi AI Service hoặc dịch vụ ngoài không khả dụng (thông báo + cho phép nhập tay).
+- Mục tiêu khả dụng 99% trong môi trường demo; có `health check` cho Backend, AI Service và trạng thái kết nối Elasticsearch/Redis/PostgreSQL.
+- Sao lưu CSDL định kỳ; có thể khôi phục (chỉ mục Elasticsearch có thể dựng lại từ PostgreSQL qua job reindex).
+- Xử lý lỗi nhã nhặn khi AI Service, Elasticsearch hoặc dịch vụ ngoài không khả dụng (nhận diện ảnh thông báo và cho phép nhập tay; tìm kiếm món ăn chuyển dự phòng sang PostgreSQL).
 
 ### 9.5. Khả năng sử dụng và tương thích `(*)`
 
@@ -842,14 +864,14 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 ### 9.6. Khả năng bảo trì và mở rộng `(*)`
 
 - Mã nguồn tổ chức theo layer controller → service → repository (kèm dto, entity, mapper, exception, config, common) như mục 3.4 `[README]`; có quy ước đặt tên và định dạng mã. `(*)`
-- Kiểm thử tự động cho lõi nghiệp vụ bằng JUnit 5 + Mockito (độ phủ mục tiêu ≥ 60% cho tầng service quan trọng `(*)`); integration test dùng Testcontainers (PostgreSQL) nên cần Docker đang chạy `[README]`.
+- Kiểm thử tự động cho lõi nghiệp vụ bằng JUnit 5 + Mockito (độ phủ mục tiêu ≥ 60% cho tầng service quan trọng `(*)`); integration test dùng Testcontainers (PostgreSQL, Elasticsearch/Redis khi cần) nên cần Docker đang chạy `[README]`.
 - Cấu hình theo profile `dev`/`prod`; build bằng Gradle Wrapper; đóng gói Docker/Docker Compose `[README]`; CI chạy `./gradlew check` `(*)`.
 - Mô hình AI có thể thay phiên bản mà không đổi mã Backend (đổi file ONNX + khai báo phiên bản).
 
 ### 9.7. Quan sát và ghi nhật ký `(*)`
 
 - Nhật ký có cấu trúc kèm `request_id`/`trace_id` xuyên suốt Mobile → Backend → AI Service.
-- Chỉ số cơ bản: số yêu cầu, lỗi, độ trễ, tỉ lệ nhận diện thất bại.
+- Chỉ số cơ bản: số yêu cầu, lỗi, độ trễ, tỉ lệ nhận diện thất bại, lỗi đồng bộ chỉ mục hoặc fallback Elasticsearch.
 
 ### 9.8. Địa phương hoá `(*)`
 
@@ -864,7 +886,7 @@ Ký hiệu: **✔** = endpoint đã nêu trong README (đường dẫn chính th
 | Mức | Nội dung | Công cụ gợi ý |
 |---|---|---|
 | Đơn vị | Công thức BMI/BMR/TDEE, tính calo/macro, tính streak, sinh thực đơn, tính xu hướng cân nặng | JUnit 5, Mockito, pytest, Jest |
-| Tích hợp | API + CSDL; Backend ↔ AI Service; xác thực JWT/Google | Spring Test, Testcontainers |
+| Tích hợp | API + CSDL; Backend ↔ Elasticsearch (tìm không dấu, đồng bộ chỉ mục, lọc quyền sở hữu, fallback); Backend ↔ AI Service; xác thực JWT/Google | Spring Test, Testcontainers |
 | Giao diện/E2E | Luồng đăng ký → thiết lập hồ sơ → ghi log → xem thống kê | Detox hoặc Maestro |
 | Mô hình AI | Đánh giá trên tập test; kiểm thử với ảnh chụp thực tế bằng điện thoại | Script đánh giá riêng |
 | Hiệu năng | Tải API và nhận diện | k6 hoặc JMeter |
@@ -898,16 +920,17 @@ Sản phẩm được coi là đạt khi:
 | R5 | Thay đổi chính sách/API Google (Google Fit, Health Connect) | Trung bình | Dùng Health Connect; tách lớp trừu tượng cho nguồn dữ liệu sức khoẻ |
 | R6 | Phạm vi lớn so với nhóm 3 người, 3 tháng | Cao | Ưu tiên MoSCoW, làm song song AI–Backend–Mobile, cắt phạm vi theo mục 11 |
 | R7 | Phụ thuộc dịch vụ ngoài (Open Food Facts, nguồn LLM) không ổn định; Open Food Facts có thể thiếu hoặc thiếu calo/macro với sản phẩm Việt Nam | Trung bình | Bộ nhớ đệm (kể cả "không tìm thấy"), timeout, dữ liệu dự phòng, thông báo lỗi nhã nhặn, cho phép tạo món từ mã vạch |
-| R8 | Chi phí/tài nguyên hạ tầng hạn chế khi suy luận AI, chatbot | Trung bình | Dùng ONNX Runtime CPU, mô hình nhỏ/tối ưu, giới hạn tần suất |
+| R8 | Chi phí/tài nguyên hạ tầng hạn chế khi suy luận AI, chatbot, chạy thêm Elasticsearch | Trung bình | Dùng ONNX Runtime CPU, mô hình nhỏ/tối ưu, giới hạn tần suất; giới hạn heap JVM cho Elasticsearch khi triển khai demo |
 | R9 | Rủi ro an toàn sức khoẻ khi gợi ý calo cực đoan | Trung bình | Ngưỡng calo tối thiểu, giới hạn tốc độ giảm cân, lời miễn trừ |
 | R10 | Lộ dữ liệu cá nhân/sức khoẻ | Cao | Mục 9.2 và 9.3 |
 | R11 | Chiếm email: kẻ xấu đăng ký trước bằng email của người khác (chưa xác minh), rồi chờ nạn nhân dùng Google hoặc khiến nạn nhân gặp lỗi “email đã tồn tại” | Trung bình | Xác minh email bằng OTP (FR-AUTH-09); liên kết Google vào tài khoản chưa xác minh thì xoá mật khẩu cũ và thu hồi token; nạn nhân lấy lại tài khoản bằng Google hoặc quên mật khẩu |
+| R12 | Dữ liệu giữa PostgreSQL và Elasticsearch bị lệch hoặc Elasticsearch tạm thời gián đoạn | Trung bình | Đồng bộ chỉ mục sau commit, có job đối soát/reindex toàn phần từ PostgreSQL, và tự động fallback tìm kiếm sang PostgreSQL khi ES lỗi |
 
 ### 11.2. Giả định `(*)`
 
 - Người dùng có điện thoại có camera và kết nối mạng khi dùng tính năng AI.
 - Nhóm có đủ quyền sử dụng/ gán nhãn bộ dữ liệu VietFood68 cho mục đích học thuật.
-- Có môi trường máy chủ/đám mây đủ để triển khai demo (Backend, AI, CSDL, Object Storage).
+- Có môi trường máy chủ/đám mây đủ để triển khai demo (Backend, AI, CSDL, Elasticsearch, Redis, Object Storage).
 - Người dùng chủ yếu ăn món Việt thuộc phạm vi 68 lớp.
 
 ### 11.3. Ràng buộc
@@ -934,7 +957,7 @@ Sản phẩm được coi là đạt khi:
 | Q9 | Tập món có mở rộng ngoài 68 lớp, và người dùng có thể “đóng góp ảnh” để huấn luyện lại không? | Ảnh hưởng vòng đời mô hình và yêu cầu pháp lý/riêng tư. |
 | Q10 | Đề cương ghi ngày giao “09/20226”; xác nhận là **09/2026**? | Sai sót đánh máy trong đề cương gốc. |
 | Q11 | Tên ứng dụng là **Kallo** (đề cương) hay **Kallo** (README, repo `kallo-backend`, package `com.healthcare.kallo`)? | Cần một tên duy nhất trong tài liệu, mã nguồn và giao diện. |
-| Q12 | README nhắc `PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD`, `PROD_ES_URIS` (Redis, Elasticsearch) nhưng bảng công nghệ không có hai thành phần này. Có dùng không? | Nếu có (ví dụ Redis cho cache/rate limit/thu hồi token, Elasticsearch cho tìm món không dấu) thì phải bổ sung vào kiến trúc và yêu cầu; nếu không thì bỏ khỏi cấu hình/README. |
+| Q12 | ~~README nhắc `PROD_REDIS_HOST`, `PROD_REDIS_PASSWORD`, `PROD_ES_URIS` (Redis, Elasticsearch) nhưng bảng công nghệ không có hai thành phần này. Có dùng không?~~ | **Đã chốt (16/11/2026): có sử dụng.** **Elasticsearch** dùng cho tìm kiếm món ăn tiếng Việt (có/không dấu, gợi ý khi gõ; xem mục 3.1, 3.2, 3.4, 4.3, 4.9, 6.3, 9.4, R12); **Redis** dùng cho rate limit ở module SYS và WebSocket (xem mục 4.8). |
 | Q13 | ~~Có bắt buộc xác minh email (chặn dùng ứng dụng hoặc một số tính năng) cho tới khi nhập đúng OTP không?~~ | **Đã chốt (20/10/2026): bắt buộc.** Chưa xác minh thì mọi API nghiệp vụ trả 403 `EMAIL_NOT_VERIFIED` (trừ nhóm `auth` và `GET /users/me`). Xem FR-AUTH-09, AC7. |
 
 ---
@@ -1016,7 +1039,7 @@ mục_tiêu_nước_ml ≈ 30–35 × cân_nặng_kg  (cấu hình được)
 | Chức năng chính trong đề cương | Yêu cầu tương ứng |
 |---|---|
 | Quản lý tài khoản & hồ sơ sức khoẻ | FR-AUTH-01…09, FR-PRO-01…08 |
-| Quản lý dinh dưỡng & bữa ăn | FR-NUT-01…13, FR-FD-01…07b |
+| Quản lý dinh dưỡng & bữa ăn | FR-NUT-01…13, FR-FD-01…08 |
 | Lập kế hoạch bữa ăn & Trợ lý AI | FR-PLAN-01…06, FR-CHAT-01…06 |
 | Theo dõi vận động & chỉ số cơ thể | FR-ACT-01…08, FR-NUT-11 |
 | Báo cáo & thống kê | FR-REP-01…08 |
@@ -1039,3 +1062,4 @@ Danh sách lớp (nhãn) sẽ được điền theo tệp `data.yaml` của tậ
 | 1.0 | 15/10/2026 | Nhóm Kallo | Bản nháp đầu tiên, dựng từ Đề cương đồ án tốt nghiệp |
 | 1.1 | 15/10/2026 | Nhóm Kallo | Đối chiếu README repository backend: chốt Java 21+/Spring Boot 4.x/Gradle/Flyway/MinIO, thêm mục 3.4 (cấu trúc mã nguồn, biến môi trường), đổi tiền tố API sang `/api` và căn chỉnh endpoint, đặt thời hạn token mặc định 15 phút / 7 ngày, thêm Q11–Q12 |
 | 1.2 | 20/10/2026 | Nhóm Kallo | Chốt Q2 = cách C (tra mã vạch lai: CSDL nội bộ → Open Food Facts → tạo món tay): tách FR-FD-07 thành 07a/07b; thêm FR-SYS-09 (ghi nguồn ODbL), NFR-SEC-09; cập nhật 3.1, 3.4 (biến `OFF_*`), 4.3 (quy tắc, AC4–AC6), 6.1 (`Food.source`, `BarcodeMiss`), 6.5, 8.1, 8.2, R7 và Q2; sửa ghi chú v1.1 (Q11–Q12). Module AUTH: bổ sung xác minh email bằng OTP ngay sau đăng ký (FR-AUTH-09, AC5–AC6, quy tắc `email_verified` và liên kết Google an toàn); cập nhật phạm vi (1.3), thuật ngữ OTP, biến `OTP_HMAC_SECRET`, dữ liệu (6.1–6.2: `email_verified`, `google_sub`, bảng token), màn hình (7.1), API (8.2), NFR-SEC-06, rủi ro R11, câu hỏi Q13 (đã chốt: bắt buộc xác minh, AC7, lỗi 403 `EMAIL_NOT_VERIFIED`) |
+| 1.3 | 16/11/2026 | Nhóm Kallo | Chốt Q12: sử dụng **Elasticsearch** cho tìm kiếm món ăn tiếng Việt (có/không dấu, gợi ý khi gõ) và ghi nhận **Redis** cho rate limit (theo SYS Phase 8). Cập nhật phạm vi (1.3), môi trường (2.3), kiến trúc tổng thể & công nghệ (3.1, 3.2, 3.3, 3.4 với biến `ES_URIS`/`PROD_ES_URIS`, `PROD_REDIS_HOST`), tìm kiếm & đồng bộ chỉ mục (4.3, AC7, FR-FD-03, FR-FD-08, 6.3, 6.5, 8.2), bảo mật/độ tin cậy/kiểm thử/rủi ro (NFR-SEC-04/05/07/08, 9.4, 10.1, R8, R12), Q12 và ma trận truy vết (Phụ lục B) |
