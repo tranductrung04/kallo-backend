@@ -73,6 +73,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
         friendship.setRespondedAt(now);
         onAccepted(userId);
         onAccepted(target.getId());
+        onRequestAccepted(friendship.getRequester().getId(), friendship.getAddressee().getId());
         return response(friendship);
       }
       if (friendship.getRequester().getId().equals(userId)
@@ -87,7 +88,10 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
     created.setRequester(requester);
     created.setAddressee(target);
     created.setStatus(FriendshipStatus.PENDING);
-    return response(friendships.saveAndFlush(created));
+    Friendship saved = friendships.saveAndFlush(created);
+    events.publishEvent(new com.healthcare.kallo.event.game.FriendRequestReceivedEvent(
+        target.getId(), saved.getId(), requester.getId()));
+    return response(saved);
   }
 
   private User settingsUser(UUID userId, String friendCode) {
@@ -119,6 +123,7 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
       friendship.setStatus(FriendshipStatus.ACCEPTED);
       onAccepted(friendship.getRequester().getId());
       onAccepted(friendship.getAddressee().getId());
+      onRequestAccepted(friendship.getRequester().getId(), friendship.getAddressee().getId());
     } else {
       friendship.setStatus(FriendshipStatus.DECLINED);
     }
@@ -164,6 +169,10 @@ public class FriendServiceImpl implements com.healthcare.kallo.service.game.Frie
 
   private void onAccepted(UUID userId) {
     events.publishEvent(new FriendAcceptedEvent(userId));
+  }
+
+  private void onRequestAccepted(UUID recipientId, UUID friendId) {
+    events.publishEvent(new com.healthcare.kallo.event.game.FriendRequestAcceptedEvent(recipientId, friendId));
   }
 
   private void enforceLimits(UUID requester, UUID target) {

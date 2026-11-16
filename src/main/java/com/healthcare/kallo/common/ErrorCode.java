@@ -27,6 +27,7 @@ public enum ErrorCode {
   UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "Unsupported media type"),
   MISSING_PARAMETER(HttpStatus.BAD_REQUEST, "Required parameter is missing"),
   INVALID_PARAMETER(HttpStatus.BAD_REQUEST, "Invalid parameter"),
+  CHALLENGE_LOCKED(HttpStatus.CONFLICT, "Challenge metric and target cannot change after participation"),
   CANNOT_FRIEND_SELF(HttpStatus.BAD_REQUEST, "Cannot friend yourself"),
   ALREADY_FRIENDS(HttpStatus.CONFLICT, "Users are already friends"),
   FRIEND_REQUEST_PENDING(HttpStatus.CONFLICT, "Friend request is pending"),
