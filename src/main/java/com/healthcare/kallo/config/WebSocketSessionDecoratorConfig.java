@@ -19,7 +19,7 @@ public class WebSocketSessionDecoratorConfig implements WebSocketMessageBrokerCo
   @Override
   public void configureWebSocketTransport(WebSocketTransportRegistration registration) {
     registration
-        .setMessageSizeLimit(64 * 1024)
+        .setMessageSizeLimit(8 * 1024)
         .setSendBufferSizeLimit(256 * 1024)
         .addDecoratorFactory(this::decorate);
   }

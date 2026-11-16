@@ -1,9 +1,13 @@
 package com.healthcare.kallo.security.sys;
 
 import com.healthcare.kallo.config.WebSocketProperties;
+import com.healthcare.kallo.model.auth.enums.UserStatus;
+import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.service.sys.WebSocketSessionRegistry;
 import java.security.Principal;
+import java.util.Set;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.stomp.StompCommand;
@@ -20,12 +24,16 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
   private final JwtDecoder jwtDecoder;
   private final WebSocketProperties properties;
   private final WebSocketSessionRegistry sessions;
+  private final UserRepository users;
 
+  @Autowired
   public StompAuthChannelInterceptor(
-      JwtDecoder jwtDecoder, WebSocketProperties properties, WebSocketSessionRegistry sessions) {
+      JwtDecoder jwtDecoder, WebSocketProperties properties, WebSocketSessionRegistry sessions,
+      UserRepository users) {
     this.jwtDecoder = jwtDecoder;
     this.properties = properties;
     this.sessions = sessions;
+    this.users = users;
   }
 
   @Override
@@ -38,6 +46,9 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     else if (command != null && accessor.getUser() == null) {
       throw new IllegalArgumentException("STOMP frame requires authentication");
     } else if (command == StompCommand.SUBSCRIBE) authorizeSubscription(accessor);
+    else if (command == StompCommand.SEND) {
+      throw new IllegalArgumentException("Client STOMP SEND is not allowed");
+    }
     return message;
   }
 
@@ -61,16 +72,20 @@ public class StompAuthChannelInterceptor implements ChannelInterceptor {
     } catch (IllegalArgumentException e) {
       throw new IllegalArgumentException("Invalid STOMP user id", e);
     }
+    if (users != null && users.findById(userId).map(user -> user.getStatus() == UserStatus.ACTIVE).orElse(false) == false) {
+      throw new IllegalArgumentException("User is disabled or does not exist");
+    }
     Principal principal = () -> userId.toString();
     accessor.setUser(principal);
-    if (!sessions.register(userId, accessor.getSessionId(), jwt.getExpiresAt(), properties.maxSessionsPerUser())) {
+    if (!sessions.registerWithEviction(userId, accessor.getSessionId(), jwt.getExpiresAt(), properties.maxSessionsPerUser())) {
       throw new IllegalArgumentException("Maximum WebSocket sessions exceeded");
     }
   }
 
   private void authorizeSubscription(StompHeaderAccessor accessor) {
     String destination = accessor.getDestination();
-    if (!"/user/queue/notifications".equals(destination)) {
+    if (!Set.of("/user/queue/notifications", "/user/queue/leaderboard", "/user/queue/game-events")
+        .contains(destination)) {
       throw new IllegalArgumentException("STOMP subscription destination is not allowed");
     }
   }

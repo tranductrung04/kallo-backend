@@ -34,6 +34,7 @@ class StreakServiceImplTest {
   @Mock UserRepository users;
   @Mock DailyProgressProvider progress;
   @Mock BadgeService badges;
+  @Mock LeaderboardChangeNotifier leaderboard;
   private StreakServiceImpl service;
   private User user;
 
@@ -54,7 +55,7 @@ class StreakServiceImplTest {
         new GameProperties.Challenge(java.time.Duration.ofDays(1)),
         new GameProperties.Ws(3, List.of()));
     service = new StreakServiceImpl(streaks, users, progress, new DailyGoalPolicy(2, 10), resolver,
-        properties, new StreakCalculator(), badges);
+        properties, new StreakCalculator(), badges, leaderboard);
   }
 
   @Test

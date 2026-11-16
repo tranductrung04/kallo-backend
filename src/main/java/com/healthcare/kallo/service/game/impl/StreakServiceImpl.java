@@ -8,21 +8,25 @@ import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.game.Streak;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.game.StreakRepository;
+import com.healthcare.kallo.service.game.BadgeService;
 import com.healthcare.kallo.service.game.DailyGoalPolicy;
 import com.healthcare.kallo.service.game.DailyProgress;
 import com.healthcare.kallo.service.game.DailyProgressProvider;
+import com.healthcare.kallo.service.game.LeaderboardChangeNotifier;
 import com.healthcare.kallo.service.game.StreakCalculator;
 import com.healthcare.kallo.service.game.StreakService;
 import com.healthcare.kallo.service.game.UserDayResolver;
 import com.healthcare.kallo.model.game.enums.BadgeRuleType;
-import com.healthcare.kallo.service.game.BadgeService;
-import java.util.Set;
+import com.healthcare.kallo.model.game.enums.LeaderboardMetric;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
 public class StreakServiceImpl implements StreakService {
@@ -34,10 +38,11 @@ public class StreakServiceImpl implements StreakService {
   private final GameProperties properties;
   private final StreakCalculator calculator;
   private final BadgeService badges;
+  private final LeaderboardChangeNotifier leaderboard;
 
   public StreakServiceImpl(StreakRepository streaks, UserRepository users, DailyProgressProvider progress,
       DailyGoalPolicy goalPolicy, UserDayResolver days, GameProperties properties, StreakCalculator calculator,
-      BadgeService badges) {
+      BadgeService badges, LeaderboardChangeNotifier leaderboard) {
     this.streaks = streaks;
     this.users = users;
     this.progress = progress;
@@ -46,6 +51,7 @@ public class StreakServiceImpl implements StreakService {
     this.properties = properties;
     this.calculator = calculator;
     this.badges = badges;
+    this.leaderboard = leaderboard;
   }
 
   @Override
@@ -67,7 +73,21 @@ public class StreakServiceImpl implements StreakService {
     }
     StreakCalculator.Result result = calculator.calculate(metDates, today, storedLongest);
     streaks.upsert(userId, result.currentStreak(), result.longestStreak(), result.lastCompletedDate());
+    afterCommit(() -> leaderboard.changed(userId, LeaderboardMetric.STREAK));
     badges.evaluate(userId, Set.of(BadgeRuleType.STREAK_DAYS, BadgeRuleType.FIRST_LOG));
+  }
+
+  private void afterCommit(Runnable action) {
+    if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+      action.run();
+      return;
+    }
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+      @Override
+      public void afterCommit() {
+        action.run();
+      }
+    });
   }
 
   @Override

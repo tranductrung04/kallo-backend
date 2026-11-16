@@ -6,6 +6,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.healthcare.kallo.config.WebSocketProperties;
+import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.model.auth.User;
+import com.healthcare.kallo.model.auth.enums.UserStatus;
 import com.healthcare.kallo.service.sys.WebSocketSessionRegistry;
 import java.security.Principal;
 import java.time.Instant;
@@ -23,9 +26,17 @@ import org.springframework.security.oauth2.jwt.JwtException;
 class StompAuthChannelInterceptorTest {
   private final JwtDecoder decoder = mock(JwtDecoder.class);
   private final WebSocketSessionRegistry sessions = new WebSocketSessionRegistry();
+  private final UserRepository users = mock(UserRepository.class);
+
+  private void allow(UUID userId) {
+    User user = new User();
+    user.setId(userId);
+    user.setStatus(UserStatus.ACTIVE);
+    when(users.findById(userId)).thenReturn(java.util.Optional.of(user));
+  }
   private final StompAuthChannelInterceptor interceptor =
       new StompAuthChannelInterceptor(
-          decoder, new WebSocketProperties(List.of("*"), 5), sessions);
+          decoder, new WebSocketProperties(List.of("*"), 3), sessions, users);
 
   @Test
   void connectWithoutBearerTokenIsRejected() {
@@ -68,6 +79,7 @@ class StompAuthChannelInterceptorTest {
   @Test
   void verifiedConnectSetsUserAndOnlyAllowsNotificationsSubscription() {
     UUID userId = UUID.randomUUID();
+    allow(userId);
     when(decoder.decode("valid")).thenReturn(validJwt(userId));
 
     Message<?> connected = interceptor.preSend(
@@ -89,21 +101,36 @@ class StompAuthChannelInterceptorTest {
   }
 
   @Test
-  void sixthVerifiedSessionIsRejected() {
+  void clientSendIsRejected() {
     UUID userId = UUID.randomUUID();
+    allow(userId);
+    when(decoder.decode("valid")).thenReturn(validJwt(userId));
+    Principal principal = StompHeaderAccessor.wrap(interceptor.preSend(
+        frame(StompCommand.CONNECT, "session-send", "Bearer valid", null, null),
+        (message, channel) -> true)).getUser();
+
+    assertThatThrownBy(() -> interceptor.preSend(
+        frame(StompCommand.SEND, "session-send", null, "/app/client", principal),
+        (message, channel) -> true))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Client STOMP SEND is not allowed");
+  }
+
+  @Test
+  void fourthVerifiedSessionEvictsOldestSession() {
+    UUID userId = UUID.randomUUID();
+    allow(userId);
     when(decoder.decode("valid")).thenReturn(validJwt(userId));
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 3; i++) {
       assertThat(interceptor.preSend(
           frame(StompCommand.CONNECT, "session-" + i, "Bearer valid", null, null),
           (message, channel) -> true)).isNotNull();
     }
 
-    assertThatThrownBy(() -> interceptor.preSend(
-        frame(StompCommand.CONNECT, "session-5", "Bearer valid", null, null),
-        (message, channel) -> true))
-        .isInstanceOf(IllegalArgumentException.class)
-        .hasMessage("Maximum WebSocket sessions exceeded");
+    assertThat(interceptor.preSend(
+        frame(StompCommand.CONNECT, "session-3", "Bearer valid", null, null),
+        (message, channel) -> true)).isNotNull();
   }
 
   private static Jwt validJwt(UUID userId) {
