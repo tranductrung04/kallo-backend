@@ -13,7 +13,8 @@ class GameEventListenerTest {
   @Test
   void recomputesStreakForChangedDate() {
     StreakService service = Mockito.mock(StreakService.class);
-    GameEventListener listener = new GameEventListener(service);
+    ChallengeService challenges = Mockito.mock(ChallengeService.class);
+    GameEventListener listener = new GameEventListener(service, challenges);
     UUID userId = UUID.randomUUID();
     LocalDate date = LocalDate.of(2026, 11, 13);
 
@@ -38,11 +39,16 @@ class GameEventListenerTest {
   }
 
   @Test
-  void swallowsRecomputeFailure() {
+  void refreshesChallengeEvenWhenStreakFails() {
     StreakService service = Mockito.mock(StreakService.class);
+    ChallengeService challenges = Mockito.mock(ChallengeService.class);
+    UUID userId = UUID.randomUUID();
+    LocalDate date = LocalDate.now();
     Mockito.doThrow(new IllegalStateException()).when(service).recompute(Mockito.any());
 
-    new GameEventListener(service).onDailyProgressChanged(
-        new DailyProgressChangedEvent(UUID.randomUUID(), LocalDate.now()));
+    new GameEventListener(service, challenges).onDailyProgressChanged(
+        new DailyProgressChangedEvent(userId, date));
+
+    verify(challenges).refresh(userId, date);
   }
 }
