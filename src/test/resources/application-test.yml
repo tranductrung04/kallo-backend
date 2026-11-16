@@ -1,6 +1,9 @@
 app:
   reminder:
     enabled: false
+  chat:
+    ai:
+      mock-enabled: true
   otp-hmac-secret: test-otp-secret-with-at-least-32-bytes
   jwt:
     secret: test-secret-with-at-least-32-bytes-for-tests

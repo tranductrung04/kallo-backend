@@ -33,6 +33,9 @@ CREATE UNIQUE INDEX uq_friendships_pair
     ON friendships (LEAST(requester_id, addressee_id), GREATEST(requester_id, addressee_id));
 CREATE INDEX idx_friendships_addressee ON friendships (addressee_id, status);
 CREATE INDEX idx_friendships_requester ON friendships (requester_id, status);
+CREATE INDEX idx_friendships_declined_responded
+    ON friendships (responded_at)
+    WHERE status = 'DECLINED';
 
 CREATE TABLE streaks (
     user_id             UUID PRIMARY KEY REFERENCES users (id) ON DELETE CASCADE,
@@ -110,3 +113,17 @@ CREATE TABLE point_transactions (
     CONSTRAINT uq_point_source UNIQUE (user_id, source_type, source_id)
 );
 CREATE INDEX idx_point_transactions_user_time ON point_transactions (user_id, occurred_at);
+
+-- Seed: game badges
+
+INSERT INTO badges (code, name, description, icon_key, rule_type, threshold, points, active, sort_order)
+VALUES
+  ('FIRST_LOG', 'Bước đầu tiên', 'Ghi nhật ký đầu tiên', 'first-log', 'FIRST_LOG', 1, 10, TRUE, 1),
+  ('STREAK_7', 'Kiên trì 7 ngày', 'Hoàn thành mục tiêu 7 ngày liên tiếp', 'streak-7', 'STREAK_DAYS', 7, 20, TRUE, 2),
+  ('STREAK_30', 'Kiên trì 30 ngày', 'Hoàn thành mục tiêu 30 ngày liên tiếp', 'streak-30', 'STREAK_DAYS', 30, 50, TRUE, 3),
+  ('STREAK_100', 'Kiên trì 100 ngày', 'Hoàn thành mục tiêu 100 ngày liên tiếp', 'streak-100', 'STREAK_DAYS', 100, 150, TRUE, 4),
+  ('FIRST_FRIEND', 'Người bạn đầu tiên', 'Kết nối với người bạn đầu tiên', 'first-friend', 'FRIENDS_COUNT', 1, 10, TRUE, 5),
+  ('CHALLENGER_1', 'Người thử thách', 'Hoàn thành thử thách đầu tiên', 'challenger-1', 'CHALLENGES_COMPLETED', 1, 20, TRUE, 6),
+  ('CHALLENGER_5', 'Bậc thầy thử thách', 'Hoàn thành 5 thử thách', 'challenger-5', 'CHALLENGES_COMPLETED', 5, 60, TRUE, 7),
+  ('WEIGHT_GOAL_REACHED', 'Mục tiêu cân nặng', 'Đạt mục tiêu cân nặng', 'weight-goal-reached', 'WEIGHT_GOAL_REACHED', NULL, 100, FALSE, 8)
+ON CONFLICT (code) DO NOTHING;
