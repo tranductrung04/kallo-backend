@@ -66,9 +66,9 @@ public class ProfileWeightEventListener {
             profile.getGender(), latestWeight, profile.getHeightCm(), age);
     int newTdee = ProfileCalculator.calculateTdee(newBmr, profile.getActivityLevel());
 
-    // FR-PRO-08: If TDEE change magnitude >= 100 kcal, suggest recalculation
+    // FR-PRO-08: If TDEE change magnitude >= 50 kcal (~2.5 - 3 kg), suggest recalculation
     int diff = Math.abs(newTdee - profile.getTdee());
-    if (diff >= 100) {
+    if (diff >= 50) {
       CalorieResult calResult =
           ProfileCalculator.calculateDailyCalorieGoal(
               newTdee,

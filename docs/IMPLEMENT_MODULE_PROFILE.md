@@ -21,7 +21,7 @@ Module **PROFILE** đóng vai trò là "trung tâm số liệu sinh học và m�
 | **FR-PRO-05** | Tự động tính **BMI**, **BMR**, **TDEE** và **mục tiêu calo hàng ngày** có kẹp an toàn khi hồ sơ thay đổi. | **M** | 1 | Đã cài đặt hoàn tất |
 | **FR-PRO-06** | Tự động chia mục tiêu đa lượng macro (Protein/Carbs/Fat) theo mục tiêu; cho phép chỉnh tay tỷ lệ %. | **S** | 2 | Đã cài đặt hoàn tất |
 | **FR-PRO-07** | Đặt mục tiêu uống nước hàng ngày (tự động theo cân nặng $35 \text{ ml/kg}$ hoặc nhập số ml tùy chỉnh). | **S** | 2 | Đã cài đặt hoàn tất |
-| **FR-PRO-08** | Lắng nghe sự kiện cân nặng mới từ ACT, tự động phát hiện lệch TDEE $\ge 100 \text{ kcal}$ và đề xuất tính lại mục tiêu. | **S** | 3 | Đã cài đặt hoàn tất |
+| **FR-PRO-08** | Lắng nghe sự kiện cân nặng mới từ ACT, tự động phát hiện lệch TDEE $\ge 50 \text{ kcal}$ (~$2.5 - 3\text{ kg}$) và đề xuất tính lại mục tiêu. | **S** | 3 | Đã cài đặt hoàn tất |
 
 ### 1.2. Tiêu chí chấp nhận (Acceptance Criteria)
 
@@ -59,7 +59,7 @@ Module **PROFILE** đóng vai trò là "trung tâm số liệu sinh học và m�
 | **D4** | Chốt chặn an toàn sinh học (Safety Clamping) | Kẹp tốc độ giảm cân tối đa $1.0\text{ kg/tuần}$ (thâm hụt tối đa $\approx 1100\text{ kcal/ngày}$); calo ngày không dưới $1200\text{ kcal}$ (Nữ) hoặc $1500\text{ kcal}$ (Nam). Bật cờ `safetyClamped: true` | Ngăn chặn người dùng nhập mục tiêu giảm cân tiêu cực gây hạ đường huyết, suy nhược cơ thể hoặc rối loạn chuyển hoá (AC3) |
 | **D5** | Phân bổ đa lượng Macro | Tự động tính toán theo mục tiêu (Giảm cân: 30P/40C/30F; Giữ cân: 20P/50C/30F; Tăng cân: 25P/50C/25F); cho phép người dùng tùy chỉnh tỷ lệ % với ràng buộc tổng bằng 100% | Đáp ứng FR-PRO-06; quy đổi chuẩn $1\text{g P} = 4\text{kcal}$, $1\text{g C} = 4\text{kcal}$, $1\text{g F} = 9\text{kcal}$ |
 | **D6** | Lưu trữ thực phẩm dị ứng / kiêng kỵ | Lưu trực tiếp dưới dạng cột `allergies JSONB` trong bảng `user_health_profiles` | Cho phép lưu mảng danh mục chuẩn lẫn nhập tự do linh hoạt; không cần tạo bảng trung gian phức tạp; dễ dàng nối sang module NUTRI và PLAN |
-| **D7** | Đề xuất tính lại mục tiêu khi có cân nặng mới (FR-PRO-08) | Lắng nghe `WeightChangedEvent`. Nếu chênh lệch $\| \text{TDEE}_{\text{mới}} - \text{TDEE}_{\text{cũ}} \| \ge 100\text{ kcal}$, bật cờ `recalculationRecommended: true` và tính trước `recommendedDailyCalorieGoal` | Không âm thầm tự ý đổi calo của người dùng mà hiển thị gợi ý kèm số liệu cụ thể; cung cấp endpoint `POST /recalculate` để người dùng xác nhận áp dụng |
+| **D7** | Đề xuất tính lại mục tiêu khi có cân nặng mới (FR-PRO-08) | Lắng nghe `WeightChangedEvent`. Nếu chênh lệch $\| \text{TDEE}_{\text{mới}} - \text{TDEE}_{\text{cũ}} \| \ge 50\text{ kcal}$ (~$2.5 - 3\text{ kg}$), bật cờ `recalculationRecommended: true` và tính trước `recommendedDailyCalorieGoal` | Không âm thầm tự ý đổi calo của người dùng mà hiển thị gợi ý kèm số liệu cụ thể; cung cấp endpoint `POST /recalculate` để người dùng xác nhận áp dụng |
 | **D8** | Tích hợp liên module bằng Ports & Adapters | Cài đặt `ProfileStatusProviderImpl` và `ProfileBodyMetricsImpl` bằng Spring `@Component` | Ghi đè tự động các bean `@ConditionalOnMissingBean` của AUTH và ACT mà không cần sửa cấu hình gốc, tránh xung đột nhánh Git |
 | **D9** | Toàn vẹn dữ liệu & Xóa tài khoản | Bảng `user_health_profiles` có khóa ngoại `user_id REFERENCES users(id) ON DELETE CASCADE` và `UNIQUE(user_id)` | Quan hệ 1-1 chặt chẽ; đảm bảo khi người dùng xóa tài khoản (FR-AUTH-07), hồ sơ sức khỏe được giải phóng sạch sẽ, không để lại dữ liệu mồ côi |
 | **D10** | Đặt tên Migration Flyway | Tuân thủ định dạng timestamp UTC: `V20261117203000__profile_schema.sql` | Đảm bảo thứ tự chạy Flyway sau migration của các module AUTH, ACT, SYS, GAME; tránh xung đột phiên bản tuần tự khi merge code |
@@ -277,10 +277,10 @@ sequenceDiagram
     Listener->>WeightRepo: findLatestAtOrBefore(userId, now)
     WeightRepo-->>Listener: Latest WeightLog (newWeightKg)
     Note over Listener: Tính BMR mới & TDEE mới theo newWeightKg<br/>diff = |newTdee - oldTdee|
-    alt diff >= 100 kcal
+    alt diff >= 50 kcal (~2.5 - 3 kg)
         Note over Listener: Đặt recalculationRecommended = true<br/>Lưu recommendedTdee & recommendedDailyCalorieGoal
         Listener->>ProfileRepo: save(profile)
-    else diff < 100 kcal
+    else diff < 50 kcal
         Note over Listener: Chênh lệch nhỏ, bỏ qua
     end
 
