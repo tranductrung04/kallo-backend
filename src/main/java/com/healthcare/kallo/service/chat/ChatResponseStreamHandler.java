@@ -10,6 +10,10 @@ public interface ChatResponseStreamHandler {
 
   default void onReplace(String text) {}
 
+  default boolean clientDisconnected() {
+    return false;
+  }
+
   void onDone(ChatReplyResponseData response);
 
   record ChatReplyResponseData(UUID conversationId, ChatMessageResponse userMessage,

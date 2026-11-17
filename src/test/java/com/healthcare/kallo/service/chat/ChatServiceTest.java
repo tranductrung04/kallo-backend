@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -17,6 +18,7 @@ import com.healthcare.kallo.model.chat.Conversation;
 import com.healthcare.kallo.model.chat.enums.ChatMessageStatus;
 import com.healthcare.kallo.model.chat.enums.ChatRole;
 import com.healthcare.kallo.repository.chat.ChatMessageRepository;
+import com.healthcare.kallo.service.sys.NotificationService;
 import com.healthcare.kallo.repository.chat.ConversationRepository;
 import java.time.Duration;
 import java.util.List;
@@ -36,6 +38,7 @@ class ChatServiceTest {
   @Mock ChatContextBuilder context;
   @Mock ChatRateLimiter rateLimiter;
   @Mock ChatTxService tx;
+  @Mock NotificationService notifications;
 
   private final ChatMetrics metrics = new ChatMetrics(new SimpleMeterRegistry());
   private final ChatSafetyService safety = new ChatSafetyService(metrics);
@@ -50,7 +53,8 @@ class ChatServiceTest {
         new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), true),
         12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30,
         Duration.ofSeconds(60), 15);
-    service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx, metrics);
+    service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx, metrics,
+        notifications);
   }
 
   @Test
@@ -67,6 +71,28 @@ class ChatServiceTest {
 
     assertThat(result.assistantMessage().content()).isEqualTo("reply");
     verify(ai, never()).generate(any());
+  }
+
+  @Test
+  void synchronousReplyDoesNotNotifyConnectedClient() {
+    Conversation conversation = conversation();
+    ChatMessage user = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "hello");
+    ChatMessage assistant = message(ChatRole.ASSISTANT, ChatMessageStatus.PENDING, null);
+    user.setConversation(conversation);
+    assistant.setConversation(conversation);
+    var saved = new ChatTxService.SavedMessage(conversation, user, assistant, false);
+    when(tx.saveUserMessage(eq(userId), any(), eq("hello"))).thenReturn(saved);
+    when(context.build(any(), any(), any(), eq(12))).thenReturn(new ChatAiRequest(conversationId,
+        List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
+    when(ai.generate(any())).thenReturn(new ChatAiReply("reply", List.of(), null, null, "mock"));
+    when(tx.completeAssistant(any(), any(), any(), anyLong())).thenAnswer(invocation -> {
+      assistant.setContent(invocation.getArgument(1));
+      return true;
+    });
+    var result = service.sendMessage(userId, new SendMessageRequest(conversationId, "hello", clientMessageId));
+
+    assertThat(result.assistantMessage().content()).isEqualTo("reply");
+    verify(notifications, never()).notify(any());
   }
 
   @Test

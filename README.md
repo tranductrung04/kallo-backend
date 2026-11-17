@@ -88,7 +88,7 @@ cd kallo-backend
 cp .env.example .env
 ```
 
-Cập nhật thông tin database, JWT secret, Google OAuth2, FCM, storage trong file `.env` (xem [Cấu hình](#cấu-hình)).
+Cập nhật thông tin database, JWT secret, Google OAuth2, FCM, storage trong file `.env`.
 
 ### 3. Khởi động PostgreSQL (nếu chưa có)
 

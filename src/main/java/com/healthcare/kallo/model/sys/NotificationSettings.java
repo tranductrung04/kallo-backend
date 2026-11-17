@@ -42,6 +42,8 @@ public class NotificationSettings {
   private int calorieAlertThresholdPct = 100;
   @Column(name = "social_enabled", nullable = false)
   private boolean socialEnabled = true;
+  @Column(name = "chat_reply_enabled", nullable = false)
+  private boolean chatReplyEnabled = true;
   @Column(name = "dnd_enabled", nullable = false)
   private boolean dndEnabled;
   @Column(name = "dnd_start_time", nullable = false)

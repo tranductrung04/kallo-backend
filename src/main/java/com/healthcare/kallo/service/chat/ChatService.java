@@ -12,12 +12,16 @@ import com.healthcare.kallo.dto.response.chat.ConversationResponse;
 import com.healthcare.kallo.dto.response.chat.MessagePageResponse;
 import com.healthcare.kallo.model.chat.ChatMessage;
 import com.healthcare.kallo.model.chat.Conversation;
+import com.healthcare.kallo.model.sys.enums.NotificationType;
 import com.healthcare.kallo.repository.chat.ChatMessageRepository;
 import com.healthcare.kallo.repository.chat.ConversationRepository;
+import com.healthcare.kallo.service.sys.NotificationService;
+import com.healthcare.kallo.service.sys.NotifyCommand;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -41,10 +45,11 @@ public class ChatService {
   private final ChatProperties properties;
   private final ChatTxService tx;
   private final ChatMetrics metrics;
+  private final NotificationService notifications;
 
   public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
       ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
-      ChatProperties properties, ChatTxService tx, ChatMetrics metrics) {
+      ChatProperties properties, ChatTxService tx, ChatMetrics metrics, NotificationService notifications) {
     this.conversations = conversations;
     this.messages = messages;
     this.aiClient = aiClient;
@@ -54,6 +59,7 @@ public class ChatService {
     this.properties = properties;
     this.tx = tx;
     this.metrics = metrics;
+    this.notifications = notifications;
   }
 
   public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
@@ -211,6 +217,7 @@ public class ChatService {
           if (validation.replaced()) handler.onReplace(checked);
           handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
               ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
+          if (handler.clientDisconnected()) notifyReply(userId, active);
         }
       });
     } catch (BusinessException exception) {
@@ -221,12 +228,17 @@ public class ChatService {
       throw exception;
     } catch (RuntimeException exception) {
       if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
-      metrics.recordMessage("failed");
       if (exception instanceof ChatSseException sseException) {
-        if (!sseException.clientDisconnected()) metrics.recordAiError(sseException.code().toLowerCase());
+        if (sseException.clientDisconnected()) {
+          tx.markFailed(active.assistantMessage(), sseException.code());
+          return;
+        }
+        metrics.recordMessage("failed");
+        metrics.recordAiError(sseException.code().toLowerCase());
         tx.markFailed(active.assistantMessage(), sseException.code());
         throw exception;
       }
+      metrics.recordMessage("failed");
       metrics.recordAiError("unavailable");
       tx.markFailed(active.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, active.userMessage().getId());
@@ -281,6 +293,18 @@ public class ChatService {
     if (hasMore) result = result.subList(0, limit);
     String nextCursor = hasMore ? encodeCursor(result.getLast()) : null;
     return new MessagePageResponse(result.stream().map(ChatMessageResponse::from).toList(), nextCursor, hasMore);
+  }
+
+  private void notifyReply(UUID userId, ChatTxService.SavedMessage saved) {
+    try {
+      notifications.notify(new NotifyCommand(userId, NotificationType.CHAT_REPLY,
+          Map.of(), Map.of("conversationId", saved.conversation().getId().toString(),
+              "messageId", saved.assistantMessage().getId().toString()),
+          "chat-reply:" + saved.assistantMessage().getId()));
+    } catch (RuntimeException exception) {
+      log.warn("Unable to publish chat reply notification conversationId={} messageId={}",
+          saved.conversation().getId(), saved.assistantMessage().getId(), exception);
+    }
   }
 
   private Conversation conversation(UUID userId, UUID conversationId) {
