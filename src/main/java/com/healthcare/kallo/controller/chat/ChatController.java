@@ -1,16 +1,21 @@
 package com.healthcare.kallo.controller.chat;
 
 import com.healthcare.kallo.common.ApiResponse;
+import com.healthcare.kallo.dto.request.chat.ChatFeedbackRequest;
 import com.healthcare.kallo.dto.request.chat.ConversationUpdateRequest;
 import com.healthcare.kallo.dto.request.chat.SendMessageRequest;
+import com.healthcare.kallo.dto.response.chat.ChatFeedbackResponse;
 import com.healthcare.kallo.dto.response.chat.ChatReplyResponse;
+import com.healthcare.kallo.dto.response.chat.ChatSuggestionResponse;
 import com.healthcare.kallo.dto.response.chat.ConversationPageResponse;
 import com.healthcare.kallo.dto.response.chat.ConversationResponse;
 import com.healthcare.kallo.dto.response.chat.MessagePageResponse;
 import com.healthcare.kallo.security.auth.CurrentUser;
 import com.healthcare.kallo.config.ChatProperties;
+import com.healthcare.kallo.service.chat.ChatFeedbackService;
 import com.healthcare.kallo.service.chat.ChatResponseStreamHandler;
 import com.healthcare.kallo.service.chat.ChatService;
+import com.healthcare.kallo.service.chat.ChatSuggestionService;
 import com.healthcare.kallo.service.chat.ChatTxService;
 import com.healthcare.kallo.service.chat.ChatSseService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,11 +47,16 @@ public class ChatController {
   private final ChatService chat;
   private final ChatSseService sse;
   private final ChatProperties properties;
+  private final ChatFeedbackService feedback;
+  private final ChatSuggestionService suggestions;
 
-  public ChatController(ChatService chat, ChatSseService sse, ChatProperties properties) {
+  public ChatController(ChatService chat, ChatSseService sse, ChatProperties properties,
+      ChatFeedbackService feedback, ChatSuggestionService suggestions) {
     this.chat = chat;
     this.sse = sse;
     this.properties = properties;
+    this.feedback = feedback;
+    this.suggestions = suggestions;
   }
 
   @PostMapping("/messages")
@@ -74,6 +84,7 @@ public class ChatController {
     SseEmitter emitter = new SseEmitter(properties.sseTimeout().toMillis());
     sse.openConnection();
     AtomicBoolean cancelled = new AtomicBoolean();
+    AtomicBoolean completedNormally = new AtomicBoolean();
     emitter.onTimeout(() -> {
       cancelled.set(true);
       emitter.complete();
@@ -119,18 +130,25 @@ public class ChatController {
 
             @Override
             public void onDone(ChatReplyResponseData response) {
+              if (cancelled.get()) return;
               send("done", response);
-              emitter.complete();
+              if (!cancelled.get()) {
+                completedNormally.set(true);
+                emitter.complete();
+              }
+            }
+
+            @Override
+            public boolean clientDisconnected() {
+              return cancelled.get() && !completedNormally.get();
             }
 
             private void send(String event, Object data) {
-              if (cancelled.get()) throw com.healthcare.kallo.service.chat.ChatSseException
-                  .clientDisconnected(new IllegalStateException("CLIENT_DISCONNECTED"));
+              if (cancelled.get()) return;
               try {
                 emitter.send(SseEmitter.event().name(event).data(data));
               } catch (Exception exception) {
                 cancelled.set(true);
-                throw new com.healthcare.kallo.service.chat.ChatSseException(exception);
               }
             }
           });
@@ -156,6 +174,19 @@ public class ChatController {
       throw exception;
     }
     return emitter;
+  }
+
+  @PostMapping("/messages/{id}/feedback")
+  @Operation(summary = "Rate assistant message")
+  public ApiResponse<ChatFeedbackResponse> feedback(@PathVariable UUID id,
+      @Valid @RequestBody ChatFeedbackRequest request, Authentication authentication) {
+    return ApiResponse.success(feedback.save(CurrentUser.id(authentication), id, request));
+  }
+
+  @GetMapping("/suggestions")
+  @Operation(summary = "Get contextual chat suggestions")
+  public ApiResponse<java.util.List<ChatSuggestionResponse>> suggestions(Authentication authentication) {
+    return ApiResponse.success(suggestions.get(CurrentUser.id(authentication)));
   }
 
   @GetMapping("/conversations")

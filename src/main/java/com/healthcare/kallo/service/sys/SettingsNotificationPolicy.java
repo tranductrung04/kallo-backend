@@ -27,6 +27,7 @@ public class SettingsNotificationPolicy implements NotificationPolicy {
       case CALORIE_OVER -> settings.isCalorieAlertEnabled();
       case BADGE_EARNED, FRIEND_REQUEST, FRIEND_OVERTAKE, CHALLENGE_EXPIRING, CHALLENGE_COMPLETED ->
           settings.isSocialEnabled();
+      case CHAT_REPLY -> settings.isChatReplyEnabled();
       case SYSTEM -> true;
     };
   }

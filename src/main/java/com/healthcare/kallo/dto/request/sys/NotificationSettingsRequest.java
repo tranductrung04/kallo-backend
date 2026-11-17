@@ -16,6 +16,7 @@ public record NotificationSettingsRequest(
     @NotNull Boolean calorieAlertEnabled,
     @NotNull @Min(100) @Max(200) Integer calorieAlertThresholdPct,
     @NotNull Boolean socialEnabled,
+    Boolean chatReplyEnabled,
     @NotNull Boolean dndEnabled,
     @NotBlank @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$") String dndStartTime,
     @NotBlank @Pattern(regexp = "^([01]\\d|2[0-3]):[0-5]\\d$") String dndEndTime) {}

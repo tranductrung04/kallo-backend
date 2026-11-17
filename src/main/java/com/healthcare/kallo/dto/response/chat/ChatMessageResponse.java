@@ -12,9 +12,11 @@ public record ChatMessageResponse(
     String status,
     UUID clientMessageId,
     Map<String, Object> metadata,
+    Short feedback,
     Instant createdAt) {
   public static ChatMessageResponse from(ChatMessage message) {
     return new ChatMessageResponse(message.getId(), message.getRole().name(), message.getContent(),
-        message.getStatus().name(), message.getClientMessageId(), message.getMetadata(), message.getCreatedAt());
+        message.getStatus().name(), message.getClientMessageId(), message.getMetadata(), message.getFeedback(),
+        message.getCreatedAt());
   }
 }

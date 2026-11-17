@@ -61,7 +61,7 @@ class NotificationSettingsControllerTest {
           "waterStartTime":"10:00","waterEndTime":"18:00","waterIntervalMinutes":240,
           "mealReminderEnabled":true,"mealBreakfastTime":null,"mealLunchTime":null,"mealDinnerTime":null,
           "calorieAlertEnabled":true,"calorieAlertThresholdPct":100,"socialEnabled":true,
-          "dndEnabled":false,"dndStartTime":"22:00","dndEndTime":"07:00"
+          "chatReplyEnabled":true,"dndEnabled":false,"dndStartTime":"22:00","dndEndTime":"07:00"
         }
         """.formatted(language);
   }

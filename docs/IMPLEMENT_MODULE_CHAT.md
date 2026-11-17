@@ -737,10 +737,10 @@ test/...
 
 ### Phase 5 – Mở rộng (tuỳ chọn, 3–5 ngày)
 
-- [ ] Feedback 👍/👎 và báo cáo tổng hợp chất lượng.
-- [ ] Gợi ý nhanh (`/suggestions`) theo thời điểm trong ngày/mục tiêu.
+- [x] Feedback 👍/👎 cho câu trả lời (`POST /api/chat/messages/{id}/feedback`). Báo cáo tổng hợp chất lượng chưa triển khai.
+- [x] Gợi ý nhanh (`GET /api/chat/suggestions`) theo tổng kết calo hôm nay.
 - [ ] Gửi ảnh món ăn trong chat: upload MinIO → gọi pipeline nhận diện → đưa kết quả vào context.
-- [ ] FCM khi có câu trả lời mới lúc app ở nền.
+- [x] FCM khi có câu trả lời mới lúc app ở nền.
 - [ ] Hành động từ chat: "Thêm món này vào nhật ký" (gọi `UserFoodLog` service) – cần xác nhận của người dùng.
 
 ---

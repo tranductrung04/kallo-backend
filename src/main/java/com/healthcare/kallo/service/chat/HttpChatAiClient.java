@@ -2,8 +2,6 @@ package com.healthcare.kallo.service.chat;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.healthcare.kallo.common.ErrorCode;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.healthcare.kallo.config.ChatProperties;
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -16,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -25,6 +24,9 @@ import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 @ConditionalOnProperty(name = "app.chat.ai.mock-enabled", havingValue = "false", matchIfMissing = true)
@@ -33,11 +35,12 @@ public class HttpChatAiClient implements ChatAiClient {
   private final ChatProperties properties;
   private final ObjectMapper objectMapper;
 
+  @Autowired
   public HttpChatAiClient(ChatProperties properties, ObjectMapper objectMapper) {
     this(RestClient.builder()
-        .baseUrl(properties.ai().baseUrl())
-        .requestFactory(HttpChatAiClient.requestFactory(properties.ai().connectTimeout(), properties.ai().readTimeout()))
-        .build(), properties, objectMapper);
+            .baseUrl(properties.ai().baseUrl())
+            .requestFactory(HttpChatAiClient.requestFactory(properties.ai().connectTimeout(), properties.ai().readTimeout()))
+            .build(), properties, objectMapper);
   }
 
   HttpChatAiClient(RestClient client, ChatProperties properties, ObjectMapper objectMapper) {
@@ -72,22 +75,22 @@ public class HttpChatAiClient implements ChatAiClient {
 
   private void invokeStream(ChatAiRequest request, ChatAiStreamHandler handler) {
     client.post()
-        .uri("/v1/chat")
-        .header("X-Request-Id", UUID.randomUUID().toString())
-        .headers(headers -> {
-          headers.set(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE);
-          String apiKey = properties.ai().apiKey();
-          if (apiKey != null && !apiKey.isBlank()) headers.set("X-Internal-Api-Key", apiKey);
-        })
-        .body(request.streaming())
-        .exchange((requestMessage, response) -> {
-          if (!response.getStatusCode().is2xxSuccessful()) {
-            throw new RestClientResponseException("AI stream returned " + response.getStatusCode(),
-                response.getStatusCode().value(), response.getStatusText(), null, null, null);
-          }
-          readStream(response.getBody(), handler);
-          return null;
-        });
+            .uri("/v1/chat")
+            .header("X-Request-Id", UUID.randomUUID().toString())
+            .headers(headers -> {
+              headers.set(HttpHeaders.ACCEPT, MediaType.TEXT_EVENT_STREAM_VALUE);
+              String apiKey = properties.ai().apiKey();
+              if (apiKey != null && !apiKey.isBlank()) headers.set("X-Internal-Api-Key", apiKey);
+            })
+            .body(request.streaming())
+            .exchange((requestMessage, response) -> {
+              if (!response.getStatusCode().is2xxSuccessful()) {
+                throw new RestClientResponseException("AI stream returned " + response.getStatusCode(),
+                        response.getStatusCode().value(), response.getStatusText(), null, null, null);
+              }
+              readStream(response.getBody(), handler);
+              return null;
+            });
   }
 
   @Override
@@ -146,7 +149,7 @@ public class HttpChatAiClient implements ChatAiClient {
   }
 
   private ChatAiStreamResult handleEvent(String event, String payload, ChatAiStreamHandler handler,
-      ChatAiStreamResult current, List<ChatAiReply.SuggestedFood> suggestedFoods) {
+                                         ChatAiStreamResult current, List<ChatAiReply.SuggestedFood> suggestedFoods) {
     try {
       JsonNode node = objectMapper.readTree(payload);
       if ("delta".equals(event)) {
@@ -161,14 +164,14 @@ public class HttpChatAiClient implements ChatAiClient {
           for (JsonNode food : foods) {
             if (food.path("name").isTextual()) {
               suggestedFoods.add(new ChatAiReply.SuggestedFood(food.path("name").textValue(),
-                  food.path("kcal").isNumber() ? food.path("kcal").intValue() : null));
+                      food.path("kcal").isNumber() ? food.path("kcal").intValue() : null));
             }
           }
         }
         ChatAiStreamResult result = new ChatAiStreamResult(suggestedFoods,
-            usage.path("promptTokens").isNumber() ? usage.path("promptTokens").intValue() : null,
-            usage.path("completionTokens").isNumber() ? usage.path("completionTokens").intValue() : null,
-            node.path("modelVersion").isTextual() ? node.path("modelVersion").textValue() : null);
+                usage.path("promptTokens").isNumber() ? usage.path("promptTokens").intValue() : null,
+                usage.path("completionTokens").isNumber() ? usage.path("completionTokens").intValue() : null,
+                node.path("modelVersion").isTextual() ? node.path("modelVersion").textValue() : null);
         handler.onComplete(result);
         return result;
       }
@@ -178,31 +181,31 @@ public class HttpChatAiClient implements ChatAiClient {
         throw new ChatSseException(new IllegalStateException(code + ": " + message));
       }
       return current;
-    } catch (IOException exception) {
+    } catch (JacksonException exception) {
       throw new ChatSseException(exception);
     }
   }
 
   private ChatAiReply invoke(ChatAiRequest request) {
     AiResponse response = client.post()
-        .uri("/v1/chat")
-        .header("X-Request-Id", UUID.randomUUID().toString())
-        .headers(headers -> {
-          String apiKey = properties.ai().apiKey();
-          if (apiKey != null && !apiKey.isBlank()) headers.set("X-Internal-Api-Key", apiKey);
-        })
-        .body(request)
-        .retrieve()
-        .body(AiResponse.class);
+            .uri("/v1/chat")
+            .header("X-Request-Id", UUID.randomUUID().toString())
+            .headers(headers -> {
+              String apiKey = properties.ai().apiKey();
+              if (apiKey != null && !apiKey.isBlank()) headers.set("X-Internal-Api-Key", apiKey);
+            })
+            .body(request)
+            .retrieve()
+            .body(AiResponse.class);
     if (response == null || response.message() == null
-        || !"assistant".equalsIgnoreCase(response.message().role())
-        || response.message().content() == null || response.message().content().isBlank()) {
+            || !"assistant".equalsIgnoreCase(response.message().role())
+            || response.message().content() == null || response.message().content().isBlank()) {
       throw new ChatAiException(ErrorCode.CHAT_AI_INVALID_RESPONSE);
     }
     Usage usage = response.usage();
     return new ChatAiReply(response.message().content(), response.suggestedFoods(),
-        usage == null ? null : usage.promptTokens(), usage == null ? null : usage.completionTokens(),
-        response.modelVersion());
+            usage == null ? null : usage.promptTokens(), usage == null ? null : usage.completionTokens(),
+            response.modelVersion());
   }
 
   private RuntimeException mapHttpFailure(RestClientResponseException exception) {
@@ -221,7 +224,7 @@ public class HttpChatAiClient implements ChatAiClient {
   private boolean isTimeout(Throwable error) {
     for (Throwable current = error; current != null; current = current.getCause()) {
       if (current instanceof SocketTimeoutException || current instanceof HttpTimeoutException
-          || current instanceof TimeoutException) return true;
+              || current instanceof TimeoutException) return true;
     }
     return false;
   }
@@ -234,10 +237,10 @@ public class HttpChatAiClient implements ChatAiClient {
   }
 
   private record AiResponse(AiMessage message, List<ChatAiReply.SuggestedFood> suggestedFoods,
-      Usage usage, String modelVersion) {}
+                            Usage usage, String modelVersion) {}
 
   private record AiMessage(String role, String content) {}
 
   private record Usage(@JsonProperty("promptTokens") Integer promptTokens,
-      @JsonProperty("completionTokens") Integer completionTokens) {}
+                       @JsonProperty("completionTokens") Integer completionTokens) {}
 }

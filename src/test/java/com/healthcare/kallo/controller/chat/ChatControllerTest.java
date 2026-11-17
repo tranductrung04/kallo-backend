@@ -14,7 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.RateLimitTestConfig;
+import com.healthcare.kallo.service.chat.ChatFeedbackService;
 import com.healthcare.kallo.service.chat.ChatService;
+import com.healthcare.kallo.service.chat.ChatSuggestionService;
 import com.healthcare.kallo.service.chat.ChatTxService;
 import com.healthcare.kallo.service.chat.ChatSseService;
 import com.healthcare.kallo.config.ChatProperties;
@@ -38,6 +40,8 @@ class ChatControllerTest {
   @MockitoBean ChatSseService sse;
   @MockitoBean ChatProperties properties;
   @MockitoBean ChatTxService tx;
+  @MockitoBean ChatFeedbackService feedback;
+  @MockitoBean ChatSuggestionService suggestions;
 
   @Test
   void rejectsOversizedMessageBeforeService() throws Exception {

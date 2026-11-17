@@ -57,6 +57,7 @@ public class NotificationSettingsServiceImpl implements NotificationSettingsServ
     settings.setCalorieAlertEnabled(request.calorieAlertEnabled());
     settings.setCalorieAlertThresholdPct(request.calorieAlertThresholdPct());
     settings.setSocialEnabled(request.socialEnabled());
+    settings.setChatReplyEnabled(request.chatReplyEnabled() == null || request.chatReplyEnabled());
     settings.setDndEnabled(request.dndEnabled());
     settings.setDndStartTime(dndStart);
     settings.setDndEndTime(dndEnd);

@@ -1,7 +1,7 @@
 package com.healthcare.kallo.service.chat;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.healthcare.kallo.config.ChatProperties;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -9,6 +9,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
+import tools.jackson.databind.ObjectMapper;
 
 class HttpChatAiClientTest {
   @Test
@@ -17,7 +18,7 @@ class HttpChatAiClientTest {
     MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
     RestClient client = builder.build();
     ChatProperties properties = properties();
-    HttpChatAiClient ai = new HttpChatAiClient(client, properties, new ObjectMapper());
+    HttpChatAiClient ai = new HttpChatAiClient(client, properties, new tools.jackson.databind.ObjectMapper());
     server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo("http://ai/v1/chat"))
         .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
             "event: delta\ndata: {\"text\":\"hello\"}\n\nevent: done\ndata: {}\n\n",

@@ -35,7 +35,7 @@ public class HealthChatContextProvider implements ChatContextProvider {
   public ChatContextData get(UUID userId) {
     User user = users.findById(userId).orElse(null);
     if (user == null) return ChatContextData.empty();
-    ZoneId zone = ZoneId.of(user.getTimezone());
+    ZoneId zone = zoneOrDefault(user.getTimezone());
     LocalDate today = LocalDate.now(clock.withZone(zone));
 
     Map<String, Object> profile = new LinkedHashMap<>();
@@ -61,6 +61,14 @@ public class HealthChatContextProvider implements ChatContextProvider {
       put(todaySummary, "caloriesBurned", progress.caloriesBurned());
     }
     return new ChatContextData(profile, todaySummary, List.of());
+  }
+
+  private ZoneId zoneOrDefault(String timezone) {
+    try {
+      return ZoneId.of(timezone == null ? "Asia/Ho_Chi_Minh" : timezone);
+    } catch (java.time.DateTimeException exception) {
+      return ZoneId.of("Asia/Ho_Chi_Minh");
+    }
   }
 
   private Object decimal(BigDecimal value) {

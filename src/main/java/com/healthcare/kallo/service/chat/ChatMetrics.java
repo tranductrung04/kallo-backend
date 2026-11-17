@@ -51,6 +51,10 @@ public class ChatMetrics {
     registry.counter("chat.safety.allergen.hits").increment();
   }
 
+  public void recordFeedback(String value) {
+    counter("chat.feedback", "value", value).increment();
+  }
+
   public void sseOpened() {
     activeSseConnections.incrementAndGet();
   }
