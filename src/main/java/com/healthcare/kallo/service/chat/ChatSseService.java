@@ -16,6 +16,19 @@ public class ChatSseService {
       new ThreadPoolExecutor.AbortPolicy());
   private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2,
       Thread.ofVirtual().name("chat-sse-heartbeat-", 0).factory());
+  private final ChatMetrics metrics;
+
+  public ChatSseService(ChatMetrics metrics) {
+    this.metrics = metrics;
+  }
+
+  public void openConnection() {
+    metrics.sseOpened();
+  }
+
+  public void closeConnection() {
+    metrics.sseClosed();
+  }
 
   public void execute(Runnable task) {
     var context = MDC.getCopyOfContextMap();

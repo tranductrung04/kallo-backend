@@ -12,16 +12,24 @@ import org.springframework.stereotype.Service;
 public class ChatRateLimiter {
   private final RateLimiter limiter;
   private final ChatProperties properties;
+  private final ChatMetrics metrics;
 
-  public ChatRateLimiter(RateLimiter limiter, ChatProperties properties) {
+  public ChatRateLimiter(RateLimiter limiter, ChatProperties properties, ChatMetrics metrics) {
     this.limiter = limiter;
     this.properties = properties;
+    this.metrics = metrics;
   }
 
   public void check(UUID userId) {
     var minute = limiter.check("chat:" + userId + ":minute", properties.rateLimit().perMinute(), Duration.ofMinutes(1));
-    if (!minute.allowed()) throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, minute.retryAfterSeconds());
+    if (!minute.allowed()) {
+      metrics.recordRateLimitHit();
+      throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, minute.retryAfterSeconds());
+    }
     var day = limiter.check("chat:" + userId + ":day", properties.rateLimit().perDay(), Duration.ofDays(1));
-    if (!day.allowed()) throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, day.retryAfterSeconds());
+    if (!day.allowed()) {
+      metrics.recordRateLimitHit();
+      throw new BusinessException(ErrorCode.TOO_MANY_REQUESTS, day.retryAfterSeconds());
+    }
   }
 }

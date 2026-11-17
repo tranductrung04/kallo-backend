@@ -20,6 +20,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -39,10 +40,11 @@ public class ChatService {
   private final ChatRateLimiter rateLimiter;
   private final ChatProperties properties;
   private final ChatTxService tx;
+  private final ChatMetrics metrics;
 
   public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
       ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
-      ChatProperties properties, ChatTxService tx) {
+      ChatProperties properties, ChatTxService tx, ChatMetrics metrics) {
     this.conversations = conversations;
     this.messages = messages;
     this.aiClient = aiClient;
@@ -51,6 +53,7 @@ public class ChatService {
     this.rateLimiter = rateLimiter;
     this.properties = properties;
     this.tx = tx;
+    this.metrics = metrics;
   }
 
   public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
@@ -60,11 +63,16 @@ public class ChatService {
     return generateReply(userId, saved);
   }
 
+  public void markStreamFailed(ChatTxService.SavedMessage saved, String reason) {
+    tx.markFailed(saved.assistantMessage(), reason);
+  }
+
   private ChatReplyResponse generateReply(UUID userId, ChatTxService.SavedMessage saved) {
     if (saved.alreadyAnswered()) return reply(saved.userMessage(), saved.assistantMessage());
     ChatAiReply generated;
     String checked;
     long latencyMs;
+    var aiTimer = metrics.startAiTimer();
     try {
       long started = System.nanoTime();
       ChatAiRequest aiRequest = contextBuilder.build(userId, saved.conversation().getId(), saved.userMessage(),
@@ -74,22 +82,32 @@ public class ChatService {
           aiRequest.systemContext().allergies(), generated.suggestedFoods());
       checked = validation.content();
       if (validation.replaced() || validation.suggestedFoods().size() != generated.suggestedFoods().size()) {
+        metrics.recordAllergenHit();
         generated = new ChatAiReply(checked, validation.suggestedFoods(), generated.promptTokens(),
             generated.completionTokens(), generated.modelVersion());
       }
       latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
+      metrics.recordAiLatency(aiTimer);
     } catch (BusinessException exception) {
+      metrics.recordAiLatency(aiTimer);
+      metrics.recordAiError(exception.getErrorCode().name().toLowerCase());
+      metrics.recordMessage("failed");
       tx.markFailed(saved.assistantMessage(), exception.getErrorCode().name());
       throw exception;
     } catch (RuntimeException exception) {
+      metrics.recordAiLatency(aiTimer);
+      metrics.recordAiError("unavailable");
+      metrics.recordMessage("failed");
       log.error("Chat AI call failed conversationId={} messageId={}", saved.conversation().getId(),
           saved.userMessage().getId(), exception);
       tx.markFailed(saved.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, saved.userMessage().getId());
     }
     if (!tx.completeAssistant(saved.assistantMessage(), checked, generated, latencyMs)) {
+      metrics.recordAiError("conversation_busy");
       throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
     }
+    metrics.recordMessage("completed");
     return reply(saved.userMessage(), saved.assistantMessage());
   }
 
@@ -152,11 +170,13 @@ public class ChatService {
           ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
       return;
     }
-    handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
     ChatTxService.SavedMessage active = saved;
     StringBuilder contentBuilder = new StringBuilder();
     long started = System.nanoTime();
+    var aiTimer = metrics.startAiTimer();
+    AtomicBoolean latencyRecorded = new AtomicBoolean();
     try {
+      handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
       ChatAiRequest aiRequest = contextBuilder.build(userId, active.conversation().getId(), active.userMessage(),
           properties.historyWindow()).streaming();
       aiClient.stream(aiRequest, new ChatAiStreamHandler() {
@@ -178,22 +198,37 @@ public class ChatService {
           String checked = validation.content();
           ChatAiReply reply = new ChatAiReply(checked, validation.suggestedFoods(), result.promptTokens(),
               result.completionTokens(), result.modelVersion());
+          if (validation.replaced() || validation.suggestedFoods().size() != result.suggestedFoods().size()) {
+            metrics.recordAllergenHit();
+          }
           if (!tx.completeAssistant(active.assistantMessage(), checked, reply,
               TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))) {
+            metrics.recordAiError("conversation_busy");
             throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, active.userMessage().getId());
           }
+          if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
+          metrics.recordMessage("completed");
           if (validation.replaced()) handler.onReplace(checked);
           handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
               ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
         }
       });
     } catch (BusinessException exception) {
+      if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
+      metrics.recordMessage("failed");
+      metrics.recordAiError(exception.getErrorCode().name().toLowerCase());
       tx.markFailed(active.assistantMessage(), exception.getErrorCode().name());
       throw exception;
     } catch (RuntimeException exception) {
-      tx.markFailed(active.assistantMessage(), exception instanceof ChatSseException sseException
-          ? sseException.code() : ErrorCode.CHAT_AI_UNAVAILABLE.name());
-      if (exception instanceof ChatSseException) throw exception;
+      if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
+      metrics.recordMessage("failed");
+      if (exception instanceof ChatSseException sseException) {
+        if (!sseException.clientDisconnected()) metrics.recordAiError(sseException.code().toLowerCase());
+        tx.markFailed(active.assistantMessage(), sseException.code());
+        throw exception;
+      }
+      metrics.recordAiError("unavailable");
+      tx.markFailed(active.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, active.userMessage().getId());
     }
   }

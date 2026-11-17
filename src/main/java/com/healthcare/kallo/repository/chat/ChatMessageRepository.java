@@ -66,4 +66,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
       Pageable pageable);
 
   List<ChatMessage> findByConversationIdOrderByCreatedAtAscIdAsc(UUID conversationId);
+
+  @Modifying
+  @Query("delete from ChatMessage m where m.conversation.id in (select c.id from Conversation c where c.deletedAt is not null and c.deletedAt < :cutoff)")
+  int deleteSoftDeletedBefore(@Param("cutoff") Instant cutoff);
 }

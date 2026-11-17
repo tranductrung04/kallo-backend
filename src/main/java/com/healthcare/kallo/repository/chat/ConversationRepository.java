@@ -42,4 +42,8 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
       where c.id = :id and c.deletedAt is null
       """)
   int touchLastMessageAt(@Param("id") UUID id, @Param("lastMessageAt") java.time.Instant lastMessageAt);
+
+  @Modifying
+  @Query("delete from Conversation c where c.deletedAt is not null and c.deletedAt < :cutoff")
+  int deleteSoftDeletedBefore(@Param("cutoff") java.time.Instant cutoff);
 }

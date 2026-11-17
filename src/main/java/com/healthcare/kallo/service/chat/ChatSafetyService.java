@@ -13,14 +13,23 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ChatSafetyService {
+  private final ChatMetrics metrics;
+
+  public ChatSafetyService(ChatMetrics metrics) {
+    this.metrics = metrics;
+  }
   private static final String ALLERGEN_REPLACEMENT =
       "Mình không thể giữ gợi ý này vì có thể chứa thành phần bạn dị ứng. "
           + "Hãy chọn món có thành phần rõ ràng và kiểm tra nhãn trước khi dùng.";
 
   public String validateAndNormalizeInput(String content, int maxLength) {
     String normalized = content == null ? "" : content.trim().replaceAll("[\\p{Cntrl}&&[^\\r\\n\\t]]", "");
-    if (normalized.isBlank()) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+    if (normalized.isBlank()) {
+      metrics.recordSafetyBlocked("blank_input");
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+    }
     if (normalized.codePointCount(0, normalized.length()) > maxLength) {
+      metrics.recordSafetyBlocked("payload_too_large");
       throw new BusinessException(ErrorCode.PAYLOAD_TOO_LARGE);
     }
     return normalized;
