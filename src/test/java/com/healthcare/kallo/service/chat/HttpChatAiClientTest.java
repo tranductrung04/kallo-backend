@@ -34,6 +34,23 @@ class HttpChatAiClientTest {
     assertThat(deltas).containsExactly("hello");
   }
 
+  @Test
+  void streamFailsWhenDoneEventIsMissing() {
+    RestClient.Builder builder = RestClient.builder().baseUrl("http://ai");
+    MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+    HttpChatAiClient ai = new HttpChatAiClient(builder.build(), properties(), new ObjectMapper());
+    server.expect(org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo("http://ai/v1/chat"))
+        .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess(
+            "event: delta\ndata: {\"text\":\"hello\"}\n\n", org.springframework.http.MediaType.TEXT_EVENT_STREAM));
+
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> ai.stream(
+        new ChatAiRequest(java.util.UUID.randomUUID(), List.of(
+            new ChatAiRequest.ChatHistoryMessage("user", "hello"))), new ChatAiStreamHandler() {
+          @Override public void onDelta(String text) {}
+          @Override public void onComplete(ChatAiStreamResult result) {}
+        })).isInstanceOf(ChatSseException.class);
+  }
+
   private ChatProperties properties() {
     return new ChatProperties(true,
         new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), false),

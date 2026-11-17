@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ChatService {
   private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+  private static final int MAX_STREAMED_OUTPUT_LENGTH = 20_000;
   private final ConversationRepository conversations;
   private final ChatMessageRepository messages;
   private final ChatAiClient aiClient;
@@ -66,9 +67,16 @@ public class ChatService {
     long latencyMs;
     try {
       long started = System.nanoTime();
-      generated = aiClient.generate(contextBuilder.build(userId, saved.conversation().getId(), saved.userMessage(),
-          properties.historyWindow()));
-      checked = safety.validateOutput(generated.content());
+      ChatAiRequest aiRequest = contextBuilder.build(userId, saved.conversation().getId(), saved.userMessage(),
+          properties.historyWindow());
+      generated = aiClient.generate(aiRequest);
+      var validation = safety.validateOutputWithGuardrails(generated.content(),
+          aiRequest.systemContext().allergies(), generated.suggestedFoods());
+      checked = validation.content();
+      if (validation.replaced() || validation.suggestedFoods().size() != generated.suggestedFoods().size()) {
+        generated = new ChatAiReply(checked, validation.suggestedFoods(), generated.promptTokens(),
+            generated.completionTokens(), generated.modelVersion());
+      }
       latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
     } catch (BusinessException exception) {
       tx.markFailed(saved.assistantMessage(), exception.getErrorCode().name());
@@ -110,32 +118,33 @@ public class ChatService {
     return generateReply(userId, saved);
   }
 
-  public void streamMessage(UUID userId, SendMessageRequest request, ChatResponseStreamHandler handler) {
+  public ChatTxService.SavedMessage prepareStreamMessage(UUID userId, SendMessageRequest request) {
     if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     String content = safety.validateAndNormalizeInput(request.content(), properties.maxMessageLength());
-    ChatTxService.SavedMessage saved;
     try {
-      saved = tx.findExistingMessage(userId, request);
+      ChatTxService.SavedMessage saved = tx.findExistingMessage(userId, request);
       if (saved != null) {
-        if (saved.alreadyAnswered()) {
-          handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
-          handler.onDelta(saved.assistantMessage().getContent());
-          handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(saved.conversation().getId(),
-              ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
-          return;
-        }
+        if (saved.alreadyAnswered()) return saved;
         rateLimiter.check(userId);
-        saved = tx.retryFailed(saved);
-      } else {
-        rateLimiter.check(userId);
-        saved = tx.saveUserMessage(userId, request, content);
+        return tx.retryFailed(saved);
       }
+      rateLimiter.check(userId);
+      return tx.saveUserMessage(userId, request, content);
     } catch (DataIntegrityViolationException exception) {
       if (tx.isIdempotencyViolation(exception)) {
-        saved = tx.retryExistingMessage(userId, request);
-        if (!saved.alreadyAnswered()) saved = tx.retryFailed(saved);
-      } else throw tx.mapIntegrityViolation(exception);
+        ChatTxService.SavedMessage saved = tx.retryExistingMessage(userId, request);
+        return saved.alreadyAnswered() ? saved : tx.retryFailed(saved);
+      }
+      throw tx.mapIntegrityViolation(exception);
     }
+  }
+
+  public void streamMessage(UUID userId, SendMessageRequest request, ChatResponseStreamHandler handler) {
+    streamPreparedMessage(userId, prepareStreamMessage(userId, request), handler);
+  }
+
+  public void streamPreparedMessage(UUID userId, ChatTxService.SavedMessage saved,
+      ChatResponseStreamHandler handler) {
     if (saved.alreadyAnswered()) {
       handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
       handler.onDelta(saved.assistantMessage().getContent());
@@ -153,21 +162,27 @@ public class ChatService {
       aiClient.stream(aiRequest, new ChatAiStreamHandler() {
         @Override
         public void onDelta(String text) {
-          if (text != null && !text.isEmpty()) {
-            contentBuilder.append(text);
-            handler.onDelta(text);
+          if (text == null || text.isEmpty()) return;
+          if (contentBuilder.codePointCount(0, contentBuilder.length()) + text.codePointCount(0, text.length())
+              > MAX_STREAMED_OUTPUT_LENGTH) {
+            throw new ChatSseException("CHAT_AI_OUTPUT_TOO_LARGE", "AI output exceeds maximum length");
           }
+          contentBuilder.append(text);
+          if (aiRequest.systemContext().allergies().isEmpty()) handler.onDelta(text);
         }
 
         @Override
         public void onComplete(ChatAiStreamResult result) {
-          String checked = safety.validateOutput(contentBuilder.toString());
-          ChatAiReply reply = new ChatAiReply(checked, result.suggestedFoods(), result.promptTokens(),
+          var validation = safety.validateOutputWithGuardrails(contentBuilder.toString(),
+              aiRequest.systemContext().allergies(), result.suggestedFoods());
+          String checked = validation.content();
+          ChatAiReply reply = new ChatAiReply(checked, validation.suggestedFoods(), result.promptTokens(),
               result.completionTokens(), result.modelVersion());
           if (!tx.completeAssistant(active.assistantMessage(), checked, reply,
               TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))) {
             throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, active.userMessage().getId());
           }
+          if (validation.replaced()) handler.onReplace(checked);
           handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
               ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
         }
@@ -176,7 +191,9 @@ public class ChatService {
       tx.markFailed(active.assistantMessage(), exception.getErrorCode().name());
       throw exception;
     } catch (RuntimeException exception) {
-      tx.markFailed(active.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
+      tx.markFailed(active.assistantMessage(), exception instanceof ChatSseException sseException
+          ? sseException.code() : ErrorCode.CHAT_AI_UNAVAILABLE.name());
+      if (exception instanceof ChatSseException) throw exception;
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, active.userMessage().getId());
     }
   }

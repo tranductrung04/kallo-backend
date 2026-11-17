@@ -122,6 +122,14 @@ public class ChatTxService {
         Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)),
         Map.of("suggestedFoods", generated.suggestedFoods()));
     if (updated == 0) return false;
+    assistant.setContent(content);
+    assistant.setStatus(ChatMessageStatus.COMPLETED);
+    assistant.setPendingSince(null);
+    assistant.setPromptTokens(generated.promptTokens());
+    assistant.setCompletionTokens(generated.completionTokens());
+    assistant.setModelVersion(generated.modelVersion());
+    assistant.setLatencyMs(Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)));
+    assistant.setMetadata(Map.of("suggestedFoods", generated.suggestedFoods()));
     conversations.touchLastMessageAt(assistant.getConversation().getId(), assistant.getCreatedAt());
     return true;
   }

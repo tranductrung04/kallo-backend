@@ -20,4 +20,14 @@ class ChatSafetyServiceTest {
         .isInstanceOf(BusinessException.class)
         .hasMessageContaining("Payload");
   }
+
+  @Test
+  void replacesOutputContainingAllergen() {
+    var result = safety.validateOutputWithGuardrails("Gợi ý món có tôm", java.util.List.of("đậu phộng"));
+    assertThat(result.replaced()).isFalse();
+
+    result = safety.validateOutputWithGuardrails("Gợi ý món có tôm", java.util.List.of("tôm"));
+    assertThat(result.replaced()).isTrue();
+    assertThat(result.content()).doesNotContain("tôm");
+  }
 }
