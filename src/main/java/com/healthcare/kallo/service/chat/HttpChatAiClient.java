@@ -12,6 +12,7 @@ import java.net.SocketTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeoutException;
@@ -112,14 +113,17 @@ public class HttpChatAiClient implements ChatAiClient {
 
   private Void readStream(java.io.InputStream input, ChatAiStreamHandler handler) {
     ChatAiStreamResult result = new ChatAiStreamResult(List.of(), null, null, null);
+    List<ChatAiReply.SuggestedFood> suggestedFoods = new ArrayList<>();
     try (BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8))) {
       String event = null;
       String data;
+      boolean completed = false;
       StringBuilder payload = new StringBuilder();
       while ((data = reader.readLine()) != null) {
         if (data.isEmpty()) {
           if (event != null && payload.length() > 0) {
-            result = handleEvent(event, payload.toString(), handler, result);
+            result = handleEvent(event, payload.toString(), handler, result, suggestedFoods);
+            completed = completed || "done".equals(event);
           }
           event = null;
           payload.setLength(0);
@@ -130,7 +134,11 @@ public class HttpChatAiClient implements ChatAiClient {
           payload.append(data.substring(5).trim());
         }
       }
-      if (event != null && payload.length() > 0) handleEvent(event, payload.toString(), handler, result);
+      if (event != null && payload.length() > 0) {
+        handleEvent(event, payload.toString(), handler, result, suggestedFoods);
+        completed = "done".equals(event);
+      }
+      if (!completed) throw new ChatSseException(new IllegalStateException("AI stream ended before done event"));
       return null;
     } catch (IOException exception) {
       throw new ChatSseException(exception);
@@ -138,7 +146,7 @@ public class HttpChatAiClient implements ChatAiClient {
   }
 
   private ChatAiStreamResult handleEvent(String event, String payload, ChatAiStreamHandler handler,
-      ChatAiStreamResult current) {
+      ChatAiStreamResult current, List<ChatAiReply.SuggestedFood> suggestedFoods) {
     try {
       JsonNode node = objectMapper.readTree(payload);
       if ("delta".equals(event)) {
@@ -147,14 +155,28 @@ public class HttpChatAiClient implements ChatAiClient {
       }
       if ("done".equals(event)) {
         JsonNode usage = node.path("usage");
-        ChatAiStreamResult result = new ChatAiStreamResult(List.of(),
+        JsonNode foods = node.path("suggestedFoods");
+        if (foods.isArray()) {
+          suggestedFoods.clear();
+          for (JsonNode food : foods) {
+            if (food.path("name").isTextual()) {
+              suggestedFoods.add(new ChatAiReply.SuggestedFood(food.path("name").textValue(),
+                  food.path("kcal").isNumber() ? food.path("kcal").intValue() : null));
+            }
+          }
+        }
+        ChatAiStreamResult result = new ChatAiStreamResult(suggestedFoods,
             usage.path("promptTokens").isNumber() ? usage.path("promptTokens").intValue() : null,
             usage.path("completionTokens").isNumber() ? usage.path("completionTokens").intValue() : null,
             node.path("modelVersion").isTextual() ? node.path("modelVersion").textValue() : null);
         handler.onComplete(result);
         return result;
       }
-      if ("error".equals(event)) throw new ChatSseException(new IllegalStateException("AI stream error"));
+      if ("error".equals(event)) {
+        String code = node.path("code").asText("CHAT_AI_STREAM_FAILED");
+        String message = node.path("message").asText("AI stream error");
+        throw new ChatSseException(new IllegalStateException(code + ": " + message));
+      }
       return current;
     } catch (IOException exception) {
       throw new ChatSseException(exception);

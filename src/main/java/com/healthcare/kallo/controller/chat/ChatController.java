@@ -11,15 +11,17 @@ import com.healthcare.kallo.security.auth.CurrentUser;
 import com.healthcare.kallo.config.ChatProperties;
 import com.healthcare.kallo.service.chat.ChatResponseStreamHandler;
 import com.healthcare.kallo.service.chat.ChatService;
+import com.healthcare.kallo.service.chat.ChatTxService;
 import com.healthcare.kallo.service.chat.ChatSseService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
-import org.springframework.http.HttpHeaders;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -63,22 +65,39 @@ public class ChatController {
   @PostMapping(value = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   @org.springframework.web.bind.annotation.ResponseBody
   @Operation(summary = "Stream chat message response")
-  public SseEmitter stream(@Valid @RequestBody SendMessageRequest request, Authentication authentication) {
+  public SseEmitter stream(@Valid @RequestBody SendMessageRequest request, Authentication authentication,
+      jakarta.servlet.http.HttpServletResponse response) {
+    UUID userId = CurrentUser.id(authentication);
+    ChatTxService.SavedMessage saved = chat.prepareStreamMessage(userId, request);
+    response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
+    response.setHeader("X-Accel-Buffering", "no");
     SseEmitter emitter = new SseEmitter(properties.sseTimeout().toMillis());
-    emitter.onTimeout(emitter::complete);
-    emitter.onError(error -> emitter.complete());
+    AtomicBoolean cancelled = new AtomicBoolean();
+    emitter.onTimeout(() -> {
+      cancelled.set(true);
+      emitter.complete();
+    });
+    emitter.onError(error -> {
+      cancelled.set(true);
+      emitter.complete();
+    });
     ScheduledFuture<?> heartbeat = sse.scheduleHeartbeat(() -> {
+      if (cancelled.get()) return;
       try {
         emitter.send(SseEmitter.event().comment("ping"));
       } catch (Exception exception) {
-        emitter.completeWithError(exception);
+        cancelled.set(true);
+        emitter.complete();
       }
     }, properties.sseHeartbeatSeconds());
-    emitter.onCompletion(() -> heartbeat.cancel(false));
+    emitter.onCompletion(() -> {
+      cancelled.set(true);
+      heartbeat.cancel(false);
+    });
     sse.execute(() -> {
       try {
-        UUID userId = CurrentUser.id(authentication);
-        chat.streamMessage(userId, request, new ChatResponseStreamHandler() {
+        emitter.send(SseEmitter.event().comment("connected"));
+        chat.streamPreparedMessage(userId, saved, new ChatResponseStreamHandler() {
           @Override
           public void onMeta(UUID conversationId, UUID userMessageId, UUID assistantMessageId) {
             send("meta", java.util.Map.of("conversationId", conversationId, "userMessageId", userMessageId,
@@ -87,7 +106,12 @@ public class ChatController {
 
           @Override
           public void onDelta(String text) {
-            send("delta", java.util.Map.of("text", text));
+            if (!cancelled.get()) send("delta", java.util.Map.of("text", text));
+          }
+
+          @Override
+          public void onReplace(String text) {
+            send("replace", java.util.Map.of("text", text));
           }
 
           @Override
@@ -97,20 +121,28 @@ public class ChatController {
           }
 
           private void send(String event, Object data) {
+            if (cancelled.get()) throw com.healthcare.kallo.service.chat.ChatSseException
+                .clientDisconnected(new IllegalStateException("CLIENT_DISCONNECTED"));
             try {
               emitter.send(SseEmitter.event().name(event).data(data));
             } catch (Exception exception) {
+              cancelled.set(true);
               throw new com.healthcare.kallo.service.chat.ChatSseException(exception);
             }
           }
         });
       } catch (Exception exception) {
-        try {
-          emitter.send(SseEmitter.event().name("error").data(java.util.Map.of("code", "CHAT_STREAM_FAILED")));
-        } catch (Exception ignored) {
-          // Client already disconnected.
+        if (!cancelled.get()) {
+          try {
+            String code = exception instanceof com.healthcare.kallo.service.chat.ChatSseException sseException
+                ? sseException.code() : "CHAT_STREAM_FAILED";
+            emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
+                "code", code, "message", "Chat stream failed")));
+          } catch (Exception ignored) {
+            // Client already disconnected.
+          }
         }
-        emitter.completeWithError(exception);
+        emitter.complete();
       }
     });
     return emitter;

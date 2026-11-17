@@ -8,6 +8,8 @@ public interface ChatResponseStreamHandler {
 
   void onDelta(String text);
 
+  default void onReplace(String text) {}
+
   void onDone(ChatReplyResponseData response);
 
   record ChatReplyResponseData(UUID conversationId, ChatMessageResponse userMessage,
