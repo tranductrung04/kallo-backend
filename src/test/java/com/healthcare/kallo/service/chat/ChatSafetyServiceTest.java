@@ -4,10 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.healthcare.kallo.common.BusinessException;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 class ChatSafetyServiceTest {
-  private final ChatSafetyService safety = new ChatSafetyService();
+  private final ChatSafetyService safety = new ChatSafetyService(new ChatMetrics(new SimpleMeterRegistry()));
 
   @Test
   void trimsAndRemovesControlCharacters() {

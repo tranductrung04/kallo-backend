@@ -726,14 +726,14 @@ test/...
 
 ### Phase 4 – Hardening (3–4 ngày)
 
-- [ ] Rate limit (Redis/Bucket4j) + header `Retry-After` + test.
-- [ ] Job retention (xoá cứng sau 30 ngày), xoá cascade khi xoá tài khoản.
-- [ ] Metrics Micrometer, log có cấu trúc, dashboard cơ bản (mục 15).
+- [x] Rate limit Redis + header `Retry-After` + test.
+- [x] Job retention xoá cứng conversation/message sau `CHAT_RETENTION_DAYS`; xoá cascade khi xoá tài khoản.
+- [x] Metrics Micrometer, log không chứa nội dung chat, endpoint metrics; Prometheus exporter chờ bổ sung dependency khi Maven access ổn định.
 - [ ] Load test (k6/Gatling): 100 user đồng thời, AI giả lập chậm.
-- [ ] Rà soát bảo mật: IDOR, log nhạy cảm, validation, kích thước payload.
-- [ ] Cập nhật README (endpoint, biến môi trường) + `.env.example`.
+- [x] Rà soát bảo mật: IDOR, validation, kích thước payload; Actuator health public, endpoint metrics/admin-only.
+- [x] Cập nhật README (endpoint, biến môi trường) + `.env.example`.
 
-**Hoàn thành khi:** đạt NFR mục 2.2; checklist bảo mật đạt; tài liệu cập nhật.
+**Hoàn thành phần code nền:** rate limit, retention, metrics và tài liệu đã có. Còn load test, dashboard/cảnh báo và hardening quyền truy cập Actuator production.
 
 ### Phase 5 – Mở rộng (tuỳ chọn, 3–5 ngày)
 

@@ -72,6 +72,7 @@ public class ChatController {
     response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
     response.setHeader("X-Accel-Buffering", "no");
     SseEmitter emitter = new SseEmitter(properties.sseTimeout().toMillis());
+    sse.openConnection();
     AtomicBoolean cancelled = new AtomicBoolean();
     emitter.onTimeout(() -> {
       cancelled.set(true);
@@ -93,58 +94,67 @@ public class ChatController {
     emitter.onCompletion(() -> {
       cancelled.set(true);
       heartbeat.cancel(false);
+      sse.closeConnection();
     });
-    sse.execute(() -> {
-      try {
-        emitter.send(SseEmitter.event().comment("connected"));
-        chat.streamPreparedMessage(userId, saved, new ChatResponseStreamHandler() {
-          @Override
-          public void onMeta(UUID conversationId, UUID userMessageId, UUID assistantMessageId) {
-            send("meta", java.util.Map.of("conversationId", conversationId, "userMessageId", userMessageId,
-                "assistantMessageId", assistantMessageId));
-          }
+    try {
+      sse.execute(() -> {
+        try {
+          emitter.send(SseEmitter.event().comment("connected"));
+          chat.streamPreparedMessage(userId, saved, new ChatResponseStreamHandler() {
+            @Override
+            public void onMeta(UUID conversationId, UUID userMessageId, UUID assistantMessageId) {
+              send("meta", java.util.Map.of("conversationId", conversationId, "userMessageId", userMessageId,
+                  "assistantMessageId", assistantMessageId));
+            }
 
-          @Override
-          public void onDelta(String text) {
-            if (!cancelled.get()) send("delta", java.util.Map.of("text", text));
-          }
+            @Override
+            public void onDelta(String text) {
+              if (!cancelled.get()) send("delta", java.util.Map.of("text", text));
+            }
 
-          @Override
-          public void onReplace(String text) {
-            send("replace", java.util.Map.of("text", text));
-          }
+            @Override
+            public void onReplace(String text) {
+              send("replace", java.util.Map.of("text", text));
+            }
 
-          @Override
-          public void onDone(ChatReplyResponseData response) {
-            send("done", response);
-            emitter.complete();
-          }
+            @Override
+            public void onDone(ChatReplyResponseData response) {
+              send("done", response);
+              emitter.complete();
+            }
 
-          private void send(String event, Object data) {
-            if (cancelled.get()) throw com.healthcare.kallo.service.chat.ChatSseException
-                .clientDisconnected(new IllegalStateException("CLIENT_DISCONNECTED"));
+            private void send(String event, Object data) {
+              if (cancelled.get()) throw com.healthcare.kallo.service.chat.ChatSseException
+                  .clientDisconnected(new IllegalStateException("CLIENT_DISCONNECTED"));
+              try {
+                emitter.send(SseEmitter.event().name(event).data(data));
+              } catch (Exception exception) {
+                cancelled.set(true);
+                throw new com.healthcare.kallo.service.chat.ChatSseException(exception);
+              }
+            }
+          });
+        } catch (Exception exception) {
+          if (!cancelled.get()) {
             try {
-              emitter.send(SseEmitter.event().name(event).data(data));
-            } catch (Exception exception) {
-              cancelled.set(true);
-              throw new com.healthcare.kallo.service.chat.ChatSseException(exception);
+              String code = exception instanceof com.healthcare.kallo.service.chat.ChatSseException sseException
+                  ? sseException.code() : "CHAT_STREAM_FAILED";
+              emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
+                  "code", code, "message", "Chat stream failed")));
+            } catch (Exception ignored) {
+              // Client already disconnected.
             }
           }
-        });
-      } catch (Exception exception) {
-        if (!cancelled.get()) {
-          try {
-            String code = exception instanceof com.healthcare.kallo.service.chat.ChatSseException sseException
-                ? sseException.code() : "CHAT_STREAM_FAILED";
-            emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
-                "code", code, "message", "Chat stream failed")));
-          } catch (Exception ignored) {
-            // Client already disconnected.
-          }
+          emitter.complete();
         }
-        emitter.complete();
-      }
-    });
+      });
+    } catch (com.healthcare.kallo.service.chat.ChatSseException exception) {
+      cancelled.set(true);
+      heartbeat.cancel(false);
+      sse.closeConnection();
+      chat.markStreamFailed(saved, exception.code());
+      throw exception;
+    }
     return emitter;
   }
 

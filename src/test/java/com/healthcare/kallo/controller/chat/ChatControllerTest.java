@@ -1,6 +1,9 @@
 package com.healthcare.kallo.controller.chat;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -12,6 +15,7 @@ import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.RateLimitTestConfig;
 import com.healthcare.kallo.service.chat.ChatService;
+import com.healthcare.kallo.service.chat.ChatTxService;
 import com.healthcare.kallo.service.chat.ChatSseService;
 import com.healthcare.kallo.config.ChatProperties;
 import java.util.UUID;
@@ -33,6 +37,7 @@ class ChatControllerTest {
   @MockitoBean ChatService chat;
   @MockitoBean ChatSseService sse;
   @MockitoBean ChatProperties properties;
+  @MockitoBean ChatTxService tx;
 
   @Test
   void rejectsOversizedMessageBeforeService() throws Exception {
@@ -44,6 +49,29 @@ class ChatControllerTest {
                 + UUID.randomUUID() + "\"}"))
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.error.code").value("VALIDATION_ERROR"));
+  }
+
+  @Test
+  void releasesSseSlotWhenWorkerPoolIsFull() throws Exception {
+    UUID userId = UUID.randomUUID();
+    when(properties.sseTimeout()).thenReturn(java.time.Duration.ofSeconds(60));
+    when(properties.sseHeartbeatSeconds()).thenReturn(15);
+    when(sse.scheduleHeartbeat(any(), anyLong())).thenReturn(org.mockito.Mockito.mock(java.util.concurrent.ScheduledFuture.class));
+    ChatTxService.SavedMessage saved = org.mockito.Mockito.mock(ChatTxService.SavedMessage.class);
+    when(chat.prepareStreamMessage(any(), any())).thenReturn(saved);
+    doThrow(new com.healthcare.kallo.service.chat.ChatSseException(
+        "CHAT_STREAM_CAPACITY", "Too many active chat streams")).when(sse).execute(any());
+
+    assertThatThrownBy(() -> mockMvc.perform(post("/api/chat/messages/stream")
+            .with(jwt().jwt(Jwt.withTokenValue("token").subject(userId.toString()).header("alg", "none").build()))
+            .contentType(MediaType.APPLICATION_JSON)
+            .accept(MediaType.TEXT_EVENT_STREAM)
+            .content("{\"content\":\"hello\",\"clientMessageId\":\"" + UUID.randomUUID() + "\"}")))
+        .hasRootCauseInstanceOf(com.healthcare.kallo.service.chat.ChatSseException.class);
+
+    org.mockito.Mockito.verify(sse).openConnection();
+    org.mockito.Mockito.verify(sse).closeConnection();
+    org.mockito.Mockito.verify(chat).markStreamFailed(saved, "CHAT_STREAM_CAPACITY");
   }
 
   @Test

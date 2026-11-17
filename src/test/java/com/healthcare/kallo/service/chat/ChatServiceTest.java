@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -36,7 +37,8 @@ class ChatServiceTest {
   @Mock ChatRateLimiter rateLimiter;
   @Mock ChatTxService tx;
 
-  private final ChatSafetyService safety = new ChatSafetyService();
+  private final ChatMetrics metrics = new ChatMetrics(new SimpleMeterRegistry());
+  private final ChatSafetyService safety = new ChatSafetyService(metrics);
   private ChatService service;
   private final UUID userId = UUID.randomUUID();
   private final UUID conversationId = UUID.randomUUID();
@@ -48,7 +50,7 @@ class ChatServiceTest {
         new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), true),
         12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30,
         Duration.ofSeconds(60), 15);
-    service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx);
+    service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx, metrics);
   }
 
   @Test
