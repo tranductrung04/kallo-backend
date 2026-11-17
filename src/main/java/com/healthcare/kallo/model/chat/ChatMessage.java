@@ -71,12 +71,16 @@ public class ChatMessage {
 
   private Short feedback;
 
+  @Column(name = "pending_since")
+  private Instant pendingSince;
+
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
   @PrePersist
   void onCreate() {
     if (createdAt == null) createdAt = Instant.now();
+    if (status == ChatMessageStatus.PENDING && pendingSince == null) pendingSince = createdAt;
   }
 
   @Override

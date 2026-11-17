@@ -26,12 +26,16 @@ public class ChatContextBuilder {
         .filter(message -> !message.getId().equals(currentUserMessage.getId()))
         .toList().reversed());
     if (ordered.size() > oldMessageLimit) {
-      ordered = new java.util.ArrayList<>(ordered.subList(ordered.size() - oldMessageLimit, ordered.size()));
+      ordered = oldMessageLimit == 0 ? new java.util.ArrayList<>()
+          : new java.util.ArrayList<>(ordered.subList(ordered.size() - oldMessageLimit, ordered.size()));
     }
     ordered.add(currentUserMessage);
     ChatAiRequest request = new ChatAiRequest(conversationId, ordered.stream()
         .map(m -> new ChatAiRequest.ChatHistoryMessage(m.getRole().name().toLowerCase(), m.getContent()))
         .toList());
-    return request.withContext(contextProvider.get(userId));
+    ChatContextData context = contextProvider.get(userId);
+    if (context == null) context = ChatContextData.empty();
+    return request.withContext(context);
   }
+
 }

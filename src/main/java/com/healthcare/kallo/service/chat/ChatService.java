@@ -52,27 +52,14 @@ public class ChatService {
     this.tx = tx;
   }
 
-  public ChatReplyResponse sendMessage(UUID userId, SendMessageRequest request) {
+  public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
     if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
-    String content = safety.validateAndNormalizeInput(request.content(), properties.maxMessageLength());
-    ChatTxService.SavedMessage saved;
-    try {
-      saved = tx.findExistingMessage(userId, request);
-      if (saved != null) {
-        if (saved.alreadyAnswered()) return reply(saved.userMessage(), saved.assistantMessage());
-        rateLimiter.check(userId);
-        saved = tx.retryFailed(saved);
-      } else {
-        rateLimiter.check(userId);
-        saved = tx.saveUserMessage(userId, request, content);
-      }
-    } catch (DataIntegrityViolationException exception) {
-      if (tx.isIdempotencyViolation(exception)) {
-        saved = tx.retryExistingMessage(userId, request);
-      } else {
-        throw tx.mapIntegrityViolation(exception);
-      }
-    }
+    rateLimiter.check(userId);
+    ChatTxService.SavedMessage saved = tx.retryByAssistantId(userId, assistantMessageId);
+    return generateReply(userId, saved);
+  }
+
+  private ChatReplyResponse generateReply(UUID userId, ChatTxService.SavedMessage saved) {
     if (saved.alreadyAnswered()) return reply(saved.userMessage(), saved.assistantMessage());
     ChatAiReply generated;
     String checked;
@@ -98,6 +85,31 @@ public class ChatService {
     return reply(saved.userMessage(), saved.assistantMessage());
   }
 
+  public ChatReplyResponse sendMessage(UUID userId, SendMessageRequest request) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
+    String content = safety.validateAndNormalizeInput(request.content(), properties.maxMessageLength());
+    ChatTxService.SavedMessage saved;
+    try {
+      saved = tx.findExistingMessage(userId, request);
+      if (saved != null) {
+        if (saved.alreadyAnswered()) return reply(saved.userMessage(), saved.assistantMessage());
+        rateLimiter.check(userId);
+        saved = tx.retryFailed(saved);
+      } else {
+        rateLimiter.check(userId);
+        saved = tx.saveUserMessage(userId, request, content);
+      }
+    } catch (DataIntegrityViolationException exception) {
+      if (tx.isIdempotencyViolation(exception)) {
+        saved = tx.retryExistingMessage(userId, request);
+        if (!saved.alreadyAnswered()) saved = tx.retryFailed(saved);
+      } else {
+        throw tx.mapIntegrityViolation(exception);
+      }
+    }
+    return generateReply(userId, saved);
+  }
+
   public void streamMessage(UUID userId, SendMessageRequest request, ChatResponseStreamHandler handler) {
     if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     String content = safety.validateAndNormalizeInput(request.content(), properties.maxMessageLength());
@@ -119,8 +131,10 @@ public class ChatService {
         saved = tx.saveUserMessage(userId, request, content);
       }
     } catch (DataIntegrityViolationException exception) {
-      if (tx.isIdempotencyViolation(exception)) saved = tx.retryExistingMessage(userId, request);
-      else throw tx.mapIntegrityViolation(exception);
+      if (tx.isIdempotencyViolation(exception)) {
+        saved = tx.retryExistingMessage(userId, request);
+        if (!saved.alreadyAnswered()) saved = tx.retryFailed(saved);
+      } else throw tx.mapIntegrityViolation(exception);
     }
     if (saved.alreadyAnswered()) {
       handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());

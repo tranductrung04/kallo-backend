@@ -47,6 +47,29 @@ public class HttpChatAiClient implements ChatAiClient {
 
   @Override
   public void stream(ChatAiRequest request, ChatAiStreamHandler handler) {
+    Throwable last = null;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        invokeStream(request, handler);
+        return;
+      } catch (ResourceAccessException exception) {
+        last = exception;
+        if (attempt == 0 && !isTimeout(exception)) continue;
+        throw mapAccessFailure(exception);
+      } catch (RestClientResponseException exception) {
+        last = exception;
+        if (attempt == 0 && exception.getStatusCode().is5xxServerError()) continue;
+        throw mapHttpFailure(exception);
+      } catch (ChatSseException exception) {
+        throw exception;
+      } catch (RestClientException exception) {
+        throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE);
+      }
+    }
+    throw mapAccessFailure(last);
+  }
+
+  private void invokeStream(ChatAiRequest request, ChatAiStreamHandler handler) {
     client.post()
         .uri("/v1/chat")
         .header("X-Request-Id", UUID.randomUUID().toString())
@@ -58,7 +81,8 @@ public class HttpChatAiClient implements ChatAiClient {
         .body(request.streaming())
         .exchange((requestMessage, response) -> {
           if (!response.getStatusCode().is2xxSuccessful()) {
-            throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE);
+            throw new RestClientResponseException("AI stream returned " + response.getStatusCode(),
+                response.getStatusCode().value(), response.getStatusText(), null, null, null);
           }
           readStream(response.getBody(), handler);
           return null;
@@ -67,7 +91,7 @@ public class HttpChatAiClient implements ChatAiClient {
 
   @Override
   public ChatAiReply generate(ChatAiRequest request) {
-    RuntimeException last = null;
+    Throwable last = null;
     for (int attempt = 0; attempt < 2; attempt++) {
       try {
         return invoke(request);
@@ -83,7 +107,7 @@ public class HttpChatAiClient implements ChatAiClient {
         throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE);
       }
     }
-    throw mapAccessFailure((ResourceAccessException) last);
+    throw mapAccessFailure(last);
   }
 
   private Void readStream(java.io.InputStream input, ChatAiStreamHandler handler) {

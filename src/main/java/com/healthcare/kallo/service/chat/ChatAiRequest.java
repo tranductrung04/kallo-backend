@@ -28,8 +28,10 @@ public record ChatAiRequest(UUID conversationId, String locale, ChatSystemContex
   public record ChatOptions(int maxTokens, boolean stream) {}
 
   public ChatAiRequest withContext(ChatContextData context) {
+    Map<String, Object> profile = new java.util.LinkedHashMap<>(context.profile());
+    if (!context.allergies().isEmpty()) profile.put("allergies", context.allergies());
     return new ChatAiRequest(conversationId, locale,
-        new ChatSystemContext(context.profile(), context.today(), context.allergies()), messages, options);
+        new ChatSystemContext(profile, context.today(), context.allergies()), messages, options);
   }
 
   public ChatAiRequest streaming() {

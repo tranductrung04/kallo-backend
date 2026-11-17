@@ -59,10 +59,12 @@ public class ChatTxService {
 
   @Transactional
   public SavedMessage retryFailed(SavedMessage existing) {
-    if (messages.retryFailed(existing.assistantMessage().getId()) == 0) {
+    Instant pendingSince = Instant.now();
+    if (messages.retryFailed(existing.assistantMessage().getId(), pendingSince) == 0) {
       throw new BusinessException(ErrorCode.CHAT_CONVERSATION_BUSY);
     }
     existing.assistantMessage().setStatus(ChatMessageStatus.PENDING);
+    existing.assistantMessage().setPendingSince(pendingSince);
     existing.assistantMessage().setContent(null);
     existing.assistantMessage().setMetadata(null);
     return new SavedMessage(existing.conversation(), existing.userMessage(), existing.assistantMessage(), false);
@@ -86,8 +88,10 @@ public class ChatTxService {
     }
     var pending = messages.findByConversationIdAndStatus(conversation.getId(), ChatMessageStatus.PENDING);
     if (pending.isPresent()) {
+      Instant pendingSince = pending.get().getPendingSince() == null
+          ? pending.get().getCreatedAt() : pending.get().getPendingSince();
       Instant cutoff = Instant.now().minus(properties.pendingTimeout());
-      if (pending.get().getCreatedAt().isAfter(cutoff)) {
+      if (pendingSince.isAfter(cutoff)) {
         throw new BusinessException(ErrorCode.CHAT_CONVERSATION_BUSY);
       }
       messages.failPending(pending.get().getId(), Map.of("reason", "PENDING_TIMEOUT"));
@@ -139,6 +143,22 @@ public class ChatTxService {
     ChatMessage userMessage = messages.findByConversationIdAndClientMessageId(conversation.getId(), request.clientMessageId())
         .orElseThrow(() -> new BusinessException(ErrorCode.CHAT_AI_UNAVAILABLE));
     return existingReply(conversation, userMessage);
+  }
+
+  @Transactional
+  public SavedMessage retryByAssistantId(UUID userId, UUID assistantMessageId) {
+    ChatMessage assistant = messages.findById(assistantMessageId)
+        .filter(message -> message.getRole() == ChatRole.ASSISTANT)
+        .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    Conversation conversation = conversations.findByIdAndUserIdAndDeletedAtIsNull(
+        assistant.getConversation().getId(), userId).orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+    if (assistant.getStatus() != ChatMessageStatus.FAILED) {
+      throw new BusinessException(assistant.getStatus() == ChatMessageStatus.PENDING
+          ? ErrorCode.CHAT_CONVERSATION_BUSY : ErrorCode.INVALID_PARAMETER);
+    }
+    ChatMessage userMessage = assistant.getParentMessage();
+    if (userMessage == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    return retryFailed(new SavedMessage(conversation, userMessage, assistant, false));
   }
 
   public boolean isIdempotencyViolation(DataIntegrityViolationException exception) {

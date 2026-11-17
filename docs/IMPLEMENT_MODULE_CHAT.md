@@ -309,7 +309,7 @@ Tiền tố `/api/chat`, tất cả yêu cầu JWT (`Authorization: Bearer <toke
 | DELETE | `/api/chat/conversations/{id}` | Xoá (soft delete) | 1 |
 | GET | `/api/chat/conversations/{id}/messages` | Lịch sử tin nhắn (`before`, `limit`) | 1 |
 | POST | `/api/chat/messages/stream` | Gửi tin, nhận SSE | 3 |
-| POST | `/api/chat/messages/{id}/retry` | Thử lại câu trả lời bị lỗi | 2 |
+| POST | `/api/chat/messages/{id}/retry` | Thử lại câu trả lời bị lỗi (`id` là `assistantMessageId`) | 2 |
 | POST | `/api/chat/messages/{id}/feedback` | 👍/👎 | 5 |
 | GET | `/api/chat/suggestions` | Gợi ý nhanh | 5 |
 
