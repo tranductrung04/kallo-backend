@@ -54,6 +54,12 @@ public class ChatController {
     return ApiResponse.success(chat.sendMessage(CurrentUser.id(authentication), request));
   }
 
+  @PostMapping("/messages/{id}/retry")
+  @Operation(summary = "Retry failed chat message")
+  public ApiResponse<ChatReplyResponse> retry(@PathVariable UUID id, Authentication authentication) {
+    return ApiResponse.success(chat.retryMessage(CurrentUser.id(authentication), id));
+  }
+
   @PostMapping(value = "/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   @org.springframework.web.bind.annotation.ResponseBody
   @Operation(summary = "Stream chat message response")

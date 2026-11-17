@@ -29,7 +29,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
   @Modifying
   @Query("""
       update ChatMessage m
-      set m.content = :content, m.status = 'COMPLETED', m.promptTokens = :promptTokens,
+      set m.content = :content, m.status = 'COMPLETED', m.pendingSince = null, m.promptTokens = :promptTokens,
           m.completionTokens = :completionTokens, m.modelVersion = :modelVersion,
           m.latencyMs = :latencyMs, m.metadata = :metadata
       where m.id = :id and m.status = 'PENDING'
@@ -40,18 +40,19 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
       @Param("metadata") java.util.Map<String, Object> metadata);
 
   @Modifying
-  @Query("update ChatMessage m set m.status = 'FAILED', m.metadata = :metadata where m.id = :id and m.status = 'PENDING'")
+  @Query("update ChatMessage m set m.status = 'FAILED', m.pendingSince = null, m.metadata = :metadata where m.id = :id and m.status = 'PENDING'")
   int failPending(@Param("id") UUID id, @Param("metadata") java.util.Map<String, Object> metadata);
 
   @Modifying
-  @Query("update ChatMessage m set m.status = 'FAILED', m.metadata = :metadata "
-      + "where m.status = 'PENDING' and m.createdAt < :cutoff")
+  @Query("update ChatMessage m set m.status = 'FAILED', m.pendingSince = null, m.metadata = :metadata "
+      + "where m.status = 'PENDING' and (m.pendingSince < :cutoff or (m.pendingSince is null and m.createdAt < :cutoff))")
   int failExpiredPending(@Param("cutoff") Instant cutoff,
       @Param("metadata") java.util.Map<String, Object> metadata);
 
   @Modifying
-  @Query("update ChatMessage m set m.status = 'PENDING', m.metadata = null where m.id = :id and m.status = 'FAILED'")
-  int retryFailed(@Param("id") UUID id);
+  @Query("update ChatMessage m set m.status = 'PENDING', m.pendingSince = :pendingSince, m.metadata = null "
+      + "where m.id = :id and m.status = 'FAILED'")
+  int retryFailed(@Param("id") UUID id, @Param("pendingSince") Instant pendingSince);
 
   @Query("""
       select m from ChatMessage m
