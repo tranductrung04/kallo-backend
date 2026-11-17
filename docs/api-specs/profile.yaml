@@ -1,0 +1,358 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - PROFILE API
+  version: 1.0.0
+  description: |
+    API quản lý hồ sơ sức khoẻ, các chỉ số sinh học (BMI, BMR, TDEE) và mục tiêu dinh dưỡng hàng ngày (Calo, Macros, Nước).
+    User ID luôn được trích xuất từ JWT token của người dùng hiện hành; yêu cầu tài khoản đã xác minh email.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: health-profile
+    description: Quản lý hồ sơ sức khỏe và mục tiêu thể trạng người dùng
+
+paths:
+  /api/users/me/profile:
+    get:
+      tags: [health-profile]
+      summary: Lấy thông tin hồ sơ sức khoẻ của người dùng hiện tại
+      description: Trả về toàn bộ chỉ số thể trạng (chiều cao, cân nặng, BMI, phân loại thể trạng chuẩn châu Á, BMR, TDEE, mục tiêu calo, phân bổ macro P/C/F, mục tiêu nước uống và các cảnh báo an toàn / đề xuất cập nhật).
+      responses:
+        '200':
+          description: Lấy hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Người dùng chưa hoàn thành thiết lập hồ sơ sức khoẻ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    put:
+      tags: [health-profile]
+      summary: Thiết lập hoặc cập nhật toàn diện hồ sơ sức khoẻ
+      description: |
+        Tạo mới hoặc cập nhật hồ sơ thể trạng. Hệ thống tự động tính toán thuần hàm:
+        - Tuổi từ `birthDate`
+        - BMI và phân loại thể trạng theo chuẩn WHO châu Á (WPRO)
+        - BMR theo Mifflin-St Jeor
+        - TDEE theo hệ số vận động
+        - Mục tiêu calo hàng ngày có kẹp an toàn (Safety Clamping >= 1200 kcal nữ / >= 1500 kcal nam)
+        - Phân chia tỷ lệ macro (P/C/F) mặc định hoặc theo tỷ lệ tuỳ chỉnh của người dùng
+        - Mục tiêu nước uống mặc định 35 ml/kg
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/HealthProfileRequest'
+      responses:
+        '200':
+          description: Cập nhật hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileApiResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/users/me/profile/recalculate:
+    post:
+      tags: [health-profile]
+      summary: Chấp nhận áp dụng đề xuất cập nhật calo/TDEE từ cân nặng mới nhất
+      description: |
+        Khi người dùng ghi nhận cân nặng mới (qua module ACT) làm lệch TDEE >= 100 kcal, hệ thống bật cờ đề xuất `recalculationRecommended: true`.
+        Gọi endpoint này để tự động cập nhật cân nặng hồ sơ sang cân nặng mới nhất và đồng bộ lại toàn bộ mục tiêu calo, macro.
+      responses:
+        '200':
+          description: Đã áp dụng tính toán lại thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileApiResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Gender:
+      type: string
+      enum: [MALE, FEMALE, OTHER]
+      example: MALE
+
+    ActivityLevel:
+      type: string
+      enum: [SEDENTARY, LIGHTLY_ACTIVE, MODERATELY_ACTIVE, VERY_ACTIVE, EXTRA_ACTIVE]
+      description: |
+        - `SEDENTARY`: Ít vận động, ngồi nhiều (hệ số 1.2)
+        - `LIGHTLY_ACTIVE`: Vận động nhẹ, 1-3 buổi/tuần (hệ số 1.375)
+        - `MODERATELY_ACTIVE`: Vừa phải, 3-5 buổi/tuần (hệ số 1.55)
+        - `VERY_ACTIVE`: Năng động, 6-7 buổi/tuần (hệ số 1.725)
+        - `EXTRA_ACTIVE`: Rất nhiều, tập 2 lần/ngày hoặc lao động nặng (hệ số 1.9)
+      example: MODERATELY_ACTIVE
+
+    GoalType:
+      type: string
+      enum: [LOSE_WEIGHT, MAINTAIN_WEIGHT, GAIN_WEIGHT]
+      example: LOSE_WEIGHT
+
+    BmiCategory:
+      type: string
+      enum: [UNDERWEIGHT, NORMAL, OVERWEIGHT, OBESE]
+      description: |
+        Phân loại BMI theo ngưỡng chuẩn WPRO (châu Á):
+        - `UNDERWEIGHT`: BMI < 18.5 (Thiếu cân)
+        - `NORMAL`: 18.5 <= BMI <= 22.9 (Bình thường)
+        - `OVERWEIGHT`: 23.0 <= BMI <= 24.9 (Thừa cân / Tiền béo phì)
+        - `OBESE`: BMI >= 25.0 (Béo phì)
+      example: NORMAL
+
+    HealthProfileRequest:
+      type: object
+      required:
+        - gender
+        - birthDate
+        - heightCm
+        - weightKg
+        - activityLevel
+        - goalType
+      properties:
+        gender:
+          $ref: '#/components/schemas/Gender'
+        birthDate:
+          type: string
+          format: date
+          example: '1998-05-15'
+          description: Ngày sinh của người dùng (tuổi phải từ 13 đến 120)
+        heightCm:
+          type: number
+          format: double
+          minimum: 100.0
+          maximum: 250.0
+          example: 172.5
+        weightKg:
+          type: number
+          format: double
+          minimum: 20.0
+          maximum: 300.0
+          example: 68.0
+        activityLevel:
+          $ref: '#/components/schemas/ActivityLevel'
+        goalType:
+          $ref: '#/components/schemas/GoalType'
+        targetWeightKg:
+          type: number
+          format: double
+          minimum: 20.0
+          maximum: 300.0
+          example: 64.0
+          description: Cân nặng mục tiêu (tuỳ chọn với MAINTAIN_WEIGHT)
+        weeklyRateKg:
+          type: number
+          format: double
+          minimum: 0.0
+          maximum: 2.0
+          example: 0.5
+          description: Tốc độ thay đổi cân nặng mong muốn mỗi tuần (kg/tuần). Mặc định 0.5 kg/tuần cho giảm/tăng cân, 0.0 cho giữ cân.
+        customProteinPct:
+          type: number
+          format: double
+          example: 30.0
+          description: Tỷ lệ Protein tuỳ chỉnh (%)
+        customCarbsPct:
+          type: number
+          format: double
+          example: 40.0
+          description: Tỷ lệ Carbs tuỳ chỉnh (%)
+        customFatPct:
+          type: number
+          format: double
+          example: 30.0
+          description: Tỷ lệ Fat tuỳ chỉnh (%)
+        customWaterGoalMl:
+          type: integer
+          minimum: 500
+          maximum: 10000
+          example: 2400
+          description: Mục tiêu uống nước tuỳ chỉnh theo ngày (ml). Nếu bỏ qua sẽ tự động tính theo cân nặng (35 ml/kg).
+        allergies:
+          type: array
+          items:
+            type: string
+          example: ["PEANUT", "SEAFOOD", "MILK"]
+          description: Danh sách thực phẩm dị ứng hoặc kiêng kỵ
+
+    HealthProfileResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        gender:
+          $ref: '#/components/schemas/Gender'
+        birthDate:
+          type: string
+          format: date
+        age:
+          type: integer
+          example: 28
+        heightCm:
+          type: number
+          example: 172.5
+        weightKg:
+          type: number
+          example: 68.0
+        activityLevel:
+          $ref: '#/components/schemas/ActivityLevel'
+        goalType:
+          $ref: '#/components/schemas/GoalType'
+        targetWeightKg:
+          type: number
+          example: 64.0
+        weeklyRateKg:
+          type: number
+          example: 0.5
+        bmi:
+          type: number
+          example: 22.9
+        bmiCategory:
+          $ref: '#/components/schemas/BmiCategory'
+        bmiCategoryVi:
+          type: string
+          example: "Bình thường"
+        bmr:
+          type: integer
+          example: 1649
+        tdee:
+          type: integer
+          example: 2556
+        dailyCalorieGoal:
+          type: integer
+          example: 2006
+        safetyClamped:
+          type: boolean
+          example: false
+          description: Bật true khi calo tính toán bị kẹp lên ngưỡng an toàn tối thiểu (1200 kcal nữ / 1500 kcal nam)
+        proteinGoalG:
+          type: number
+          example: 150.5
+        carbsGoalG:
+          type: number
+          example: 200.6
+        fatGoalG:
+          type: number
+          example: 66.9
+        proteinPct:
+          type: number
+          example: 30.0
+        carbsPct:
+          type: number
+          example: 40.0
+        fatPct:
+          type: number
+          example: 30.0
+        customMacro:
+          type: boolean
+          example: false
+        waterGoalMl:
+          type: integer
+          example: 2380
+        allergies:
+          type: array
+          items:
+            type: string
+          example: ["PEANUT", "SEAFOOD"]
+        recalculationRecommended:
+          type: boolean
+          example: false
+          description: Bật true khi cân nặng mới ghi nhận làm lệch TDEE >= 100 kcal so với hồ sơ
+        recommendedTdee:
+          type: integer
+          nullable: true
+          example: 2450
+        recommendedDailyCalorieGoal:
+          type: integer
+          nullable: true
+          example: 1900
+        latestLoggedWeightKg:
+          type: number
+          nullable: true
+          example: 65.5
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ProfileApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/HealthProfileResponse'
+        error:
+          type: object
+          nullable: true
+
+    ApiErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          nullable: true
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: PROFILE_NOT_FOUND
+            message:
+              type: string
+              example: Profile not found
+            details:
+              type: object
+              nullable: true
+
+  responses:
+    BadRequest:
+      description: Dữ liệu gửi lên không hợp lệ (ngoài phạm vi chiều cao, cân nặng, tỷ lệ macro sai...)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
+    Unauthorized:
+      description: Thiếu hoặc sai JWT Bearer token
+    Forbidden:
+      description: Email chưa xác minh (EMAIL_NOT_VERIFIED) hoặc không có quyền truy cập
+    NotFound:
+      description: Không tìm thấy hồ sơ sức khoẻ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiErrorResponse'
