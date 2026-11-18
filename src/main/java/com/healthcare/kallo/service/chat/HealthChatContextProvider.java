@@ -60,7 +60,8 @@ public class HealthChatContextProvider implements ChatContextProvider {
       todaySummary.put("steps", progress.steps());
       put(todaySummary, "caloriesBurned", progress.caloriesBurned());
     }
-    return new ChatContextData(profile, todaySummary, List.of());
+    return new ChatContextData(profile, todaySummary,
+        user.getAllergies() == null ? List.of() : user.getAllergies());
   }
 
   private ZoneId zoneOrDefault(String timezone) {

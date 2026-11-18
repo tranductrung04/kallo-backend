@@ -96,6 +96,21 @@ class ChatServiceTest {
   }
 
   @Test
+  void rateLimitedRetryMarksAssistantFailedAgain() {
+    ChatMessage assistant = message(ChatRole.ASSISTANT, ChatMessageStatus.FAILED, "old failure");
+    Conversation conversation = conversation();
+    assistant.setConversation(conversation);
+    var saved = new ChatTxService.SavedMessage(conversation, message(ChatRole.USER, ChatMessageStatus.COMPLETED, "hello"), assistant, false);
+    when(tx.retryByAssistantId(userId, assistant.getId())).thenReturn(saved);
+    var limited = new BusinessException(ErrorCode.TOO_MANY_REQUESTS);
+    org.mockito.Mockito.doThrow(limited).when(rateLimiter).check(userId);
+
+    assertThatThrownBy(() -> service.retryMessage(userId, assistant.getId()))
+        .isSameAs(limited);
+    verify(tx).markFailed(assistant, ErrorCode.TOO_MANY_REQUESTS.name());
+  }
+
+  @Test
   void pendingRequestReturnsBusyWithoutCallingAi() {
     when(tx.saveUserMessage(eq(userId), any(), eq("hello")))
         .thenThrow(new BusinessException(ErrorCode.CHAT_CONVERSATION_BUSY));

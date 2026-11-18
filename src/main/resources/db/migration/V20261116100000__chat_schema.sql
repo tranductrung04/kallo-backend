@@ -61,10 +61,6 @@ CREATE UNIQUE INDEX uq_chat_messages_idempotency
     ON chat_messages (conversation_id, client_message_id)
     WHERE client_message_id IS NOT NULL;
 
-CREATE INDEX idx_chat_messages_pending
-    ON chat_messages (status, created_at)
-    WHERE status = 'PENDING';
-
 CREATE INDEX idx_chat_messages_pending_since
     ON chat_messages (status, pending_since)
     WHERE status = 'PENDING';
@@ -82,3 +78,9 @@ CREATE UNIQUE INDEX uq_chat_messages_pending_assistant
 -- ---------------------------------------------------------------------------
 ALTER TABLE notification_settings
     ADD COLUMN chat_reply_enabled BOOLEAN NOT NULL DEFAULT TRUE;
+
+-- ---------------------------------------------------------------------------
+-- users (table owned by another module)
+-- ---------------------------------------------------------------------------
+ALTER TABLE users
+    ADD COLUMN allergies JSONB NOT NULL DEFAULT '[]'::jsonb;

@@ -61,7 +61,10 @@ public class UserServiceImpl implements UserService {
       throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     String displayName = request.displayName().trim();
-    if (users.updateProfile(userId, displayName, request.timezone(), Instant.now()) == 0) {
+    int updated = request.allergies() == null
+        ? users.updateProfile(userId, displayName, request.timezone(), Instant.now())
+        : users.updateProfileWithAllergies(userId, displayName, request.timezone(), request.allergies(), Instant.now());
+    if (updated == 0) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
     return response(findUser(userId));
@@ -141,7 +144,8 @@ public class UserServiceImpl implements UserService {
         user.getDisplayName(),
         user.getTimezone(),
         avatarUrl,
-        user.getRole().name());
+        user.getRole().name(),
+        user.getAllergies() == null ? java.util.List.of() : user.getAllergies());
   }
 
   private String detectImageType(byte[] bytes) {

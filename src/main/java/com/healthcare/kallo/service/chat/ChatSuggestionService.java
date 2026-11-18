@@ -9,6 +9,8 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.UUID;
+
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -20,10 +22,18 @@ public class ChatSuggestionService {
 
   private final ChatContextProvider contextProvider;
   private final ChatProperties properties;
+  private final java.time.Clock clock;
 
-  public ChatSuggestionService(ChatContextProvider contextProvider, ChatProperties properties) {
+  @Autowired
+  public ChatSuggestionService(ChatContextProvider contextProvider, ChatProperties properties,
+      java.time.Clock clock) {
     this.contextProvider = contextProvider;
     this.properties = properties;
+    this.clock = clock;
+  }
+
+  public ChatSuggestionService(ChatContextProvider contextProvider, ChatProperties properties) {
+    this(contextProvider, properties, java.time.Clock.systemUTC());
   }
 
   public List<ChatSuggestionResponse> get(UUID userId) {
@@ -49,8 +59,8 @@ public class ChatSuggestionService {
     Object timezone = context.profile().get("timezone");
     try {
       ZoneId zone = ZoneId.of(timezone instanceof String value ? value : "Asia/Ho_Chi_Minh");
-      LocalTime now = LocalTime.now(java.time.Clock.systemUTC().withZone(zone));
-      return !now.isBefore(LocalTime.NOON);
+      LocalTime now = LocalTime.now(clock.withZone(zone));
+      return !now.isBefore(LocalTime.of(17, 0));
     } catch (DateTimeException exception) {
       return false;
     }

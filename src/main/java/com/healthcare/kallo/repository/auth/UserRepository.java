@@ -52,6 +52,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
   @Modifying
   @Transactional
+  @Query("update User u set u.displayName = :displayName, u.timezone = :timezone, u.allergies = :allergies, u.updatedAt = :now where u.id = :id")
+  int updateProfileWithAllergies(
+      @Param("id") UUID id,
+      @Param("displayName") String displayName,
+      @Param("timezone") String timezone,
+      @Param("allergies") List<String> allergies,
+      @Param("now") Instant now);
+
+  @Modifying
+  @Transactional
   @Query("update User u set u.avatarUrl = :avatarUrl, u.updatedAt = :now where u.id = :id")
   int updateAvatarKey(
       @Param("id") UUID id, @Param("avatarUrl") String avatarUrl, @Param("now") Instant now);

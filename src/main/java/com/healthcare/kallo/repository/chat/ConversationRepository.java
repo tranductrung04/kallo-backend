@@ -18,15 +18,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
   @Query("""
       select c from Conversation c
       where c.user.id = :userId and c.deletedAt is null
-      order by case when c.lastMessageAt is null then 1 else 0 end,
-               c.lastMessageAt desc, c.id desc
+      order by c.lastMessageAt desc nulls last, c.id desc
       """)
   Page<Conversation> findRecentByUserId(@Param("userId") UUID userId, Pageable pageable);
 
   @Modifying
   @Query("""
       update Conversation c
-      set c.messageCount = c.messageCount + 2,
+      set c.messageCount = c.messageCount + 1,
           c.lastMessageAt = :lastMessageAt,
           c.title = case when c.title is null then :title else c.title end,
           c.updatedAt = CURRENT_TIMESTAMP
@@ -34,6 +33,10 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
       """)
   int addMessages(@Param("id") UUID id, @Param("lastMessageAt") java.time.Instant lastMessageAt,
       @Param("title") String title);
+
+  @Modifying
+  @Query("update Conversation c set c.messageCount = c.messageCount + 1 where c.id = :id and c.deletedAt is null")
+  int incrementMessageCount(@Param("id") UUID id);
 
   @Modifying
   @Query("""

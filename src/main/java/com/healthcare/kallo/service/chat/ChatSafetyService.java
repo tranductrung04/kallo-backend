@@ -64,27 +64,49 @@ public class ChatSafetyService {
         StringBuilder::appendCodePoint, StringBuilder::append).toString();
   }
 
-  private static final Map<String, Set<String>> ALLERGEN_GROUPS = Map.of(
-      "tom", Set.of("tom", "tep", "shrimp", "prawn"),
-      "tep", Set.of("tom", "tep", "shrimp", "prawn"),
-      "hai san", Set.of("hai san", "tom", "tep", "cua", "ghe", "muc", "oyster", "shrimp", "prawn", "seafood"),
-      "lac", Set.of("lac", "dau phong", "peanut", "groundnut"),
-      "dau phong", Set.of("lac", "dau phong", "peanut", "groundnut"),
-      "sua", Set.of("sua", "milk", "dairy"));
+  private static final Map<String, Set<String>> ALLERGEN_GROUPS = Map.ofEntries(
+      Map.entry("tom", Set.of("tom", "tep", "shrimp", "prawn")),
+      Map.entry("tep", Set.of("tom", "tep", "shrimp", "prawn")),
+      Map.entry("hai san", Set.of("hai san", "tom", "tep", "cua", "ghe", "muc", "oyster", "shrimp", "prawn", "seafood")),
+      Map.entry("lac", Set.of("lac", "dau phong", "peanut", "groundnut")),
+      Map.entry("dau phong", Set.of("lac", "dau phong", "peanut", "groundnut")),
+      Map.entry("sua", Set.of("sua", "milk", "dairy")),
+      Map.entry("trung", Set.of("trung", "egg")),
+      Map.entry("dau nanh", Set.of("dau nanh", "soy", "soya")),
+      Map.entry("gluten", Set.of("gluten", "wheat", "lua mi")),
+      Map.entry("ca", Set.of("ca", "fish")),
+      Map.entry("me", Set.of("me", "sesame")));
+
+  private static final Pattern NEGATED_TERM = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:khong|without|no)(?:\\s+(?:dung|co))?\\s*$");
+  private static final Map<String, Set<String>> SHORT_TERM_VARIANTS = Map.of(
+      "ca", Set.of("cá"),
+      "me", Set.of("mè"),
+      "trung", Set.of("trứng"),
+      "lac", Set.of("lạc"));
 
   private boolean containsIngredient(String content, String allergy) {
     String normalizedAllergy = normalize(allergy);
     if (normalizedAllergy.isBlank()) return false;
     Set<String> ingredients = ALLERGEN_GROUPS.getOrDefault(normalizedAllergy, Set.of(normalizedAllergy));
     String normalizedContent = normalize(content);
-    return ingredients.stream().anyMatch(ingredient -> containsTerm(normalizedContent, ingredient));
+    String originalContent = content == null ? "" : content.toLowerCase(Locale.ROOT);
+    return ingredients.stream().anyMatch(ingredient -> {
+      Set<String> variants = SHORT_TERM_VARIANTS.get(ingredient);
+      return variants == null
+          ? containsTerm(normalizedContent, ingredient)
+          : variants.stream().anyMatch(term -> containsTerm(originalContent, term));
+    });
   }
 
   private boolean containsTerm(String content, String term) {
     String expression = Pattern.quote(term).replace("\\Q \\E", "\\\\s+");
     Matcher matcher = Pattern.compile("(?<![\\p{L}\\p{N}])" + expression
-        + "(?![\\p{L}\\p{N}])").matcher(content);
-    return matcher.find();
+        + "(?![\\p{L}\\p{N}])", Pattern.UNICODE_CASE).matcher(content);
+    while (matcher.find()) {
+      if (!NEGATED_TERM.matcher(normalize(content.substring(0, matcher.start()))).find()) return true;
+    }
+    return false;
   }
 
   private String normalize(String value) {

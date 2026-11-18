@@ -23,6 +23,32 @@ class ChatSafetyServiceTest {
   }
 
   @Test
+  void ignoresNegatedAllergen() {
+    var result = safety.validateOutputWithGuardrails("Mon khong co tom", java.util.List.of("tom"));
+    assertThat(result.replaced()).isFalse();
+  }
+
+  @Test
+  void doesNotMatchAccentedShortWordsAfterNormalization() {
+    assertThat(safety.validateOutputWithGuardrails("Cà phê sữa và calo trung bình", java.util.List.of("ca"))
+        .replaced()).isFalse();
+    assertThat(safety.validateOutputWithGuardrails("Cà phê sữa và calo trung bình", java.util.List.of("trung"))
+        .replaced()).isFalse();
+    assertThat(safety.validateOutputWithGuardrails("Mẹ bạn uống cà phê", java.util.List.of("me"))
+        .replaced()).isFalse();
+    assertThat(safety.validateOutputWithGuardrails("Lắc đều trước khi dùng", java.util.List.of("lac"))
+        .replaced()).isFalse();
+  }
+
+  @Test
+  void matchesAccentedAllergenTerms() {
+    assertThat(safety.validateOutputWithGuardrails("Cá nướng", java.util.List.of("ca")).replaced()).isTrue();
+    assertThat(safety.validateOutputWithGuardrails("Mè rang", java.util.List.of("me")).replaced()).isTrue();
+    assertThat(safety.validateOutputWithGuardrails("Trứng luộc", java.util.List.of("trung")).replaced()).isTrue();
+    assertThat(safety.validateOutputWithGuardrails("Lạc rang", java.util.List.of("lac")).replaced()).isTrue();
+  }
+
+  @Test
   void replacesOutputContainingAllergen() {
     var result = safety.validateOutputWithGuardrails("Gợi ý món có tôm", java.util.List.of("đậu phộng"));
     assertThat(result.replaced()).isFalse();
