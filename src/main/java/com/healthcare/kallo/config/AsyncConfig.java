@@ -1,5 +1,6 @@
 package com.healthcare.kallo.config;
 
+import com.healthcare.kallo.service.auth.MailMetrics;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
@@ -22,13 +23,20 @@ public class AsyncConfig {
   private static final Logger log = LoggerFactory.getLogger(AsyncConfig.class);
 
   @Bean(name = "mailTaskExecutor")
-  ThreadPoolTaskExecutor mailTaskExecutor() {
+  ThreadPoolTaskExecutor mailTaskExecutor(MailMetrics metrics) {
     ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
     executor.setCorePoolSize(2);
     executor.setMaxPoolSize(4);
     executor.setQueueCapacity(100);
     executor.setThreadNamePrefix("kallo-mail-");
     executor.setTaskDecorator(mdcTaskDecorator());
+    executor.setRejectedExecutionHandler(
+        (task, pool) -> {
+          metrics.recordRejected();
+          log.warn("MAIL async task rejected because executor queue is full");
+        });
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(30);
     executor.initialize();
     return executor;
   }

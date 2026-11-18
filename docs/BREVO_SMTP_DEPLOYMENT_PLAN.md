@@ -241,6 +241,8 @@ APP_AUTH_MAX_OTP_ATTEMPTS=5
 
 ### Giai đoạn 4. Củng cố code gửi thư (PR 2, tuỳ chọn nhưng nên làm)
 
+**Trạng thái triển khai:** Đã triển khai C1, C2, C3, C4, C6. C5 chưa làm vì chưa cần cho go-live.
+
 Giải quyết P6/P7 và độ tin cậy. Mỗi mục độc lập:
 
 | # | Thay đổi | Lý do |

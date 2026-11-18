@@ -86,7 +86,11 @@ public class EmailVerificationService {
 
   private void dispatchAfterCommit(Runnable action) {
     if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-      action.run();
+      try {
+        action.run();
+      } catch (RuntimeException e) {
+        log.warn("Unable to dispatch authentication email", e);
+      }
       return;
     }
     TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
