@@ -160,7 +160,7 @@ Mục tiêu: có đủ thư viện, cấu hình và khung phản hồi/lỗi đ�
 - [x] `config/`: `JwtProperties`, `AuthProperties`, `GoogleProperties` dạng `@ConfigurationProperties` + `@Validated` (secret ≥ 32 byte, hạn > 0).
 - [x] `common/`: `ApiResponse<T>`, enum `ErrorCode` (mã lỗi + HTTP status), `BusinessException`.
 - [x] `exception/GlobalExceptionHandler`: lỗi validate → 400 kèm `details` theo từng trường; `BusinessException` → status của `ErrorCode`; lỗi không lường trước → 500, không lộ stacktrace.
-- [x] `docker-compose.yml`: thêm Mailpit làm SMTP giả cho máy dev (cổng 1025 nhận thư, 8025 xem thư) và Redis nếu theo D6.
+- [x] `docker-compose.yml`: thêm Mailpit làm SMTP giả cho máy dev trong profile `dev` (cổng 1025 nhận thư, 8025 xem thư) và Redis nếu theo D6.
 - [x] Kiểm tra ứng dụng khởi động được khi chưa chạy Redis và Elasticsearch; nếu không, bỏ starter chưa dùng (D6).
 
 **Hoàn thành khi:** `./gradlew clean build` xanh; một endpoint cố tình lỗi trả JSON đúng `ApiResponse`; thiếu `JWT_SECRET` thì ứng dụng báo lỗi rõ ràng lúc khởi động.

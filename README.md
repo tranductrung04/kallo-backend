@@ -96,6 +96,14 @@ Cập nhật thông tin database, JWT secret, Google OAuth2, FCM, storage trong 
 docker compose up -d postgres
 ```
 
+Mail dev dùng Mailpit. Chạy Mailpit cùng app container bằng profile `dev`:
+
+```bash
+docker compose --profile dev up -d mailpit
+```
+
+Khi chạy app trong Docker, đặt `MAIL_HOST=mailpit` trong `.env` local. Mailpit mở SMTP tại `localhost:1025` và giao diện xem thư tại `http://localhost:8025`. Profile `dev` không được bật trên prod.
+
 ### 4. Build
 
 ```bash
