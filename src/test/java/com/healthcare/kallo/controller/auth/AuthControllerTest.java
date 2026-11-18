@@ -33,6 +33,7 @@ class AuthControllerTest {
   @MockitoBean private AuthService authService;
   @MockitoBean private EmailVerificationService emailVerificationService;
   @MockitoBean private PasswordResetService passwordResetService;
+  @MockitoBean private com.healthcare.kallo.service.auth.AuthRateLimiter authRateLimiter;
 
   @Test
   void registerRejectsInvalidPasswordWithFieldDetails() throws Exception {

@@ -65,6 +65,10 @@ app:
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
     resend-interval: ${APP_AUTH_RESEND_INTERVAL:60s}
     max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
+    rate-limit:
+      register-per-hour: ${APP_AUTH_RATE_LIMIT_REGISTER_PER_HOUR:10}
+      forgot-per-hour: ${APP_AUTH_RATE_LIMIT_FORGOT_PER_HOUR:10}
+      resend-per-hour: ${APP_AUTH_RATE_LIMIT_RESEND_PER_HOUR:10}
   act:
     max-sync-batch-size: ${APP_ACT_MAX_SYNC_BATCH_SIZE:500}
     sync-backfill-days: ${APP_ACT_SYNC_BACKFILL_DAYS:30}
