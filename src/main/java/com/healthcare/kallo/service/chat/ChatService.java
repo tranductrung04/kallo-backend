@@ -64,8 +64,13 @@ public class ChatService {
 
   public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
     if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
-    rateLimiter.check(userId);
     ChatTxService.SavedMessage saved = tx.retryByAssistantId(userId, assistantMessageId);
+    try {
+      rateLimiter.check(userId);
+    } catch (BusinessException exception) {
+      tx.markFailed(saved.assistantMessage(), exception.getErrorCode().name());
+      throw exception;
+    }
     return generateReply(userId, saved);
   }
 
@@ -214,7 +219,7 @@ public class ChatService {
           }
           if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
           metrics.recordMessage("completed");
-          if (validation.replaced()) handler.onReplace(checked);
+          if (!aiRequest.systemContext().allergies().isEmpty() || validation.replaced()) handler.onReplace(checked);
           handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
               ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
           if (handler.clientDisconnected()) notifyReply(userId, active);
@@ -275,7 +280,9 @@ public class ChatService {
 
   @Transactional
   public void deleteConversation(UUID userId, UUID conversationId) {
-    conversation(userId, conversationId).setDeletedAt(Instant.now());
+    Conversation conversation = conversation(userId, conversationId);
+    conversation.setDeletedAt(Instant.now());
+    conversation.setInitialClientMessageId(null);
   }
 
   @Transactional(readOnly = true)

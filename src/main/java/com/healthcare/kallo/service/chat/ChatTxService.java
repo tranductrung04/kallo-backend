@@ -15,6 +15,7 @@ import com.healthcare.kallo.repository.chat.ConversationRepository;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -130,6 +131,7 @@ public class ChatTxService {
     assistant.setModelVersion(generated.modelVersion());
     assistant.setLatencyMs(Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)));
     assistant.setMetadata(Map.of("suggestedFoods", generated.suggestedFoods()));
+    conversations.incrementMessageCount(assistant.getConversation().getId());
     conversations.touchLastMessageAt(assistant.getConversation().getId(), assistant.getCreatedAt());
     return true;
   }
@@ -170,13 +172,13 @@ public class ChatTxService {
   }
 
   public boolean isIdempotencyViolation(DataIntegrityViolationException exception) {
-    String message = rootMessage(exception);
-    return message.contains("uq_chat_messages_idempotency")
-        || message.contains("uq_conversations_initial_idempotency");
+    String constraint = constraintName(exception);
+    return "uq_chat_messages_idempotency".equals(constraint)
+        || "uq_conversations_initial_idempotency".equals(constraint);
   }
 
   public BusinessException mapIntegrityViolation(DataIntegrityViolationException exception) {
-    if (rootMessage(exception).contains("uq_chat_messages_pending_assistant")) {
+    if ("uq_chat_messages_pending_assistant".equals(constraintName(exception))) {
       return new BusinessException(ErrorCode.CHAT_CONVERSATION_BUSY);
     }
     return new BusinessException(ErrorCode.INTERNAL_ERROR);
@@ -208,10 +210,11 @@ public class ChatTxService {
         assistant.getStatus() == ChatMessageStatus.COMPLETED);
   }
 
-  private String rootMessage(Throwable error) {
-    Throwable current = error;
-    while (current.getCause() != null) current = current.getCause();
-    return current.getMessage() == null ? "" : current.getMessage();
+  private String constraintName(Throwable error) {
+    for (Throwable current = error; current != null; current = current.getCause()) {
+      if (current instanceof ConstraintViolationException violation) return violation.getConstraintName();
+    }
+    return null;
   }
 
   public User userReference(UUID userId) {

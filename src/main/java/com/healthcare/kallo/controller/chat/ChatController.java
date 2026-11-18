@@ -1,6 +1,7 @@
 package com.healthcare.kallo.controller.chat;
 
 import com.healthcare.kallo.common.ApiResponse;
+import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.dto.request.chat.ChatFeedbackRequest;
 import com.healthcare.kallo.dto.request.chat.ConversationUpdateRequest;
 import com.healthcare.kallo.dto.request.chat.SendMessageRequest;
@@ -156,7 +157,10 @@ public class ChatController {
           if (!cancelled.get()) {
             try {
               String code = exception instanceof com.healthcare.kallo.service.chat.ChatSseException sseException
-                  ? sseException.code() : "CHAT_STREAM_FAILED";
+                  ? sseException.code()
+                  : exception instanceof BusinessException businessException
+                      ? businessException.getErrorCode().name()
+                      : "CHAT_STREAM_FAILED";
               emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
                   "code", code, "message", "Chat stream failed")));
             } catch (Exception ignored) {
