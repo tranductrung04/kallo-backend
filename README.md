@@ -98,38 +98,33 @@ cd kallo-backend
 cp .env.example .env
 ```
 
-Cập nhật thông tin database, JWT secret, Google OAuth2, FCM, storage trong file `.env`.
+### 3. Khởi động các dịch vụ phụ thuộc
 
-### 3. Khởi động PostgreSQL (nếu chưa có)
+Ứng dụng cần PostgreSQL, Redis, Elasticsearch và MinIO. Chạy qua Docker Compose:
 
 ```bash
-docker compose up -d postgres
+docker compose up -d postgres redis elasticsearch minio
 ```
 
-Mail dev dùng Mailpit. Chạy Mailpit cùng app container bằng profile `dev`:
+Mail dev dùng Mailpit (tuỳ chọn, chỉ khi chạy app bằng `bootRun`):
 
 ```bash
 docker compose --profile dev up -d mailpit
 ```
 
-Khi chạy app trong Docker, đặt `MAIL_HOST=mailpit` trong `.env` local. Mailpit mở SMTP tại `localhost:1025` và giao diện xem thư tại `http://localhost:8025`. Profile `dev` không được bật trên prod.
+Mailpit mở SMTP tại `localhost:1025` (khớp giá trị mặc định `MAIL_HOST=localhost`, `MAIL_PORT=1025`) và giao diện xem thư tại http://localhost:8025.
 
-### 4. Build
-
-```bash
-./gradlew clean build
-```
-
-### 5. Chạy ứng dụng
+### 4. Chạy ứng dụng
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=dev'
+./gradlew bootRun
 ```
 
-Ứng dụng chạy tại: http://localhost:8080  
-Flyway sẽ tự động chạy migration khi ứng dụng khởi động.
+Profile mặc định là `dev`. Flyway tự động chạy migration khi ứng dụng khởi động.
 
+Kiểm tra nhanh:
 
+- Health check: http://localhost:8080/actuator/health
 
 ## Database & Migration
 
@@ -144,13 +139,6 @@ spring:
     enabled: true
     locations: classpath:db/migration
 ```
-
-Quy ước đặt tên: migration khởi tạo hiện có dùng `V1__init_schema.sql`; các migration mới
-dùng `V<yyyyMMddHHmm>__<module>_<mô_tả>.sql` với thời gian tạo theo UTC, ví dụ
-`V202611121030__act_weight_logs.sql`. Số phiên bản phải tăng theo thứ tự phụ thuộc trong
-cùng module. Khi phát triển local, profile `dev` cho phép Flyway chạy migration lệch thứ tự;
-production vẫn giữ mặc định an toàn.
-**Không sửa** file migration đã chạy – hãy tạo phiên bản mới.
 
 ```bash
 # Xem trạng thái migration (nếu cấu hình plugin Flyway cho Gradle)
