@@ -69,7 +69,7 @@ class FoodServiceTest {
         foodService.searchFoods(userId, "pho", FoodCategory.NOODLES_SOUP, PageRequest.of(0, 10));
 
     assertThat(response.items()).hasSize(1);
-    assertThat(response.items().get(0).name()).isEqualTo("Phở bò");
+    assertThat(response.items().getFirst().name()).isEqualTo("Phở bò");
     assertThat(response.totalElements()).isEqualTo(1);
   }
 

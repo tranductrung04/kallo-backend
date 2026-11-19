@@ -26,7 +26,7 @@ paths:
       parameters:
         - name: q
           in: query
-          description: Từ khóa tìm kiếm tiếng Việt có hoặc không dấu (ví dụ: pho, banh mi, bun cha)
+          description: "Từ khóa tìm kiếm tiếng Việt có hoặc không dấu (ví dụ: pho, banh mi, bun cha)"
           schema:
             type: string
         - name: category

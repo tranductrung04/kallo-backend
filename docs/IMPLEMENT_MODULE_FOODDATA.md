@@ -435,11 +435,13 @@ sequenceDiagram
 Các mã lỗi mới thuộc phạm vi của FOODDATA:
 
 ```java
-FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "Food item not found"),
-CANNOT_MODIFY_SYSTEM_FOOD(HttpStatus.FORBIDDEN, "Cannot modify or delete system food"),
-INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
-BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
-NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "Detected object is not a food item");
+public enum ErrorCode {
+  FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "Food item not found"),
+  CANNOT_MODIFY_SYSTEM_FOOD(HttpStatus.FORBIDDEN, "Cannot modify or delete system food"),
+  INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
+  BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
+  NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "Detected object is not a food item");
+}
 ```
 
 ---
