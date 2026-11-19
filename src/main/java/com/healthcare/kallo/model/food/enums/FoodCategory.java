@@ -1,0 +1,33 @@
+package com.healthcare.kallo.model.food.enums;
+
+public enum FoodCategory {
+  NOODLES_SOUP,
+  RICE_DISH,
+  BREAD_SANDWICH,
+  ROLLS_CAKE,
+  PANCAKE,
+  STEW,
+  GRILLED,
+  VEGETABLES,
+  FISH_SEAFOOD,
+  MEAT,
+  FASTFOOD,
+  SNACK,
+  SOUP,
+  PORRIDGE,
+  SALAD,
+  STAPLE,
+  DAIRY,
+  EGG,
+  PICKLED,
+  TRADITIONAL_CAKE,
+  PROCESSED_MEAT,
+  FRIED,
+  FRUIT_VEG,
+  SOY_PRODUCT,
+  HOTPOT,
+  NOODLES,
+  POULTRY,
+  PASTA_DISH,
+  NON_FOOD
+}

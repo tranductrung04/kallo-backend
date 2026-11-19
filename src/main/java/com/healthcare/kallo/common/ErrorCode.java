@@ -50,6 +50,11 @@ public enum ErrorCode {
   PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "Profile not found"),
   INVALID_BIRTH_DATE(HttpStatus.BAD_REQUEST, "Birth date is invalid"),
   INVALID_MACRO_RATIO(HttpStatus.BAD_REQUEST, "Total macro percentage must equal 100%"),
+  FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "Food item not found"),
+  CANNOT_MODIFY_SYSTEM_FOOD(HttpStatus.FORBIDDEN, "Cannot modify or delete system food"),
+  INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
+  BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
+  NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "Detected object is not a food item"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

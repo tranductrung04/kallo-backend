@@ -1,0 +1,400 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - FOODDATA API
+  version: 1.0.0
+  description: |
+    API quản lý từ điển thực phẩm, tìm kiếm tiếng Việt không dấu, quét mã vạch (Open Food Facts v2) và món ăn tùy chỉnh.
+    Tất cả các endpoint (trừ khi có ghi chú khác) yêu cầu Bearer JWT token của tài khoản đã xác minh email.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: foods
+    description: Tra cứu và quản lý danh mục món ăn
+  - name: barcode
+    description: Quét và tra cứu thực phẩm đóng gói qua mã vạch
+
+paths:
+  /api/foods/search:
+    get:
+      tags: [foods]
+      summary: Tìm kiếm món ăn tiếng Việt không phân biệt dấu
+      description: |
+        Tìm kiếm món ăn kết hợp giữa CSDL hệ thống và món riêng của người dùng.
+        Hỗ trợ tìm kiếm mờ (fuzzy search với pg_trgm), lọc theo nhóm món và phân trang.
+      parameters:
+        - name: q
+          in: query
+          description: Từ khóa tìm kiếm tiếng Việt có hoặc không dấu (ví dụ: pho, banh mi, bun cha)
+          schema:
+            type: string
+        - name: category
+          in: query
+          description: Lọc theo nhóm món ăn
+          schema:
+            type: string
+            enum: [NOODLES_SOUP, RICE_DISH, BREAD_SANDWICH, ROLLS_CAKE, PANCAKE, STEW, GRILLED, VEGETABLES, FISH_SEAFOOD, MEAT, FASTFOOD, SNACK, SOUP, PORRIDGE, SALAD, STAPLE, DAIRY, EGG, PICKLED, TRADITIONAL_CAKE, PROCESSED_MEAT, FRIED, FRUIT_VEG, SOY_PRODUCT, HOTPOT, NOODLES, POULTRY, PASTA_DISH]
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 0)
+          schema:
+            type: integer
+            default: 0
+        - name: size
+          in: query
+          description: Số lượng kết quả mỗi trang (tối đa 100)
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Tìm kiếm thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodSearchPageResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/foods/{id}:
+    get:
+      tags: [foods]
+      summary: Lấy chi tiết món ăn theo ID
+      description: Trả về đầy đủ thông tin dinh dưỡng trên 100g và trên khẩu phần chuẩn, nhãn dị ứng, bữa ăn phù hợp.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lấy thông tin thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodApiResponse'
+        '404':
+          description: Món ăn không tồn tại hoặc không thuộc quyền truy cập
+
+  /api/foods/vietfood/{classId}:
+    get:
+      tags: [foods]
+      summary: Tra cứu món ăn theo ID lớp YOLO AI (0..67)
+      description: Dành cho tích hợp nội bộ giữa AI Service nhận diện ảnh và Backend Kallo.
+      parameters:
+        - name: classId
+          in: path
+          required: true
+          description: Chỉ số lớp trong mô hình YOLO (0 đến 67)
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodApiResponse'
+        '400':
+          description: Lớp nhận diện là người hoặc vật không phải thực phẩm (NON_FOOD_DETECTED)
+        '404':
+          description: Không tìm thấy lớp tương ứng
+
+  /api/foods/custom:
+    post:
+      tags: [foods]
+      summary: Tạo món ăn tùy chỉnh của người dùng
+      description: Lưu món ăn mới do người dùng tự nhập, tự động tính toán dinh dưỡng theo khẩu phần.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFoodRequest'
+      responses:
+        '201':
+          description: Tạo món thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodApiResponse'
+
+  /api/foods/custom/{id}:
+    put:
+      tags: [foods]
+      summary: Cập nhật món ăn tùy chỉnh
+      description: Chỉ chủ sở hữu mới có quyền chỉnh sửa. Không thể sửa món hệ thống.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFoodRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+        '403':
+          description: Không có quyền sửa hoặc cố tình sửa món hệ thống
+        '404':
+          description: Món không tồn tại
+
+    delete:
+      tags: [foods]
+      summary: Xóa món ăn tùy chỉnh
+      description: Chỉ chủ sở hữu mới có quyền xóa món ăn của mình.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Xóa thành công
+        '403':
+          description: Không có quyền xóa hoặc cố tình xóa món hệ thống
+        '404':
+          description: Món không tồn tại
+
+  /api/foods/barcode/{code}:
+    get:
+      tags: [barcode]
+      summary: Quét và tra cứu thực phẩm theo mã vạch
+      description: Áp dụng cơ chế bộ đệm 3 bước (CSDL nội bộ -> Cache Misses -> Open Food Facts v2 API).
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Mã vạch EAN-8/13 hoặc UPC-A
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Tìm thấy sản phẩm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FoodApiResponse'
+        '400':
+          description: Định dạng mã vạch không hợp lệ
+        '404':
+          description: Không tìm thấy sản phẩm trên cả hệ thống và Open Food Facts
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    FoodResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        nameUnaccented:
+          type: string
+        category:
+          type: string
+        defaultServingName:
+          type: string
+        defaultServingGrams:
+          type: number
+        caloriesPer100g:
+          type: number
+        proteinPer100g:
+          type: number
+        carbsPer100g:
+          type: number
+        fatPer100g:
+          type: number
+        sugarPer100g:
+          type: number
+        fiberPer100g:
+          type: number
+        caloriesPerServing:
+          type: integer
+        proteinPerServing:
+          type: number
+        carbsPerServing:
+          type: number
+        fatPerServing:
+          type: number
+        sugarPerServing:
+          type: number
+        fiberPerServing:
+          type: number
+        imageUrl:
+          type: string
+        barcode:
+          type: string
+        source:
+          type: string
+          enum: [SYSTEM, OFF, USER_CUSTOM]
+        vietfoodClassId:
+          type: integer
+        allergens:
+          type: array
+          items:
+            type: string
+        suitableMealTypes:
+          type: array
+          items:
+            type: string
+        referencePriceVnd:
+          type: integer
+        isVerified:
+          type: boolean
+        ownerUserId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FoodSearchItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          type: string
+        defaultServingName:
+          type: string
+        defaultServingGrams:
+          type: number
+        caloriesPerServing:
+          type: integer
+        proteinPerServing:
+          type: number
+        carbsPerServing:
+          type: number
+        fatPerServing:
+          type: number
+        imageUrl:
+          type: string
+        barcode:
+          type: string
+        source:
+          type: string
+        isVerified:
+          type: boolean
+        isCustom:
+          type: boolean
+
+    CustomFoodRequest:
+      type: object
+      required:
+        - name
+        - category
+        - defaultServingName
+        - defaultServingGrams
+        - caloriesPer100g
+        - proteinPer100g
+        - carbsPer100g
+        - fatPer100g
+      properties:
+        name:
+          type: string
+          example: Cơm sườn nướng
+        category:
+          type: string
+          example: RICE_DISH
+        defaultServingName:
+          type: string
+          example: 1 dĩa
+        defaultServingGrams:
+          type: number
+          example: 350.0
+        caloriesPer100g:
+          type: number
+          example: 195.0
+        proteinPer100g:
+          type: number
+          example: 12.5
+        carbsPer100g:
+          type: number
+          example: 25.0
+        fatPer100g:
+          type: number
+          example: 5.5
+        sugarPer100g:
+          type: number
+          example: 2.0
+        fiberPer100g:
+          type: number
+          example: 1.0
+        imageUrl:
+          type: string
+        barcode:
+          type: string
+        allergens:
+          type: array
+          items:
+            type: string
+        suitableMealTypes:
+          type: array
+          items:
+            type: string
+        referencePriceVnd:
+          type: integer
+          example: 45000
+
+    FoodApiResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/FoodResponse'
+
+    FoodSearchPageResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FoodSearchItemResponse'
+            page:
+              type: integer
+            size:
+              type: integer
+            totalElements:
+              type: integer
+            totalPages:
+              type: integer
+
+  responses:
+    Unauthorized:
+      description: Chưa xác thực JWT hoặc token không hợp lệ
+    Forbidden:
+      description: Không có quyền truy cập
