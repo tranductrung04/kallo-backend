@@ -55,6 +55,10 @@ public enum ErrorCode {
   INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
   BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
   NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "Detected object is not a food item"),
+  FOOD_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Food log not found"),
+  WATER_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Water log not found"),
+  DAILY_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "Daily summary not found"),
+  AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI recognition service is temporarily unavailable"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;
