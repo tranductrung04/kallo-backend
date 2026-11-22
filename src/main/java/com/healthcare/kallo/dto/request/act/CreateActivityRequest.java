@@ -19,13 +19,15 @@ public record CreateActivityRequest(
     @Size(max = 255) String note,
     String source,
     String externalId,
-    String routePolyline) {
+    String routePolyline,
+    @Size(max = 100) @JsonAlias("name") String customName,
+    @DecimalMin("0.0") @DecimalMax("999999.9") @JsonAlias("caloriesBurned") BigDecimal caloriesBurned) {
   public CreateActivityRequest {
     if (intensity == null) intensity = Intensity.MODERATE;
   }
 
   public CreateActivityRequest(UUID clientUuid, String activityType, Intensity intensity,
       Instant startedAt, int durationMin, BigDecimal distanceKm, String note) {
-    this(clientUuid.toString(), activityType, intensity, startedAt, durationMin, distanceKm, note, null, null, null);
+    this(clientUuid.toString(), activityType, intensity, startedAt, durationMin, distanceKm, note, null, null, null, null, null);
   }
 }

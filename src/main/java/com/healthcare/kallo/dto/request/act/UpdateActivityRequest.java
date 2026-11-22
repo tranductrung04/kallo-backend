@@ -16,8 +16,15 @@ public record UpdateActivityRequest(
     @DecimalMin("0.0") @DecimalMax("9999.99") BigDecimal distanceKm,
     @Size(max = 255) String note,
     Instant clientUpdatedAt,
-    String routePolyline) {
+    String routePolyline,
+    @Size(max = 100) @JsonAlias("name") String customName,
+    @DecimalMin("0.0") @DecimalMax("999999.9") @JsonAlias("caloriesBurned") BigDecimal caloriesBurned) {
   public UpdateActivityRequest {
     if (intensity == null) intensity = Intensity.MODERATE;
+  }
+
+  public UpdateActivityRequest(String activityType, Intensity intensity, Instant startedAt, int durationMin,
+      BigDecimal distanceKm, String note, Instant clientUpdatedAt, String routePolyline) {
+    this(activityType, intensity, startedAt, durationMin, distanceKm, note, clientUpdatedAt, routePolyline, null, null);
   }
 }

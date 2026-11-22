@@ -61,9 +61,26 @@ public class UserServiceImpl implements UserService {
       throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     String displayName = request.displayName().trim();
+    if (request.gender() != null && !java.util.Set.of("MALE", "FEMALE", "OTHER", "PREFER_NOT_TO_SAY").contains(request.gender())) {
+      throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+    }
     int updated = request.allergies() == null
         ? users.updateProfile(userId, displayName, request.timezone(), Instant.now())
         : users.updateProfileWithAllergies(userId, displayName, request.timezone(), request.allergies(), Instant.now());
+    if (request.heightCm() != null || request.gender() != null || request.birthDate() != null
+        || request.targetWeightKg() != null || request.stepGoal() != null) {
+      User current = findUser(userId);
+      var heightCm = request.heightCm() == null ? current.getHeightCm() : request.heightCm();
+      var gender = request.gender() == null ? current.getGender() : request.gender();
+      var birthDate = request.birthDate() == null ? current.getBirthDate() : request.birthDate();
+      var targetWeightKg = request.targetWeightKg() == null ? current.getTargetWeightKg() : request.targetWeightKg();
+      var stepGoal = request.stepGoal() == null ? current.getStepGoal() : request.stepGoal();
+      updated = request.allergies() == null
+          ? users.updateProfileBody(userId, displayName, request.timezone(), heightCm, gender,
+              birthDate, targetWeightKg, stepGoal, Instant.now())
+          : users.updateProfileWithBodyAndAllergies(userId, displayName, request.timezone(), request.allergies(),
+              heightCm, gender, birthDate, targetWeightKg, stepGoal, Instant.now());
+    }
     if (updated == 0) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
@@ -145,7 +162,8 @@ public class UserServiceImpl implements UserService {
         user.getTimezone(),
         avatarUrl,
         user.getRole().name(),
-        user.getAllergies() == null ? java.util.List.of() : user.getAllergies());
+        user.getAllergies() == null ? java.util.List.of() : user.getAllergies(),
+        user.getHeightCm(), user.getGender(), user.getBirthDate(), user.getTargetWeightKg(), user.getStepGoal());
   }
 
   private String detectImageType(byte[] bytes) {

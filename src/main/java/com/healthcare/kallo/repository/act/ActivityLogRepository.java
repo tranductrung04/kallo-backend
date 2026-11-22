@@ -79,16 +79,17 @@ public interface ActivityLogRepository extends JpaRepository<ActivityLog, UUID> 
   @Query(value = """
       INSERT INTO activity_logs
       (user_id, client_uuid, activity_type, intensity, met, weight_kg_used, duration_min,
-       distance_km, calories_burned, source, external_id, started_at, ended_at, note, route_polyline, created_at, updated_at)
+       distance_km, calories_burned, custom_name, manual_calories_burned, source, external_id, started_at, ended_at, note, route_polyline, created_at, updated_at)
       VALUES (:userId, :clientUuid, :activityType, :intensity, :met, :weight, :duration,
-              :distance, :calories, :source, :externalId, :startedAt, :endedAt, :note, :routePolyline, NOW(), NOW())
+              :distance, :calories, :customName, :manualCalories, :source, :externalId, :startedAt, :endedAt, :note, :routePolyline, NOW(), NOW())
       ON CONFLICT (user_id, client_uuid) DO NOTHING
       """, nativeQuery = true)
   int insertIfAbsent(@Param("userId") UUID userId, @Param("clientUuid") UUID clientUuid,
       @Param("activityType") String activityType, @Param("intensity") String intensity,
       @Param("met") java.math.BigDecimal met, @Param("weight") java.math.BigDecimal weight,
       @Param("duration") int duration, @Param("distance") java.math.BigDecimal distance,
-      @Param("calories") java.math.BigDecimal calories, @Param("source") String source,
+      @Param("calories") java.math.BigDecimal calories, @Param("customName") String customName,
+      @Param("manualCalories") java.math.BigDecimal manualCalories, @Param("source") String source,
       @Param("externalId") String externalId, @Param("startedAt") Instant startedAt,
       @Param("endedAt") Instant endedAt, @Param("note") String note,
       @Param("routePolyline") String routePolyline);

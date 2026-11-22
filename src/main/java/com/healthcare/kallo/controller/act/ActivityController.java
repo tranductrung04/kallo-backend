@@ -45,19 +45,38 @@ public class ActivityController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+      @RequestParam(defaultValue = "day") String groupBy,
       Authentication authentication) {
     UUID userId = CurrentUser.id(authentication);
     if (date != null && (from != null || to != null)) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    if (!List.of("day", "week", "month").contains(groupBy)) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
+    if (date != null && !"day".equals(groupBy)) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     if (date != null) return ApiResponse.success(List.of(aggregator.aggregate(userId, date)));
     if (from == null && to == null) {
       date = LocalDate.now(clock.withZone(timeResolver.zoneOf(userId)));
       return ApiResponse.success(List.of(aggregator.aggregate(userId, date)));
     }
-    if (from == null || to == null || from.isAfter(to) || from.plusDays(30).isBefore(to))
+    if (from == null || to == null || from.isAfter(to)
+        || ("day".equals(groupBy) && from.plusDays(30).isBefore(to))
+        || (!"day".equals(groupBy) && from.plusDays(366).isBefore(to)))
       throw new BusinessException(ErrorCode.INVALID_TIME_RANGE);
     List<DailyActivityStats> result = new java.util.ArrayList<>();
-    for (LocalDate current = from; !current.isAfter(to); current = current.plusDays(1))
-      result.add(aggregator.aggregate(userId, current));
+    if ("day".equals(groupBy)) {
+      for (LocalDate current = from; !current.isAfter(to); current = current.plusDays(1))
+        result.add(aggregator.aggregate(userId, current));
+    } else {
+      java.time.DayOfWeek first = java.time.DayOfWeek.MONDAY;
+      LocalDate current = "week".equals(groupBy) ? from.with(java.time.temporal.TemporalAdjusters.previousOrSame(first)) : from.withDayOfMonth(1);
+      while (!current.isAfter(to)) {
+        LocalDate end = "week".equals(groupBy) ? current.plusDays(6) : current.plusMonths(1).minusDays(1);
+        DailyActivityStats total = new DailyActivityStats(current, 0, java.math.BigDecimal.ZERO.setScale(1), java.math.BigDecimal.ZERO.setScale(1), java.math.BigDecimal.ZERO.setScale(1), 0, null, null, null, null);
+        for (LocalDate day = current; !day.isAfter(end) && !day.isAfter(to); day = day.plusDays(1)) {
+          DailyActivityStats value = aggregator.aggregate(userId, day);
+          total = new DailyActivityStats(current, total.totalSteps() + value.totalSteps(), total.activityCalories().add(value.activityCalories()), total.stepCalories().add(value.stepCalories()), total.totalCaloriesBurned().add(value.totalCaloriesBurned()), total.activeMinutes() + value.activeMinutes(), value.averageHeartRate(), value.maxHeartRate(), value.weightKg(), value.stepsSource());
+        }
+        result.add(total); current = end.plusDays(1);
+      }
+    }
     return ApiResponse.success(result);
   }
 

@@ -71,20 +71,20 @@ public class WeightLogServiceImpl implements WeightLogService {
       if (weightLog.getDeletedAt() != null) {
         throw new BusinessException(ErrorCode.RECORD_DELETED);
       }
-      return new WeightLogService.CreateResult(mapper.toResponse(weightLog), false);
+      return new WeightLogService.CreateResult(response(userId,weightLog), false);
     }
 
     WeightLog saved =
         weightLogs.findByUserIdAndClientUuid(userId, clientUuid)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     publishChangedEvent(userId, saved.getLoggedAt());
-    return new WeightLogService.CreateResult(mapper.toResponse(saved), true);
+    return new WeightLogService.CreateResult(response(userId,saved), true);
   }
 
   @Override
   @Transactional(readOnly = true)
   public Optional<WeightLogResponse> getById(UUID userId, UUID id) {
-    return weightLogs.findByIdAndUserIdAndDeletedAtIsNull(id, userId).map(mapper::toResponse);
+    return weightLogs.findByIdAndUserIdAndDeletedAtIsNull(id, userId).map(log -> response(userId, log));
   }
 
   @Override
@@ -111,7 +111,7 @@ public class WeightLogServiceImpl implements WeightLogService {
     Instant toInstant = userTimeResolver.dayRange(to, zone).end();
     return weightLogs.findByUserIdAndLoggedAtInRange(userId, fromInstant, toInstant)
         .stream()
-        .map(mapper::toResponse)
+        .map(log -> response(userId, log))
         .toList();
   }
 
@@ -128,7 +128,7 @@ public class WeightLogServiceImpl implements WeightLogService {
 
     Instant clientUpdatedAt = request.clientUpdatedAt();
     if (clientUpdatedAt != null && clientUpdatedAt.isBefore(existing.getUpdatedAt())) {
-      return mapper.toResponse(existing);
+      return response(userId,existing);
     }
 
     validateWeight(request.weightKg());
@@ -143,7 +143,7 @@ public class WeightLogServiceImpl implements WeightLogService {
     if (!oldDate.equals(newDate)) {
       events.publishEvent(new WeightChangedEvent(userId, oldDate));
     }
-    return mapper.toResponse(updated);
+    return response(userId,updated);
   }
 
   @Override
@@ -176,7 +176,7 @@ public class WeightLogServiceImpl implements WeightLogService {
     }
     if (limit < 1 || limit > 500) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     return weightLogs.findChangedSince(userId, since.minusSeconds(1), PageRequest.of(0, limit)).stream()
-        .map(mapper::toResponse)
+        .map(log -> response(userId, log))
         .toList();
   }
 
@@ -193,12 +193,12 @@ public class WeightLogServiceImpl implements WeightLogService {
         delete(userId, existing.getId());
       }
       return weightLogs.findByIdAndUserId(existing.getId(), userId)
-          .map(mapper::toResponse).orElse(null);
+          .map(log -> response(userId, log)).orElse(null);
     }
     Optional<WeightLog> existing = weightLogs.findByUserIdAndClientUuid(userId, request.clientUuid());
     if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null
         && clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
-      return mapper.toResponse(existing.get());
+      return response(userId,existing.get());
     }
     if (existing.isPresent()) {
       return update(userId, existing.get().getId(),
@@ -230,6 +230,10 @@ public class WeightLogServiceImpl implements WeightLogService {
             now.atZone(java.time.ZoneOffset.UTC).minusYears(10).toInstant())) {
       throw new BusinessException(ErrorCode.TIMESTAMP_OUT_OF_RANGE);
     }
+  }
+
+  private WeightLogResponse response(UUID userId, WeightLog log) {
+    return mapper.toResponse(log, userTimeResolver.zoneOf(userId));
   }
 
   private LocalDate localDate(UUID userId, Instant instant) {
