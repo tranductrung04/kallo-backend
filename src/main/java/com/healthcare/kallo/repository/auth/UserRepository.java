@@ -45,20 +45,41 @@ public interface UserRepository extends JpaRepository<User, UUID> {
   @Transactional
   @Query("update User u set u.displayName = :displayName, u.timezone = :timezone, u.updatedAt = :now where u.id = :id")
   int updateProfile(
+      @Param("id") UUID id, @Param("displayName") String displayName,
+      @Param("timezone") String timezone, @Param("now") Instant now);
+
+  @Modifying
+  @Transactional
+  @Query("update User u set u.displayName = :displayName, u.timezone = :timezone, u.heightCm = :heightCm, u.gender = :gender, u.birthDate = :birthDate, u.targetWeightKg = :targetWeightKg, u.stepGoal = :stepGoal, u.updatedAt = :now where u.id = :id")
+  int updateProfileBody(
       @Param("id") UUID id,
       @Param("displayName") String displayName,
       @Param("timezone") String timezone,
+      @Param("heightCm") java.math.BigDecimal heightCm,
+      @Param("gender") String gender,
+      @Param("birthDate") java.time.LocalDate birthDate,
+      @Param("targetWeightKg") java.math.BigDecimal targetWeightKg,
+      @Param("stepGoal") Integer stepGoal,
       @Param("now") Instant now);
 
   @Modifying
   @Transactional
   @Query("update User u set u.displayName = :displayName, u.timezone = :timezone, u.allergies = :allergies, u.updatedAt = :now where u.id = :id")
   int updateProfileWithAllergies(
-      @Param("id") UUID id,
-      @Param("displayName") String displayName,
-      @Param("timezone") String timezone,
-      @Param("allergies") List<String> allergies,
+      @Param("id") UUID id, @Param("displayName") String displayName,
+      @Param("timezone") String timezone, @Param("allergies") List<String> allergies,
       @Param("now") Instant now);
+
+  @Modifying
+  @Transactional
+  @Query("update User u set u.displayName = :displayName, u.timezone = :timezone, u.allergies = :allergies, u.heightCm = :heightCm, u.gender = :gender, u.birthDate = :birthDate, u.targetWeightKg = :targetWeightKg, u.stepGoal = :stepGoal, u.updatedAt = :now where u.id = :id")
+  int updateProfileWithBodyAndAllergies(
+      @Param("id") UUID id, @Param("displayName") String displayName,
+      @Param("timezone") String timezone, @Param("allergies") List<String> allergies,
+      @Param("heightCm") java.math.BigDecimal heightCm, @Param("gender") String gender,
+      @Param("birthDate") java.time.LocalDate birthDate,
+      @Param("targetWeightKg") java.math.BigDecimal targetWeightKg,
+      @Param("stepGoal") Integer stepGoal, @Param("now") Instant now);
 
   @Modifying
   @Transactional

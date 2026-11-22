@@ -2,6 +2,7 @@ package com.healthcare.kallo.service.act;
 
 import com.healthcare.kallo.config.ActProperties;
 import com.healthcare.kallo.repository.act.ActivityLogRepository;
+import com.healthcare.kallo.repository.act.BodyMetricRepository;
 import com.healthcare.kallo.repository.act.WeightLogRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -13,16 +14,19 @@ import org.springframework.transaction.annotation.Transactional;
 public class ActTombstoneCleanup {
   private final WeightLogRepository weightLogs;
   private final ActivityLogRepository activities;
+  private final BodyMetricRepository bodyMetrics;
   private final ActProperties properties;
   private final Clock clock;
 
   public ActTombstoneCleanup(
       WeightLogRepository weightLogs,
       ActivityLogRepository activities,
+      BodyMetricRepository bodyMetrics,
       ActProperties properties,
       Clock clock) {
     this.weightLogs = weightLogs;
     this.activities = activities;
+    this.bodyMetrics = bodyMetrics;
     this.properties = properties;
     this.clock = clock;
   }
@@ -33,5 +37,6 @@ public class ActTombstoneCleanup {
     Instant cutoff = clock.instant().minus(properties.tombstoneRetention());
     weightLogs.deleteTombstonesBefore(cutoff);
     activities.deleteTombstonesBefore(cutoff);
+    bodyMetrics.deleteTombstonesBefore(cutoff);
   }
 }
