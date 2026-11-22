@@ -80,7 +80,14 @@ public class BodyMetricServiceImpl implements BodyMetricService {
     return metrics.findChangedSince(userId, since.minusSeconds(1), PageRequest.of(0, limit)).stream().map(metric -> response(userId, metric)).toList();
   }
 
-  private BodyMetricResponse response(UUID userId, BodyMetric metric) { return mapper.toResponse(metric, time.zoneOf(userId)); }
+  private BodyMetricResponse response(UUID userId, BodyMetric metric) {
+    BodyMetricResponse mapped = mapper.toResponse(metric, time.zoneOf(userId));
+    var risk = com.healthcare.kallo.service.act.WhrRiskCalculator.calculate(
+        mapped.waistCm(), mapped.hipCm(), mapped.gender());
+    return new BodyMetricResponse(mapped.id(), mapped.userId(), mapped.clientUuid(), mapped.waistCm(), mapped.hipCm(),
+        mapped.loggedAt(), mapped.localDate(), risk.whr(), risk.riskLevel(), mapped.gender(), mapped.note(),
+        mapped.createdAt(), mapped.updatedAt(), mapped.deletedAt());
+  }
   private void validate(BigDecimal waist, BigDecimal hip) { if (waist == null || hip == null || waist.signum() <= 0 || hip.signum() <= 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR); }
   private void validateTime(Instant value) { if (value.isAfter(clock.instant().plus(properties.futureTolerance())) || value.isBefore(clock.instant().minus(Duration.ofDays(properties.manualBackfillDays())))) throw new BusinessException(ErrorCode.TIMESTAMP_OUT_OF_RANGE); }
 }

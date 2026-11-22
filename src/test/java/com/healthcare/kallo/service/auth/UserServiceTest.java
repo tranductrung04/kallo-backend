@@ -11,6 +11,7 @@ import com.healthcare.kallo.dto.request.auth.UpdateUserRequest;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.auth.enums.Role;
 import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.repository.act.WeightLogRepository;
 import com.healthcare.kallo.service.auth.impl.UserServiceImpl;
 import java.time.Duration;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import org.springframework.mock.web.MockMultipartFile;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
   @Mock UserRepository users;
+  @Mock WeightLogRepository weightLogs;
   @Mock
   StorageService storage;
   @Mock PasswordEncoder passwordEncoder;
@@ -40,6 +42,7 @@ class UserServiceTest {
     service =
         new UserServiceImpl(
             users,
+            weightLogs,
             storage,
             new StorageProperties(
                 "http://minio:9000",
