@@ -7,5 +7,5 @@ import java.util.UUID;
 
 public record BodyMetricResponse(
     UUID id, UUID userId, UUID clientUuid, BigDecimal waistCm, BigDecimal hipCm,
-    Instant loggedAt, LocalDate localDate, String note, Instant createdAt, Instant updatedAt,
+    Instant loggedAt, LocalDate localDate, BigDecimal whr, String riskLevel, String note, Instant createdAt, Instant updatedAt,
     Instant deletedAt) {}

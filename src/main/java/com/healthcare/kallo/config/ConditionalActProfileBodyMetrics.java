@@ -17,7 +17,7 @@ public class ConditionalActProfileBodyMetrics {
     return new ProfileBodyMetrics() {
       @Override
       public Optional<BigDecimal> weightKg(UUID userId) {
-        return Optional.empty();
+        return users.findById(userId).map(com.healthcare.kallo.model.auth.User::getWeightKg);
       }
 
       @Override

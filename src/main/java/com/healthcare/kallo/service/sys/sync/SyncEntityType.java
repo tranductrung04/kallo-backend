@@ -4,5 +4,6 @@ public enum SyncEntityType {
   WATER_LOG,
   WEIGHT_LOG,
   FOOD_LOG,
-  ACTIVITY_LOG
+  ACTIVITY_LOG,
+  BODY_METRIC
 }

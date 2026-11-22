@@ -63,6 +63,9 @@ public class User {
   @Column(name = "height_cm", precision = 5, scale = 1)
   private java.math.BigDecimal heightCm;
 
+  @Column(name = "weight_kg", precision = 5, scale = 1)
+  private java.math.BigDecimal weightKg;
+
   @Column(length = 20)
   private String gender;
 
