@@ -260,14 +260,18 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     }
   }
   private BigDecimal manualCalories(ActivityType type, BigDecimal requested) {
-    return requested != null && "GENERAL_WORKOUT".equals(type.getCode())
+    return requested != null && "GENERAL_WORKOUT".equals(type.getCode()) && requested.signum() > 0
         ? requested.setScale(1, java.math.RoundingMode.HALF_UP) : null;
   }
 
   private BigDecimal calories(ActivityType type, BigDecimal requested, BigDecimal met, BigDecimal weight, int duration) {
-    return requested != null && "GENERAL_WORKOUT".equals(type.getCode())
-        ? requested.setScale(1, java.math.RoundingMode.HALF_UP)
-        : CalorieCalculator.calculate(met, weight, duration);
+    if (requested != null && "GENERAL_WORKOUT".equals(type.getCode()) && requested.signum() > 0) {
+      BigDecimal max = weight.multiply(BigDecimal.valueOf(25)).multiply(BigDecimal.valueOf(duration)).divide(BigDecimal.valueOf(60), 4, java.math.RoundingMode.HALF_UP);
+      if (requested.compareTo(max) > 0 || requested.compareTo(BigDecimal.valueOf(999999.9)) > 0)
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, Map.of("field", "caloriesBurned", "message", "Calories exceed allowed limit"));
+      return requested.setScale(1, java.math.RoundingMode.HALF_UP);
+    }
+    return CalorieCalculator.calculate(met, weight, duration);
   }
 
   private BigDecimal met(ActivityType type, Intensity intensity) {

@@ -3,6 +3,7 @@ package com.healthcare.kallo.controller.auth;
 import com.healthcare.kallo.common.ApiResponse;
 import com.healthcare.kallo.dto.request.auth.DeleteAccountRequest;
 import com.healthcare.kallo.dto.request.auth.UpdateUserRequest;
+import com.healthcare.kallo.dto.request.auth.ProfileUpdateRequest;
 import com.healthcare.kallo.dto.response.auth.AvatarResponse;
 import com.healthcare.kallo.dto.response.auth.UserProfileResponse;
 import com.healthcare.kallo.security.auth.CurrentUser;
@@ -31,6 +32,12 @@ public class UserController {
   public ApiResponse<UserProfileResponse> updateMe(
       @Valid @RequestBody UpdateUserRequest request, Authentication authentication) {
     return ApiResponse.success(users.updateMe(CurrentUser.id(authentication), request));
+  }
+
+  @PutMapping("/profile")
+  public ApiResponse<UserProfileResponse> updateProfile(
+      @Valid @RequestBody ProfileUpdateRequest request, Authentication authentication) {
+    return ApiResponse.success(users.updateProfile(CurrentUser.id(authentication), request));
   }
 
   @PostMapping("/avatar")

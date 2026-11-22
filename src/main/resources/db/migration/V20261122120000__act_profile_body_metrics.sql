@@ -1,5 +1,6 @@
 ALTER TABLE users
     ADD COLUMN height_cm NUMERIC(5, 1),
+    ADD COLUMN weight_kg NUMERIC(5, 1),
     ADD COLUMN gender VARCHAR(20),
     ADD COLUMN birth_date DATE,
     ADD COLUMN target_weight_kg NUMERIC(5, 1),
@@ -7,6 +8,7 @@ ALTER TABLE users
 
 ALTER TABLE users
     ADD CONSTRAINT chk_users_height_cm CHECK (height_cm IS NULL OR height_cm BETWEEN 50.0 AND 250.0),
+    ADD CONSTRAINT chk_users_weight_kg CHECK (weight_kg IS NULL OR weight_kg BETWEEN 20.0 AND 300.0),
     ADD CONSTRAINT chk_users_target_weight_kg CHECK (target_weight_kg IS NULL OR target_weight_kg BETWEEN 20.0 AND 300.0),
     ADD CONSTRAINT chk_users_step_goal CHECK (step_goal IS NULL OR step_goal BETWEEN 1000 AND 100000);
 

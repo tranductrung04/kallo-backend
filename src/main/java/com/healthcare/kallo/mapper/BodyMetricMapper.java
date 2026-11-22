@@ -15,6 +15,8 @@ public interface BodyMetricMapper {
   @Mapping(target = "hipCm", source = "metric.hipCm")
   @Mapping(target = "loggedAt", source = "metric.loggedAt")
   @Mapping(target = "localDate", expression = "java(metric.getLoggedAt().atZone(zone).toLocalDate())")
+  @Mapping(target = "whr", expression = "java(metric.getWaistCm().divide(metric.getHipCm(), 2, java.math.RoundingMode.HALF_UP))")
+  @Mapping(target = "riskLevel", expression = "java(metric.getWaistCm().divide(metric.getHipCm(), 2, java.math.RoundingMode.HALF_UP).compareTo(new java.math.BigDecimal(0.90)) >= 0 ? \"HIGH\" : metric.getWaistCm().divide(metric.getHipCm(), 2, java.math.RoundingMode.HALF_UP).compareTo(new java.math.BigDecimal(0.85)) >= 0 ? \"MODERATE\" : \"LOW\")")
   @Mapping(target = "note", source = "metric.note")
   @Mapping(target = "createdAt", source = "metric.createdAt")
   @Mapping(target = "updatedAt", source = "metric.updatedAt")

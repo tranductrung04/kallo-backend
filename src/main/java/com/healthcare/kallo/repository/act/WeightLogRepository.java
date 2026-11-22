@@ -14,6 +14,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.data.domain.Pageable;
 
 public interface WeightLogRepository extends JpaRepository<WeightLog, UUID> {
+  boolean existsByUserIdAndDeletedAtIsNull(UUID userId);
+
   Optional<WeightLog> findByUserIdAndClientUuid(UUID userId, UUID clientUuid);
 
   Optional<WeightLog> findByIdAndUserId(UUID id, UUID userId);
