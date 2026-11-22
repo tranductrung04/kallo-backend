@@ -37,11 +37,6 @@ public class UserServiceImpl implements UserService {
   private final PasswordEncoder passwordEncoder;
   private final GoogleTokenVerifier googleTokenVerifier;
 
-  public UserServiceImpl(UserRepository users, StorageService storage, StorageProperties storageProperties,
-      PasswordEncoder passwordEncoder, GoogleTokenVerifier googleTokenVerifier) {
-    this(users, null, storage, storageProperties, passwordEncoder, googleTokenVerifier);
-  }
-
   public UserServiceImpl(
       UserRepository users,
       WeightLogRepository weightLogs,
@@ -77,11 +72,8 @@ public class UserServiceImpl implements UserService {
     if (request.birthDate() != null) user.setBirthDate(request.birthDate());
     if (request.targetWeightKg() != null) user.setTargetWeightKg(request.targetWeightKg());
     if (request.stepGoal() != null) user.setStepGoal(request.stepGoal());
-    if (request.weightKg() != null) {
-      user.setWeightKg(request.weightKg());
-      if (weightLogs != null && !weightLogs.existsByUserIdAndDeletedAtIsNull(userId)) {
-        weightLogs.insertIfAbsent(userId, java.util.UUID.randomUUID(), request.weightKg(), java.time.Instant.now(), "onboarding");
-      }
+    if (request.weightKg() != null && !weightLogs.existsByUserIdAndDeletedAtIsNull(userId)) {
+      weightLogs.insertIfAbsent(userId, java.util.UUID.randomUUID(), request.weightKg(), java.time.Instant.now(), "onboarding");
     }
     return response(users.saveAndFlush(user));
   }
@@ -199,7 +191,9 @@ public class UserServiceImpl implements UserService {
         avatarUrl,
         user.getRole().name(),
         user.getAllergies() == null ? java.util.List.of() : user.getAllergies(),
-        user.getWeightKg(), user.getHeightCm(), user.getGender(), user.getBirthDate(), user.getTargetWeightKg(), user.getStepGoal());
+        weightLogs.findTopByUserIdAndDeletedAtIsNullAndLoggedAtLessThanEqualOrderByLoggedAtDesc(user.getId(), Instant.now())
+            .map(com.healthcare.kallo.model.act.WeightLog::getWeightKg).orElse(null),
+        user.getHeightCm(), user.getGender(), user.getBirthDate(), user.getTargetWeightKg(), user.getStepGoal());
   }
 
   private String detectImageType(byte[] bytes) {

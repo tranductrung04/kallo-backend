@@ -23,7 +23,7 @@ public class UserController {
     this.users = users;
   }
 
-  @GetMapping
+  @GetMapping({"", "/profile"})
   public ApiResponse<UserProfileResponse> getMe(Authentication authentication) {
     return ApiResponse.success(users.getMe(CurrentUser.id(authentication)));
   }
