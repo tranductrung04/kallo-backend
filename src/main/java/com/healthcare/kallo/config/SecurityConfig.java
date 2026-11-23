@@ -115,6 +115,11 @@ public class SecurityConfig {
                     .permitAll()
                     .requestMatchers("/error", "/swagger-ui/**", "/v3/api-docs/**")
                     .permitAll()
+                    .requestMatchers("/actuator/health/**")
+                    .permitAll()
+                    .requestMatchers("/actuator/**")
+                    .access(AuthorizationManagers.allOf(
+                        AuthorityAuthorizationManager.hasRole("ADMIN"), emailVerifiedManager()))
                     .requestMatchers("/api/auth/change-password")
                     .authenticated()
                     .requestMatchers("/api/auth/verify-email", "/api/auth/resend-verification")

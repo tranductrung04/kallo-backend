@@ -47,7 +47,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     Optional<ActivityLog> existing = activities.findByUserIdAndClientUuid(userId, clientUuid);
     if (existing.isPresent()) {
       if (existing.get().getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
-      return new CreateResult(mapper.toResponse(existing.get()).withoutRoute(), false);
+      return new CreateResult(response(userId, existing.get()).withoutRoute(), false);
     }
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
@@ -58,25 +58,26 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         .orElseThrow(() -> new BusinessException(ErrorCode.WEIGHT_REQUIRED));
     BigDecimal met = met(type, request.intensity());
     Instant ended = request.startedAt().plusSeconds(request.durationMin() * 60L);
-    BigDecimal calories = CalorieCalculator.calculate(met, weight, request.durationMin());
+    BigDecimal calories = calories(type, request.caloriesBurned(), met, weight, request.durationMin());
     int inserted = activities.insertIfAbsent(userId, clientUuid, type.getCode(),
         request.intensity().name(), met, weight, request.durationMin(), distance,
-        calories, source, request.externalId(), request.startedAt(), ended, request.note(), request.routePolyline());
+        calories, request.customName(), manualCalories(type, request.caloriesBurned()), source, request.externalId(),
+        request.startedAt(), ended, request.note(), request.routePolyline());
     ActivityLog result = activities.findByUserIdAndClientUuid(userId, clientUuid)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (inserted == 0) {
       if (result.getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
-      return new CreateResult(mapper.toResponse(result).withoutRoute(), false);
+      return new CreateResult(response(userId, result).withoutRoute(), false);
     }
     deduplicator.deduplicate(userId, result.getStartedAt(), result.getEndedAt());
     publish(userId, result.getStartedAt());
-    return new CreateResult(mapper.toResponse(result).withoutRoute(), true);
+    return new CreateResult(response(userId, result).withoutRoute(), true);
   }
 
   @Override
   @Transactional(readOnly = true)
   public Optional<ActivityResponse> getById(UUID userId, UUID id) {
-    return activities.findByIdAndUserIdAndDeletedAtIsNull(id, userId).map(mapper::toResponse);
+    return activities.findByIdAndUserIdAndDeletedAtIsNull(id, userId).map(activity -> response(userId, activity));
   }
 
   @Override
@@ -93,7 +94,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     var rangeTo = timeResolver.dayRange(to, zone).end();
     Page<ActivityLog> result = activities.findInRange(userId, rangeFrom, rangeTo, includeSuperseded,
         PageRequest.of(page, size));
-    return new PageResponse<>(result.getContent().stream().map(mapper::toResponse)
+    return new PageResponse<>(result.getContent().stream().map(activity -> response(userId, activity))
         .map(ActivityResponse::withoutRoute).toList(),
         page, size, result.getTotalElements(), result.getTotalPages());
   }
@@ -105,7 +106,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
     if (activity.getDeletedAt() != null) throw new BusinessException(ErrorCode.RECORD_DELETED);
     if (request.clientUpdatedAt() != null && request.clientUpdatedAt().isBefore(activity.getUpdatedAt()))
-      return mapper.toResponse(activity).withoutRoute();
+      return response(userId, activity).withoutRoute();
     validateTime(request.startedAt());
     ActivityType type = activeType(request.activityType());
     validateDistance(type, request.distanceKm());
@@ -122,7 +123,9 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     activity.setActivityType(type); activity.setIntensity(request.intensity()); activity.setStartedAt(request.startedAt());
     activity.setDurationMin(request.durationMin()); activity.setEndedAt(request.startedAt().plusSeconds(request.durationMin() * 60L));
     activity.setDistanceKm(distance); activity.setMet(met); activity.setWeightKgUsed(weight);
-    activity.setCaloriesBurned(CalorieCalculator.calculate(met, weight, request.durationMin()));
+    activity.setCaloriesBurned(calories(type, request.caloriesBurned(), met, weight, request.durationMin()));
+    activity.setCustomName(request.customName());
+    activity.setManualCaloriesBurned(manualCalories(type, request.caloriesBurned()));
     activity.setNote(request.note());
     activity.setRoutePolyline(routePolyline);
     ActivityLog saved = activities.saveAndFlush(activity);
@@ -131,7 +134,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     publish(userId, saved.getStartedAt());
     LocalDate newDate = localDate(userId, saved.getStartedAt());
     if (!oldDate.equals(newDate)) events.publishEvent(new ActivityDataChangedEvent(userId, oldDate));
-    return mapper.toResponse(saved).withoutRoute();
+    return response(userId, saved).withoutRoute();
   }
 
   @Override
@@ -167,7 +170,7 @@ public class ActivityLogServiceImpl implements ActivityLogService {
     if (since == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     if (limit < 1 || limit > 500) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     return activities.findChangedSince(userId, since.minusSeconds(1), PageRequest.of(0, limit)).stream()
-        .map(mapper::toResponse)
+        .map(activity -> response(userId, activity))
         .map(ActivityResponse::withoutRoute)
         .toList();
   }
@@ -185,16 +188,16 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         delete(userId, existing.get().getId());
       }
       return activities.findByIdAndUserId(existing.get().getId(), userId)
-          .map(mapper::toResponse).map(ActivityResponse::withoutRoute).orElse(null);
+          .map(activity -> response(userId, activity)).map(ActivityResponse::withoutRoute).orElse(null);
     }
     if (existing.isPresent() && clientUpdatedAt != null && existing.get().getUpdatedAt() != null
         && clientUpdatedAt.isBefore(existing.get().getUpdatedAt())) {
-      return mapper.toResponse(existing.get()).withoutRoute();
+      return response(userId, existing.get()).withoutRoute();
     }
     if (existing.isPresent()) {
       return update(userId, existing.get().getId(), new UpdateActivityRequest(
           request.activityType(), request.intensity(), request.startedAt(), request.durationMin(),
-          request.distanceKm(), request.note(), clientUpdatedAt, request.routePolyline()));
+          request.distanceKm(), request.note(), clientUpdatedAt, request.routePolyline(), request.customName(), request.caloriesBurned()));
     }
     return create(userId, request).response();
   }
@@ -256,6 +259,21 @@ public class ActivityLogServiceImpl implements ActivityLogService {
       return UUID.nameUUIDFromBytes(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
   }
+  private BigDecimal manualCalories(ActivityType type, BigDecimal requested) {
+    return requested != null && "GENERAL_WORKOUT".equals(type.getCode()) && requested.signum() > 0
+        ? requested.setScale(1, java.math.RoundingMode.HALF_UP) : null;
+  }
+
+  private BigDecimal calories(ActivityType type, BigDecimal requested, BigDecimal met, BigDecimal weight, int duration) {
+    if (requested != null && "GENERAL_WORKOUT".equals(type.getCode()) && requested.signum() > 0) {
+      BigDecimal max = weight.multiply(BigDecimal.valueOf(25)).multiply(BigDecimal.valueOf(duration)).divide(BigDecimal.valueOf(60), 4, java.math.RoundingMode.HALF_UP);
+      if (requested.compareTo(max) > 0 || requested.compareTo(BigDecimal.valueOf(999999.9)) > 0)
+        throw new BusinessException(ErrorCode.VALIDATION_ERROR, Map.of("field", "caloriesBurned", "message", "Calories exceed allowed limit"));
+      return requested.setScale(1, java.math.RoundingMode.HALF_UP);
+    }
+    return CalorieCalculator.calculate(met, weight, duration);
+  }
+
   private BigDecimal met(ActivityType type, Intensity intensity) {
     BigDecimal value = switch (intensity) {
       case LIGHT -> type.getMetLight(); case MODERATE -> type.getMetModerate(); case VIGOROUS -> type.getMetVigorous();
@@ -363,7 +381,14 @@ public class ActivityLogServiceImpl implements ActivityLogService {
         || startedAt.isBefore(now.minus(Duration.ofDays(properties.manualBackfillDays()))))
       throw new BusinessException(ErrorCode.TIMESTAMP_OUT_OF_RANGE);
   }
-  private LocalDate localDate(UUID userId, Instant instant) { return instant.atZone(timeResolver.zoneOf(userId)).toLocalDate(); }
+  private ActivityResponse response(UUID userId, ActivityLog activity) {
+    return mapper.toResponse(activity, timeResolver.zoneOf(userId));
+  }
+
+  private LocalDate localDate(UUID userId, Instant instant) {
+    return instant.atZone(timeResolver.zoneOf(userId)).toLocalDate();
+  }
+
   private Instant min(Instant left, Instant right) { return left.isBefore(right) ? left : right; }
   private Instant max(Instant left, Instant right) { return left.isAfter(right) ? left : right; }
   private void publish(UUID userId, Instant instant) { events.publishEvent(new ActivityDataChangedEvent(userId, localDate(userId, instant))); }

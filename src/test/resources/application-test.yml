@@ -1,6 +1,9 @@
 app:
   reminder:
     enabled: false
+  chat:
+    ai:
+      mock-enabled: true
   otp-hmac-secret: test-otp-secret-with-at-least-32-bytes
   jwt:
     secret: test-secret-with-at-least-32-bytes-for-tests
@@ -12,6 +15,10 @@ app:
     lock-duration: 15m
     otp-expiration: 15m
     max-otp-attempts: 5
+    rate-limit:
+      register-per-hour: 1000
+      forgot-per-hour: 1000
+      resend-per-hour: 1000
   google:
     client-ids: test-google-client-id
     jwks-uri: https://www.googleapis.com/oauth2/v3/certs

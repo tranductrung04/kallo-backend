@@ -12,6 +12,8 @@ public interface UserService {
 
   UserProfileResponse updateMe(UUID userId, UpdateUserRequest request);
 
+  UserProfileResponse updateProfile(UUID userId, com.healthcare.kallo.dto.request.auth.ProfileUpdateRequest request);
+
   AvatarResponse updateAvatar(UUID userId, MultipartFile file);
 
   void deleteAccount(UUID userId, DeleteAccountRequest request);

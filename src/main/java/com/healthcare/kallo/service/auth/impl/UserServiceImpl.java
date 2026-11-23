@@ -9,6 +9,7 @@ import com.healthcare.kallo.dto.response.auth.AvatarResponse;
 import com.healthcare.kallo.dto.response.auth.UserProfileResponse;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.repository.act.WeightLogRepository;
 import com.healthcare.kallo.service.auth.GoogleTokenVerifier;
 import com.healthcare.kallo.service.auth.StorageService;
 import com.healthcare.kallo.service.auth.UserService;
@@ -30,6 +31,7 @@ public class UserServiceImpl implements UserService {
   private static final int MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
   private final UserRepository users;
+  private final WeightLogRepository weightLogs;
   private final StorageService storage;
   private final StorageProperties storageProperties;
   private final PasswordEncoder passwordEncoder;
@@ -37,11 +39,13 @@ public class UserServiceImpl implements UserService {
 
   public UserServiceImpl(
       UserRepository users,
+      WeightLogRepository weightLogs,
       StorageService storage,
       StorageProperties storageProperties,
       PasswordEncoder passwordEncoder,
       GoogleTokenVerifier googleTokenVerifier) {
     this.users = users;
+    this.weightLogs = weightLogs;
     this.storage = storage;
     this.storageProperties = storageProperties;
     this.passwordEncoder = passwordEncoder;
@@ -56,12 +60,56 @@ public class UserServiceImpl implements UserService {
 
   @Override
   @Transactional
+  public UserProfileResponse updateProfile(UUID userId, com.healthcare.kallo.dto.request.auth.ProfileUpdateRequest request) {
+    User user = findUser(userId);
+    if (request.gender() != null) {
+      String gender = request.gender().trim().toLowerCase(java.util.Locale.ROOT);
+      if (!java.util.Set.of("male", "female", "other").contains(gender)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+      user.setGender(gender);
+    }
+    if (request.birthDate() != null && request.birthDate().isAfter(java.time.LocalDate.now())) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+    if (request.heightCm() != null) user.setHeightCm(request.heightCm());
+    if (request.birthDate() != null) user.setBirthDate(request.birthDate());
+    if (request.targetWeightKg() != null) user.setTargetWeightKg(request.targetWeightKg());
+    if (request.stepGoal() != null) user.setStepGoal(request.stepGoal());
+    if (request.weightKg() != null && !weightLogs.existsByUserIdAndDeletedAtIsNull(userId)) {
+      weightLogs.insertIfAbsent(userId, java.util.UUID.randomUUID(), request.weightKg(), java.time.Instant.now(), "onboarding");
+    }
+    return response(users.saveAndFlush(user));
+  }
+
+  @Override
+  @Transactional
   public UserProfileResponse updateMe(UUID userId, UpdateUserRequest request) {
     if (!ZoneId.getAvailableZoneIds().contains(request.timezone())) {
       throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     String displayName = request.displayName().trim();
-    if (users.updateProfile(userId, displayName, request.timezone(), Instant.now()) == 0) {
+    if (request.gender() != null) {
+      String normalizedGender = request.gender().trim().toLowerCase(java.util.Locale.ROOT);
+      if (!java.util.Set.of("male", "female", "other").contains(normalizedGender)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+      request = new UpdateUserRequest(request.displayName(), request.timezone(), request.allergies(), request.heightCm(), normalizedGender,
+          request.birthDate(), request.targetWeightKg(), request.stepGoal());
+    }
+    if (request.birthDate() != null && request.birthDate().isAfter(java.time.LocalDate.now())) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
+    int updated = request.allergies() == null
+        ? users.updateProfile(userId, displayName, request.timezone(), Instant.now())
+        : users.updateProfileWithAllergies(userId, displayName, request.timezone(), request.allergies(), Instant.now());
+    if (request.heightCm() != null || request.gender() != null || request.birthDate() != null
+        || request.targetWeightKg() != null || request.stepGoal() != null) {
+      User current = findUser(userId);
+      var heightCm = request.heightCm() == null ? current.getHeightCm() : request.heightCm();
+      var gender = request.gender() == null ? current.getGender() : request.gender();
+      var birthDate = request.birthDate() == null ? current.getBirthDate() : request.birthDate();
+      var targetWeightKg = request.targetWeightKg() == null ? current.getTargetWeightKg() : request.targetWeightKg();
+      var stepGoal = request.stepGoal() == null ? current.getStepGoal() : request.stepGoal();
+      updated = request.allergies() == null
+          ? users.updateProfileBody(userId, displayName, request.timezone(), heightCm, gender,
+              birthDate, targetWeightKg, stepGoal, Instant.now())
+          : users.updateProfileWithBodyAndAllergies(userId, displayName, request.timezone(), request.allergies(),
+              heightCm, gender, birthDate, targetWeightKg, stepGoal, Instant.now());
+    }
+    if (updated == 0) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
     return response(findUser(userId));
@@ -141,7 +189,11 @@ public class UserServiceImpl implements UserService {
         user.getDisplayName(),
         user.getTimezone(),
         avatarUrl,
-        user.getRole().name());
+        user.getRole().name(),
+        user.getAllergies() == null ? java.util.List.of() : user.getAllergies(),
+        weightLogs.findTopByUserIdAndDeletedAtIsNullAndLoggedAtLessThanEqualOrderByLoggedAtDesc(user.getId(), Instant.now())
+            .map(com.healthcare.kallo.model.act.WeightLog::getWeightKg).orElse(null),
+        user.getHeightCm(), user.getGender(), user.getBirthDate(), user.getTargetWeightKg(), user.getStepGoal());
   }
 
   private String detectImageType(byte[] bytes) {

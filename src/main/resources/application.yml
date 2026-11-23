@@ -1,6 +1,19 @@
 server:
   forward-headers-strategy: native
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ${MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE:health,info,metrics}
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    mail:
+      enabled: false
+
 spring:
   application:
     name: '@projectName@'
@@ -52,6 +65,10 @@ app:
     max-otp-attempts: ${APP_AUTH_MAX_OTP_ATTEMPTS:5}
     resend-interval: ${APP_AUTH_RESEND_INTERVAL:60s}
     max-otp-per-hour: ${APP_AUTH_MAX_OTP_PER_HOUR:3}
+    rate-limit:
+      register-per-hour: ${APP_AUTH_RATE_LIMIT_REGISTER_PER_HOUR:10}
+      forgot-per-hour: ${APP_AUTH_RATE_LIMIT_FORGOT_PER_HOUR:10}
+      resend-per-hour: ${APP_AUTH_RATE_LIMIT_RESEND_PER_HOUR:10}
   act:
     max-sync-batch-size: ${APP_ACT_MAX_SYNC_BATCH_SIZE:500}
     sync-backfill-days: ${APP_ACT_SYNC_BACKFILL_DAYS:30}
@@ -116,6 +133,23 @@ app:
     fao-infoods-url: ${APP_ATTRIBUTION_FAO_INFOODS_URL:https://www.fao.org/infoods}
     fao-infoods-license: ${APP_ATTRIBUTION_FAO_INFOODS_LICENSE:FAO/INFOODS terms of use}
     fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
+  chat:
+    enabled: ${CHAT_ENABLED:false}
+    ai:
+      base-url: ${AI_SERVICE_URL:http://localhost:8000}
+      api-key: ${AI_SERVICE_API_KEY:}
+      connect-timeout: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}ms
+      read-timeout: ${CHAT_AI_READ_TIMEOUT_MS:30000}ms
+      mock-enabled: ${CHAT_AI_MOCK_ENABLED:false}
+    history-window: ${CHAT_HISTORY_WINDOW:12}
+    max-message-length: ${CHAT_MAX_MESSAGE_LENGTH:2000}
+    rate-limit:
+      per-minute: ${CHAT_RATE_LIMIT_PER_MINUTE:10}
+      per-day: ${CHAT_RATE_LIMIT_PER_DAY:200}
+    pending-timeout: ${CHAT_PENDING_TIMEOUT_SECONDS:120}s
+    retention-days: ${CHAT_RETENTION_DAYS:30}
+    sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
+    sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
   game:
     daily-goal:
       min-meals: ${APP_GAME_DAILY_GOAL_MIN_MEALS:2}

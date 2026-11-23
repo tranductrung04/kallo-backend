@@ -1,0 +1,496 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - CHAT API
+  version: 1.0.0
+  description: |
+    API chatbot tư vấn dinh dưỡng và sức khoẻ (REST đồng bộ và SSE streaming).
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: Chat messages
+    description: Gửi tin nhắn, streaming, thử lại, đánh giá câu trả lời.
+  - name: Conversations
+    description: Quản lý hội thoại và lịch sử tin nhắn.
+  - name: Suggestions
+    description: Gợi ý câu hỏi nhanh theo ngữ cảnh.
+paths:
+  /api/chat/messages:
+    post:
+      tags: [Chat messages]
+      summary: Gửi tin nhắn và nhận câu trả lời đầy đủ
+      description: |
+        Bỏ trống `conversationId` để tự tạo hội thoại mới (tiêu đề sinh từ tin nhắn đầu tiên).
+        `clientMessageId` là khoá idempotency do client sinh: gửi lại cùng giá trị sẽ trả lại
+        kết quả đã có và không gọi AI lần nữa. Nếu lần trước bị `FAILED`, hệ thống thử lại câu trả lời.
+        Khi AI lỗi (502/503/504), tin nhắn USER vẫn được lưu; tin ASSISTANT chuyển `FAILED`
+        và có thể gọi `POST /api/chat/messages/{id}/retry` hoặc gửi lại cùng `clientMessageId`.
+        Câu trả lời được kiểm tra dị ứng ở backend trước khi lưu.
+      requestBody: { $ref: '#/components/requestBodies/SendMessage' }
+      responses:
+        '200': { $ref: '#/components/responses/ChatReply' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ConversationBusy' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/AiInvalidResponse' }
+        '503': { $ref: '#/components/responses/AiUnavailable' }
+        '504': { $ref: '#/components/responses/AiTimeout' }
+  /api/chat/messages/stream:
+    post:
+      tags: [Chat messages]
+      summary: Gửi tin nhắn và nhận câu trả lời dạng SSE
+      description: |
+        Cùng request body và cùng quy tắc idempotency/rate limit với `POST /api/chat/messages`.
+        Lỗi xảy ra trước khi mở stream (validation, 404, 409, 429...) được trả về dạng JSON thường
+        như các endpoint khác; lỗi sau khi mở stream được gửi bằng sự kiện `error`.
+
+        Các sự kiện (`event:`), mỗi sự kiện có `data:` là JSON:
+        - `meta`: `{conversationId, userMessageId, assistantMessageId}`, luôn là sự kiện đầu tiên.
+        - `delta`: `{text}`, một đoạn nội dung mới. Nếu user có khai báo dị ứng, backend giữ lại
+          nội dung đến khi kiểm tra xong nên không gửi `delta`; client lấy nội dung từ `done`.
+        - `replace`: `{text}`, thay toàn bộ nội dung đã hiển thị khi guardrail đầu ra phát hiện vi phạm.
+        - `done`: `ChatReply` (cùng cấu trúc với response của `POST /api/chat/messages`), kết thúc stream.
+        - `error`: `{code, message}`, kết thúc stream; tin ASSISTANT chuyển `FAILED`.
+        Ngoài ra server gửi comment `: connected` khi mở kết nối và `: ping` mỗi 15 giây
+        (`app.chat.sse-heartbeat-seconds`); stream timeout mặc định 60 giây (`app.chat.sse-timeout`).
+        Gửi lại cùng `clientMessageId` cho tin đã trả lời xong sẽ phát lại `meta`, một `delta` và `done`.
+        Khi client ngắt kết nối, tin ASSISTANT được hoàn tất phía server (hoặc `FAILED`); client đồng bộ
+        lại bằng `GET /api/chat/conversations/{id}/messages`. Nếu hoàn tất khi không còn kết nối,
+        server gửi thông báo đẩy `CHAT_REPLY`.
+        `EventSource` gốc không gửi được header `Authorization`; dùng `fetch` streaming hoặc thư viện hỗ trợ header.
+        Nếu SSE lỗi, dùng `POST /api/chat/messages` làm fallback.
+      requestBody: { $ref: '#/components/requestBodies/SendMessage' }
+      responses:
+        '200':
+          description: Luồng `text/event-stream`.
+          headers:
+            Cache-Control:
+              schema: { type: string, example: no-cache }
+            X-Accel-Buffering:
+              description: Tắt buffering ở Nginx.
+              schema: { type: string, example: 'no' }
+          content:
+            text/event-stream:
+              schema: { type: string }
+              example: |
+                : connected
+
+                event: meta
+                data: {"conversationId":"550e8400-e29b-41d4-a716-446655440000","userMessageId":"550e8400-e29b-41d4-a716-446655440001","assistantMessageId":"550e8400-e29b-41d4-a716-446655440002"}
+
+                event: delta
+                data: {"text":"Hôm nay bạn còn khoảng 450 kcal..."}
+
+                event: done
+                data: {"conversationId":"550e8400-e29b-41d4-a716-446655440000","userMessage":{"id":"550e8400-e29b-41d4-a716-446655440001","role":"USER","content":"Hôm nay tôi còn bao nhiêu calo?","status":"COMPLETED","createdAt":"2026-11-16T12:30:10Z"},"assistantMessage":{"id":"550e8400-e29b-41d4-a716-446655440002","role":"ASSISTANT","content":"Hôm nay bạn còn khoảng 450 kcal...","status":"COMPLETED","createdAt":"2026-11-16T12:30:10Z"}}
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ConversationBusy' }
+        '413': { $ref: '#/components/responses/PayloadTooLarge' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '503': { $ref: '#/components/responses/AiUnavailable' }
+  /api/chat/messages/{id}/retry:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Chat messages]
+      summary: Thử lại câu trả lời bị lỗi
+      description: |
+        `id` là `id` của tin nhắn ASSISTANT có `status = FAILED` (lấy từ lịch sử tin nhắn).
+        Tin ASSISTANT `PENDING` trả 409 `CHAT_CONVERSATION_BUSY`; tin ở trạng thái khác `FAILED`
+        trả 400 `INVALID_PARAMETER`. Có áp dụng rate limit.
+      responses:
+        '200': { $ref: '#/components/responses/ChatReply' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/ConversationBusy' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+        '502': { $ref: '#/components/responses/AiInvalidResponse' }
+        '503': { $ref: '#/components/responses/AiUnavailable' }
+        '504': { $ref: '#/components/responses/AiTimeout' }
+  /api/chat/messages/{id}/feedback:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    post:
+      tags: [Chat messages]
+      summary: Đánh giá câu trả lời của chatbot
+      description: |
+        `id` là tin nhắn ASSISTANT đã `COMPLETED` thuộc hội thoại của user.
+        `feedback` chỉ nhận `1` (hữu ích) hoặc `-1` (không hữu ích); gửi lại sẽ ghi đè đánh giá cũ.
+      requestBody: { $ref: '#/components/requestBodies/ChatFeedback' }
+      responses:
+        '200': { $ref: '#/components/responses/ChatFeedback' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/chat/suggestions:
+    get:
+      tags: [Suggestions]
+      summary: Gợi ý câu hỏi nhanh
+      description: |
+        Trả 3 gợi ý. Nếu có tổng kết calo hôm nay thì gợi ý được cá nhân hoá (calo còn lại,
+        bữa tiếp theo theo múi giờ của user); nếu không, trả gợi ý mặc định.
+      responses:
+        '200': { $ref: '#/components/responses/SuggestionList' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/chat/conversations:
+    get:
+      tags: [Conversations]
+      summary: Liệt kê hội thoại của tôi
+      description: Sắp xếp mới nhất trước (theo `lastMessageAt`); không trả hội thoại đã xoá.
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Size'
+      responses:
+        '200': { $ref: '#/components/responses/ConversationPage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Conversations]
+      summary: Tạo hội thoại rỗng
+      description: Tuỳ chọn; gửi tin nhắn không kèm `conversationId` cũng tự tạo hội thoại mới.
+      responses:
+        '201': { $ref: '#/components/responses/Conversation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/chat/conversations/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Conversations]
+      summary: Xem chi tiết hội thoại
+      responses:
+        '200': { $ref: '#/components/responses/Conversation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Conversations]
+      summary: Đổi tên hội thoại
+      requestBody: { $ref: '#/components/requestBodies/ConversationUpdate' }
+      responses:
+        '200': { $ref: '#/components/responses/Conversation' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Conversations]
+      summary: Xoá mềm hội thoại
+      description: Hội thoại bị ẩn ngay; job retention xoá cứng sau `app.chat.retention-days` (mặc định 30 ngày).
+      responses:
+        '204': { description: Đã xoá }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/chat/conversations/{id}/messages:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+    get:
+      tags: [Conversations]
+      summary: Lịch sử tin nhắn của hội thoại
+      description: |
+        Phân trang theo cursor, tin mới nhất trước (client đảo thứ tự khi hiển thị).
+        Truyền `nextCursor` của trang trước vào `before` để tải các tin cũ hơn.
+        Cursor là chuỗi mờ (opaque); cursor sai định dạng trả 400 `INVALID_PARAMETER`.
+      parameters:
+        - name: before
+          in: query
+          description: Cursor lấy từ `nextCursor` của trang trước.
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 30 }
+      responses:
+        '200': { $ref: '#/components/responses/MessagePage' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 0, default: 0 }
+    Size:
+      name: size
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  requestBodies:
+    SendMessage:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/SendMessageRequest' }
+    ConversationUpdate:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ConversationUpdateRequest' }
+    ChatFeedback:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ChatFeedbackRequest' }
+  responses:
+    ChatReply:
+      description: Tin nhắn của user và câu trả lời của chatbot (cũng dùng khi idempotent replay).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChatReplyEnvelope' } } }
+    ChatFeedback:
+      description: Đánh giá đã lưu.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChatFeedbackEnvelope' } } }
+    SuggestionList:
+      description: Danh sách gợi ý nhanh.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ChatSuggestionListEnvelope' } } }
+    Conversation:
+      description: Hội thoại.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ConversationEnvelope' } } }
+    ConversationPage:
+      description: Trang hội thoại.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ConversationPageEnvelope' } } }
+    MessagePage:
+      description: Trang tin nhắn theo cursor.
+      content: { application/json: { schema: { $ref: '#/components/schemas/MessagePageEnvelope' } } }
+    BadRequest:
+      description: |
+        Request không hợp lệ (VALIDATION_ERROR, MALFORMED_REQUEST, MISSING_PARAMETER, INVALID_PARAMETER).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Unauthorized:
+      description: Thiếu hoặc sai bearer token.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    Forbidden:
+      description: Email chưa xác minh (EMAIL_NOT_VERIFIED) hoặc tài khoản bị khoá.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    NotFound:
+      description: |
+        Tài nguyên không tồn tại, thuộc user khác, đã bị xoá, hoặc module chat đang tắt (`app.chat.enabled=false`).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    ConversationBusy:
+      description: Hội thoại đang chờ câu trả lời trước đó (CHAT_CONVERSATION_BUSY).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    PayloadTooLarge:
+      description: Nội dung tin nhắn vượt `app.chat.max-message-length` (PAYLOAD_TOO_LARGE).
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    TooManyRequests:
+      description: Vượt hạn mức theo phút hoặc theo ngày (TOO_MANY_REQUESTS). Redis lỗi thì fail-open.
+      headers:
+        Retry-After:
+          description: Số giây cần chờ trước khi gửi lại.
+          schema: { type: integer, format: int64 }
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    AiInvalidResponse:
+      description: |
+        AI service trả dữ liệu không hợp lệ (CHAT_AI_INVALID_RESPONSE). Tin USER vẫn được lưu,
+        tin ASSISTANT chuyển `FAILED`.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    AiUnavailable:
+      description: |
+        AI service lỗi hoặc circuit breaker mở (CHAT_AI_UNAVAILABLE). Tin USER vẫn được lưu,
+        tin ASSISTANT chuyển `FAILED`; `error.details` có thể chứa id tin nhắn USER.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+    AiTimeout:
+      description: AI service quá thời gian (CHAT_AI_TIMEOUT). Tin USER vẫn được lưu, có thể retry.
+      content: { application/json: { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } }
+  schemas:
+    ApiResponse:
+      type: object
+      required: [success, data, error]
+      properties:
+        success: { type: boolean }
+        data: {}
+        error:
+          oneOf:
+            - { $ref: '#/components/schemas/ApiError' }
+            - { type: 'null' }
+    ApiError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: {}
+    ErrorEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { type: 'null' }
+    SendMessageRequest:
+      type: object
+      required: [content, clientMessageId]
+      properties:
+        conversationId:
+          type: [string, 'null']
+          format: uuid
+          description: Bỏ trống để tạo hội thoại mới.
+        content:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          description: Được trim và loại ký tự điều khiển; không được rỗng sau khi chuẩn hoá.
+        clientMessageId:
+          type: string
+          format: uuid
+          description: Khoá idempotency do client sinh. Khi bỏ trống `conversationId`, deduplicate theo (user, clientMessageId).
+    ConversationUpdateRequest:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+    ChatFeedbackRequest:
+      type: object
+      required: [feedback]
+      properties:
+        feedback: { type: integer, enum: [-1, 1], description: '1 = hữu ích, -1 = không hữu ích' }
+    ChatFeedback:
+      type: object
+      required: [messageId, feedback]
+      properties:
+        messageId: { type: string, format: uuid }
+        feedback: { type: integer, enum: [-1, 1] }
+    SuggestedFood:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string }
+        kcal: { type: [integer, 'null'] }
+    ChatMessageMetadata:
+      type: object
+      description: |
+        Mở rộng được. ASSISTANT `COMPLETED` có `suggestedFoods` (đã loại món chứa chất user dị ứng);
+        ASSISTANT `FAILED` có `reason` (mã lỗi, ví dụ CHAT_AI_TIMEOUT hoặc PENDING_TIMEOUT).
+      additionalProperties: true
+      properties:
+        suggestedFoods:
+          type: array
+          items: { $ref: '#/components/schemas/SuggestedFood' }
+        reason: { type: string }
+    ChatMessage:
+      type: object
+      required: [id, role, status, createdAt]
+      properties:
+        id: { type: string, format: uuid }
+        role: { type: string, enum: [USER, ASSISTANT, SYSTEM] }
+        content:
+          type: [string, 'null']
+          description: '`null` khi tin ASSISTANT đang `PENDING` hoặc `FAILED`.'
+        status: { type: string, enum: [PENDING, COMPLETED, FAILED] }
+        clientMessageId:
+          type: [string, 'null']
+          format: uuid
+          description: Chỉ có ở tin USER.
+        metadata:
+          oneOf:
+            - { $ref: '#/components/schemas/ChatMessageMetadata' }
+            - { type: 'null' }
+        feedback:
+          type: [integer, 'null']
+          enum: [-1, 1, null]
+          description: Chỉ có ở tin ASSISTANT đã được đánh giá.
+        createdAt: { type: string, format: date-time }
+    ChatReply:
+      type: object
+      required: [conversationId, userMessage, assistantMessage]
+      properties:
+        conversationId: { type: string, format: uuid }
+        userMessage: { $ref: '#/components/schemas/ChatMessage' }
+        assistantMessage: { $ref: '#/components/schemas/ChatMessage' }
+    ChatSuggestion:
+      type: object
+      required: [prompt, reason]
+      properties:
+        prompt: { type: string, description: Câu hỏi gợi ý để điền vào ô chat. }
+        reason: { type: string, description: Lý do hiển thị gợi ý. }
+    Conversation:
+      type: object
+      required: [id, messageCount, createdAt, updatedAt]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: [string, 'null'], maxLength: 120 }
+        messageCount: { type: integer, minimum: 0 }
+        lastMessageAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+    ConversationPage:
+      type: object
+      required: [items, page, size, totalElements, totalPages]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Conversation' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+    MessagePage:
+      type: object
+      required: [items, hasMore]
+      properties:
+        items:
+          type: array
+          description: Mới nhất trước.
+          items: { $ref: '#/components/schemas/ChatMessage' }
+        nextCursor:
+          type: [string, 'null']
+          description: Cursor mờ; `null` khi hết dữ liệu.
+        hasMore: { type: boolean }
+    ChatReplyEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ChatReply' }
+    ChatFeedbackEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ChatFeedback' }
+    ChatSuggestionListEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: '#/components/schemas/ChatSuggestion' }
+    ConversationEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/Conversation' }
+    ConversationPageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/ConversationPage' }
+    MessagePageEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data: { $ref: '#/components/schemas/MessagePage' }

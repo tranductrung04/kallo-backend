@@ -9,7 +9,7 @@ public record NotificationSettingsResponse(
     String waterEndTime, int waterIntervalMinutes, boolean mealReminderEnabled,
     String mealBreakfastTime, String mealLunchTime, String mealDinnerTime,
     boolean calorieAlertEnabled, int calorieAlertThresholdPct, boolean socialEnabled,
-    boolean dndEnabled, String dndStartTime, String dndEndTime) {
+    boolean chatReplyEnabled, boolean dndEnabled, String dndStartTime, String dndEndTime) {
   private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("HH:mm");
 
   public static NotificationSettingsResponse from(NotificationSettings s) {
@@ -18,7 +18,7 @@ public record NotificationSettingsResponse(
         format(s.getWaterEndTime()), s.getWaterIntervalMinutes(), s.isMealReminderEnabled(),
         format(s.getMealBreakfastTime()), format(s.getMealLunchTime()), format(s.getMealDinnerTime()),
         s.isCalorieAlertEnabled(), s.getCalorieAlertThresholdPct(), s.isSocialEnabled(),
-        s.isDndEnabled(), format(s.getDndStartTime()), format(s.getDndEndTime()));
+        s.isChatReplyEnabled(), s.isDndEnabled(), format(s.getDndStartTime()), format(s.getDndEndTime()));
   }
 
   private static String format(LocalTime value) {

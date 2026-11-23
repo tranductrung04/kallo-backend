@@ -30,6 +30,8 @@ public class ActivityLog {
   @Column(name = "duration_min", nullable = false) private int durationMin;
   @Column(name = "distance_km", precision = 6, scale = 2) private BigDecimal distanceKm;
   @Column(name = "calories_burned", nullable = false, precision = 7, scale = 1) private BigDecimal caloriesBurned;
+  @Column(name = "custom_name", length = 100) private String customName;
+  @Column(name = "manual_calories_burned", precision = 7, scale = 1) private BigDecimal manualCaloriesBurned;
   @Enumerated(EnumType.STRING) @Column(nullable = false, length = 20) private ActivitySource source;
   @Column(name = "external_id", length = 100) private String externalId;
   @Column(name = "started_at", nullable = false) private Instant startedAt;

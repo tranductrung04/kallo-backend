@@ -11,6 +11,7 @@ import com.healthcare.kallo.dto.request.auth.UpdateUserRequest;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.auth.enums.Role;
 import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.repository.act.WeightLogRepository;
 import com.healthcare.kallo.service.auth.impl.UserServiceImpl;
 import java.time.Duration;
 import java.util.Optional;
@@ -26,6 +27,7 @@ import org.springframework.mock.web.MockMultipartFile;
 @ExtendWith(MockitoExtension.class)
 class UserServiceTest {
   @Mock UserRepository users;
+  @Mock WeightLogRepository weightLogs;
   @Mock
   StorageService storage;
   @Mock PasswordEncoder passwordEncoder;
@@ -40,6 +42,7 @@ class UserServiceTest {
     service =
         new UserServiceImpl(
             users,
+            weightLogs,
             storage,
             new StorageProperties(
                 "http://minio:9000",
@@ -77,6 +80,39 @@ class UserServiceTest {
     assertThat(result.displayName()).isEqualTo("Updated");
     assertThat(result.timezone()).isEqualTo("Europe/Paris");
     verify(users).updateProfile(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), any());
+  }
+
+  @Test
+  void preservesAllergiesWhenRequestOmitsField() {
+    user.setAllergies(java.util.List.of("tôm"));
+    doAnswer(invocation -> {
+      user.setDisplayName("Updated");
+      user.setTimezone("Europe/Paris");
+      return 1;
+    }).when(users).updateProfile(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), any());
+
+    service.updateMe(user.getId(), new UpdateUserRequest("Updated", "Europe/Paris"));
+
+    verify(users).updateProfile(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), any());
+    verify(users, never()).updateProfileWithAllergies(any(), any(), any(), any(), any());
+    assertThat(user.getAllergies()).containsExactly("tôm");
+  }
+
+  @Test
+  void updatesAllergiesWhenRequestIncludesField() {
+    var allergies = java.util.List.of("tôm");
+    when(users.updateProfileWithAllergies(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), eq(allergies), any()))
+        .thenAnswer(invocation -> {
+          user.setDisplayName("Updated");
+          user.setTimezone("Europe/Paris");
+          user.setAllergies(allergies);
+          return 1;
+        });
+
+    service.updateMe(user.getId(), new UpdateUserRequest("Updated", "Europe/Paris", allergies));
+
+    verify(users).updateProfileWithAllergies(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), eq(allergies), any());
+    assertThat(user.getAllergies()).containsExactly("tôm");
   }
 
   @Test

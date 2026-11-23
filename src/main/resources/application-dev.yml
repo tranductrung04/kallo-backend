@@ -24,6 +24,13 @@ spring:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}
 
+app:
+  chat:
+    ai:
+      mock-enabled: ${CHAT_AI_MOCK_ENABLED:true}
+    sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
+    sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
+
 logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%X{request_id:-}] %logger{36} - %msg%n"

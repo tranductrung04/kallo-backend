@@ -6,7 +6,10 @@
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.x-brightgreen)
 ![Gradle](https://img.shields.io/badge/build-Gradle-02303A)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-336791)
+![Redis](https://img.shields.io/badge/Redis-7-DC382D)
+![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.1-005571)
 ![Flyway](https://img.shields.io/badge/migration-Flyway-CC0200)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
 
 ## Mục lục
 
@@ -30,16 +33,16 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 
 | Thành phần         | Công nghệ                          | Repository                 |
 |--------------------|------------------------------------|----------------------------|
-| Mobile app         | React Native, Expo, TypeScript     | _(cập nhật link)_          |
+| Mobile app         | React Native, Expo, TypeScript     | [kallo-frontend](https://github.com/tranductrung04/kallo-frontend)         |
 | AI service         | Python, FastAPI, ONNX Runtime      | _(cập nhật link)_          |
-| **Backend (repo này)** | Java, Spring Boot 4.x          | –                          |
+| **Backend (repo này)** | Java, Spring Boot 4.x          |                           |
 
 ## Tính năng chính
 
 - **Tài khoản & hồ sơ sức khoẻ:** đăng ký/đăng nhập (Email, Google OAuth2), khôi phục mật khẩu, thể trạng – mục tiêu cân nặng – dị ứng; tự tính BMI, TDEE, mục tiêu calo hàng ngày.
 - **Dinh dưỡng & bữa ăn:** nhật ký bữa ăn (Sáng/Trưa/Tối/Bữa phụ), nhận diện món ăn qua ảnh, tra cứu món, quét mã vạch, món ăn tuỳ chỉnh.
 - **Kế hoạch bữa ăn & trợ lý AI:** gợi ý thực đơn cá nhân hoá theo calo/dị ứng/ngân sách, chatbot tư vấn dinh dưỡng.
-- **Vận động & chỉ số cơ thể:** nhật ký tập luyện, đồng bộ Google Fit / Apple Health, lịch sử cân nặng, nước uống.
+- **Vận động & chỉ số cơ thể:** nhật ký tập luyện, đồng bộ Google Fit, lịch sử cân nặng, nước uống.
 - **Báo cáo & thống kê:** dashboard, biểu đồ calo/macro/cân nặng theo ngày/tuần/tháng, dự đoán xu hướng cân nặng.
 - **Streak & động lực:** chuỗi ngày, thử thách, huy hiệu, kết bạn, bảng xếp hạng thời gian thực (WebSocket).
 - **Tiện ích:** thông báo đẩy (FCM), nhắc nhở thông minh, hỗ trợ đồng bộ khi offline.
@@ -50,21 +53,28 @@ Repository này chứa **Backend chính** (Spring Boot). Các thành phần khá
 
 ## Công nghệ sử dụng
 
-| Thành phần      | Công nghệ                                              |
-|-----------------|--------------------------------------------------------|
-| Ngôn ngữ        | Java 21                                               |
-| Framework       | Spring Boot 4.x                                        |
-| Bảo mật         | Spring Security, JWT, Google OAuth2                    |
-| ORM             | Spring Data JPA / Hibernate                            |
-| Database        | PostgreSQL                                             |
-| Migration       | Flyway                                                 |
-| Build tool      | Gradle (Gradle Wrapper)                                |
-| Real-time       | Spring WebSocket                                       |
-| Thông báo đẩy   | Firebase Cloud Messaging (FCM)                         |
-| Lưu trữ tệp     | MinIO              |
-| API docs        | SpringDoc OpenAPI (Swagger UI)                         |
-| Testing         | JUnit 5, Mockito, Testcontainers                       |
-| Container       | Docker, Docker Compose                                 |
+| Thành phần         | Công nghệ                                                    |
+| ------------------ | ------------------------------------------------------------ |
+| Ngôn ngữ           | Java 21                                                      |
+| Framework          | Spring Boot 4.x                                              |
+| Bảo mật            | Spring Security, JWT, Google OAuth2                          |
+| Validation         | Spring Validation                                            |
+| ORM                | Spring Data JPA / Hibernate                                  |
+| Database           | PostgreSQL 17                                                |
+| Migration          | Flyway                                                       |
+| Cache / Rate limit | Redis 7                                                      |
+| Real-time          | Spring WebSocket, Server-Sent Events (SSE – chat streaming)  |
+| Tích hợp AI        | Spring `RestClient` → AI Service (FastAPI)                   |
+| Email              | Spring Mail (SMTP), Mailpit (môi trường dev)                 |
+| Thông báo đẩy      | Firebase Cloud Messaging (FCM)                               |
+| Lưu trữ tệp        | MinIO                                                        |
+| Mapping            | MapStruct, Lombok                                            |
+| Giám sát           | Spring Boot Actuator, Micrometer                             |
+| API docs           | SpringDoc OpenAPI (Swagger UI)                               |
+| Testing            | JUnit 5, Mockito, Testcontainers, JaCoCo, k6 (load test)     |
+| Build tool         | Gradle (Gradle Wrapper)                                      |
+| Container          | Docker, Docker Compose                                       |
+| CI/CD              | GitHub Actions                                               |
 
 ## Yêu cầu hệ thống
 
@@ -88,30 +98,33 @@ cd kallo-backend
 cp .env.example .env
 ```
 
-Cập nhật thông tin database, JWT secret, Google OAuth2, FCM, storage trong file `.env` (xem [Cấu hình](#cấu-hình)).
+### 3. Khởi động các dịch vụ phụ thuộc
 
-### 3. Khởi động PostgreSQL (nếu chưa có)
-
-```bash
-docker compose up -d postgres
-```
-
-### 4. Build
+Ứng dụng cần PostgreSQL, Redis, Elasticsearch và MinIO. Chạy qua Docker Compose:
 
 ```bash
-./gradlew clean build
+docker compose up -d postgres redis elasticsearch minio
 ```
 
-### 5. Chạy ứng dụng
+Mail dev dùng Mailpit (tuỳ chọn, chỉ khi chạy app bằng `bootRun`):
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=dev'
+docker compose --profile dev up -d mailpit
 ```
 
-Ứng dụng chạy tại: http://localhost:8080  
-Flyway sẽ tự động chạy migration khi ứng dụng khởi động.
+Mailpit mở SMTP tại `localhost:1025` (khớp giá trị mặc định `MAIL_HOST=localhost`, `MAIL_PORT=1025`) và giao diện xem thư tại http://localhost:8025.
 
+### 4. Chạy ứng dụng
 
+```bash
+./gradlew bootRun
+```
+
+Profile mặc định là `dev`. Flyway tự động chạy migration khi ứng dụng khởi động.
+
+Kiểm tra nhanh:
+
+- Health check: http://localhost:8080/actuator/health
 
 ## Database & Migration
 
@@ -127,13 +140,6 @@ spring:
     locations: classpath:db/migration
 ```
 
-Quy ước đặt tên: migration khởi tạo hiện có dùng `V1__init_schema.sql`; các migration mới
-dùng `V<yyyyMMddHHmm>__<module>_<mô_tả>.sql` với thời gian tạo theo UTC, ví dụ
-`V202611121030__act_weight_logs.sql`. Số phiên bản phải tăng theo thứ tự phụ thuộc trong
-cùng module. Khi phát triển local, profile `dev` cho phép Flyway chạy migration lệch thứ tự;
-production vẫn giữ mặc định an toàn.
-**Không sửa** file migration đã chạy – hãy tạo phiên bản mới.
-
 ```bash
 # Xem trạng thái migration (nếu cấu hình plugin Flyway cho Gradle)
 ./gradlew flywayInfo
@@ -147,7 +153,7 @@ production vẫn giữ mặc định an toàn.
 
 ## Testing
 
-- Tài liệu test: [docs/tests](docs/tests)
+- Tài liệu test: [docs/test](docs/tests)
 
 ```bash
 # Chạy toàn bộ test

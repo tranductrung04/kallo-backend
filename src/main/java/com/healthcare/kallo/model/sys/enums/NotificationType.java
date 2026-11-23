@@ -9,6 +9,7 @@ public enum NotificationType {
   FRIEND_OVERTAKE(Kind.SOCIAL),
   CHALLENGE_EXPIRING(Kind.SOCIAL),
   CHALLENGE_COMPLETED(Kind.SOCIAL),
+  CHAT_REPLY(Kind.SYSTEM),
   SYSTEM(Kind.SYSTEM);
 
   private final Kind kind;
