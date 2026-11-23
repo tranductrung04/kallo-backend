@@ -12,6 +12,7 @@ import com.healthcare.kallo.dto.response.profile.HealthProfileResponse;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.profile.UserHealthProfile;
 import com.healthcare.kallo.model.profile.enums.ActivityLevel;
+import com.healthcare.kallo.model.profile.enums.ChronicConditionType;
 import com.healthcare.kallo.model.profile.enums.Gender;
 import com.healthcare.kallo.model.profile.enums.GoalType;
 import com.healthcare.kallo.repository.auth.UserRepository;
@@ -142,5 +143,145 @@ class HealthProfileServiceTest {
     assertThat(response.tdee()).isGreaterThan(0);
     assertThat(response.dailyCalorieGoal()).isGreaterThanOrEqualTo(1200);
     verify(profileRepository).save(any(UserHealthProfile.class));
+  }
+
+  @Test
+  @DisplayName("upsertProfile() maps chronicConditions correctly and handles null safely")
+  void upsertProfile_chronicConditions_mapsCorrectly() {
+    UUID userId = UUID.randomUUID();
+    User user = new User();
+    user.setId(userId);
+
+    java.util.List<ChronicConditionType> conditionsWithNull = new java.util.ArrayList<>();
+    conditionsWithNull.add(ChronicConditionType.DIABETES);
+    conditionsWithNull.add(null);
+    conditionsWithNull.add(ChronicConditionType.HYPERTENSION);
+
+    HealthProfileRequest request =
+        new HealthProfileRequest(
+            Gender.MALE,
+            LocalDate.of(1990, 5, 20),
+            BigDecimal.valueOf(175.0),
+            BigDecimal.valueOf(75.0),
+            ActivityLevel.MODERATELY_ACTIVE,
+            GoalType.MAINTAIN_WEIGHT,
+            BigDecimal.valueOf(75.0),
+            BigDecimal.ZERO,
+            null,
+            null,
+            null,
+            null,
+            List.of("SEAFOOD"),
+            conditionsWithNull);
+
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+    when(profileRepository.findByUserId(userId)).thenReturn(Optional.empty());
+    when(profileRepository.save(any(UserHealthProfile.class)))
+        .thenAnswer(inv -> {
+          UserHealthProfile p = inv.getArgument(0);
+          p.setId(UUID.randomUUID());
+          return p;
+        });
+
+    HealthProfileResponse response = profileService.upsertProfile(userId, request);
+
+    assertThat(response).isNotNull();
+    assertThat(response.chronicConditions()).containsExactlyInAnyOrder(ChronicConditionType.DIABETES, ChronicConditionType.HYPERTENSION);
+  }
+
+  @Test
+  @DisplayName("upsertProfile throws VALIDATION_ERROR when LOSE_WEIGHT target is greater than or equal to current weight")
+  void upsertProfile_loseWeightTargetGreater_throwsValidationError() {
+    UUID userId = UUID.randomUUID();
+    User user = new User();
+    user.setId(userId);
+
+    HealthProfileRequest request =
+        new HealthProfileRequest(
+            Gender.MALE,
+            LocalDate.of(1995, 1, 1),
+            BigDecimal.valueOf(175.0),
+            BigDecimal.valueOf(70.0), // current 70kg
+            ActivityLevel.SEDENTARY,
+            GoalType.LOSE_WEIGHT,
+            BigDecimal.valueOf(75.0), // target 75kg > 70kg!
+            BigDecimal.valueOf(0.5),
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            List.of());
+
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> profileService.upsertProfile(userId, request))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.VALIDATION_ERROR);
+  }
+
+  @Test
+  @DisplayName("upsertProfile throws INVALID_MACRO_RATIO when only partial custom macros are provided")
+  void upsertProfile_partialCustomMacro_throwsInvalidMacroRatio() {
+    UUID userId = UUID.randomUUID();
+    User user = new User();
+    user.setId(userId);
+
+    HealthProfileRequest request =
+        new HealthProfileRequest(
+            Gender.MALE,
+            LocalDate.of(1995, 1, 1),
+            BigDecimal.valueOf(175.0),
+            BigDecimal.valueOf(70.0),
+            ActivityLevel.SEDENTARY,
+            GoalType.MAINTAIN_WEIGHT,
+            BigDecimal.valueOf(70.0),
+            BigDecimal.ZERO,
+            BigDecimal.valueOf(40.0), // only protein provided!
+            null, // carbs missing
+            null, // fat missing
+            null,
+            List.of(),
+            List.of());
+
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> profileService.upsertProfile(userId, request))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.INVALID_MACRO_RATIO);
+  }
+
+  @Test
+  @DisplayName("upsertProfile throws VALIDATION_ERROR when LOSE_WEIGHT is missing targetWeightKg")
+  void upsertProfile_loseWeightTargetWeightNull_throwsValidationError() {
+    UUID userId = UUID.randomUUID();
+    User user = new User();
+    user.setId(userId);
+
+    HealthProfileRequest request =
+        new HealthProfileRequest(
+            Gender.MALE,
+            LocalDate.of(1995, 1, 1),
+            BigDecimal.valueOf(175.0),
+            BigDecimal.valueOf(70.0),
+            ActivityLevel.SEDENTARY,
+            GoalType.LOSE_WEIGHT,
+            null, // targetWeightKg is missing!
+            BigDecimal.valueOf(0.5),
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            List.of());
+
+    when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+
+    assertThatThrownBy(() -> profileService.upsertProfile(userId, request))
+        .isInstanceOf(BusinessException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.VALIDATION_ERROR);
   }
 }

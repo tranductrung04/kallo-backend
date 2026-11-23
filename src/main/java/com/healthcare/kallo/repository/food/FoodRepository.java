@@ -19,10 +19,16 @@ public interface FoodRepository extends JpaRepository<Food, UUID> {
 
   Optional<Food> findByIdAndOwnerId(UUID id, UUID ownerId);
 
+  @Query("SELECT f FROM Food f WHERE ((f.owner IS NULL AND f.isVerified = true) OR (f.owner.id = :userId)) AND f.category <> com.healthcare.kallo.model.food.enums.FoodCategory.NON_FOOD")
+  java.util.List<Food> findAvailableFoodsForUser(@Param("userId") UUID userId);
+
+  @Query("SELECT f FROM Food f WHERE f.id = :foodId AND ((f.owner IS NULL AND f.isVerified = true) OR (f.owner.id = :userId))")
+  Optional<Food> findVisibleFoodById(@Param("foodId") UUID foodId, @Param("userId") UUID userId);
+
   @Query(
       value = """
           SELECT * FROM foods f
-          WHERE (f.owner_user_id IS NULL OR f.owner_user_id = :userId)
+          WHERE ((f.owner_user_id IS NULL AND f.is_verified = true) OR f.owner_user_id = :userId)
             AND (CAST(:category AS text) IS NULL OR f.category = CAST(:category AS text))
             AND (
               CAST(:query AS text) IS NULL OR CAST(:query AS text) = '' OR
@@ -37,7 +43,7 @@ public interface FoodRepository extends JpaRepository<Food, UUID> {
           """,
       countQuery = """
           SELECT count(*) FROM foods f
-          WHERE (f.owner_user_id IS NULL OR f.owner_user_id = :userId)
+          WHERE ((f.owner_user_id IS NULL AND f.is_verified = true) OR f.owner_user_id = :userId)
             AND (CAST(:category AS text) IS NULL OR f.category = CAST(:category AS text))
             AND (
               CAST(:query AS text) IS NULL OR CAST(:query AS text) = '' OR

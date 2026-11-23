@@ -1,6 +1,7 @@
 package com.healthcare.kallo.dto.request.profile;
 
 import com.healthcare.kallo.model.profile.enums.ActivityLevel;
+import com.healthcare.kallo.model.profile.enums.ChronicConditionType;
 import com.healthcare.kallo.model.profile.enums.Gender;
 import com.healthcare.kallo.model.profile.enums.GoalType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -70,4 +71,39 @@ public record HealthProfileRequest(
     Integer customWaterGoalMl,
 
     @Schema(description = "List of food allergens or dietary restrictions", example = "[\"PEANUT\", \"SEAFOOD\"]")
-    List<String> allergies) {}
+    List<String> allergies,
+
+    @Schema(description = "List of chronic health conditions (e.g. DIABETES, HYPERTENSION)", example = "[\"DIABETES\"]")
+    List<@NotNull(message = "Chronic condition cannot be null") ChronicConditionType> chronicConditions) {
+
+  public HealthProfileRequest(
+      Gender gender,
+      LocalDate birthDate,
+      BigDecimal heightCm,
+      BigDecimal weightKg,
+      ActivityLevel activityLevel,
+      GoalType goalType,
+      BigDecimal targetWeightKg,
+      BigDecimal weeklyRateKg,
+      BigDecimal customProteinPct,
+      BigDecimal customCarbsPct,
+      BigDecimal customFatPct,
+      Integer customWaterGoalMl,
+      List<String> allergies) {
+    this(
+        gender,
+        birthDate,
+        heightCm,
+        weightKg,
+        activityLevel,
+        goalType,
+        targetWeightKg,
+        weeklyRateKg,
+        customProteinPct,
+        customCarbsPct,
+        customFatPct,
+        customWaterGoalMl,
+        allergies,
+        List.of());
+  }
+}

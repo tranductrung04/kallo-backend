@@ -112,6 +112,14 @@ public class UserHealthProfile {
   @Column(columnDefinition = "jsonb")
   private List<String> allergies = new ArrayList<>();
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "preference_vector", columnDefinition = "jsonb")
+  private List<Double> preferenceVector = new ArrayList<>();
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "chronic_conditions", columnDefinition = "jsonb")
+  private List<String> chronicConditions = new ArrayList<>();
+
   @Column(name = "recalculation_recommended", nullable = false)
   private boolean recalculationRecommended;
 

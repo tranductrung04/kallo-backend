@@ -13,6 +13,8 @@ import com.healthcare.kallo.model.food.enums.FoodSource;
 import com.healthcare.kallo.model.food.enums.MealType;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.food.FoodRepository;
+import com.healthcare.kallo.repository.nutri.UserFoodLogRepository;
+import com.healthcare.kallo.repository.plan.MealPlanFoodRepository;
 import com.healthcare.kallo.service.food.FoodService;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -30,10 +32,22 @@ public class FoodServiceImpl implements FoodService {
 
   private final FoodRepository foodRepository;
   private final UserRepository userRepository;
+  private final UserFoodLogRepository userFoodLogRepository;
+  private final MealPlanFoodRepository mealPlanFoodRepository;
 
-  public FoodServiceImpl(FoodRepository foodRepository, UserRepository userRepository) {
+  public FoodServiceImpl(
+      FoodRepository foodRepository,
+      UserRepository userRepository,
+      UserFoodLogRepository userFoodLogRepository,
+      MealPlanFoodRepository mealPlanFoodRepository) {
     this.foodRepository = foodRepository;
     this.userRepository = userRepository;
+    this.userFoodLogRepository = userFoodLogRepository;
+    this.mealPlanFoodRepository = mealPlanFoodRepository;
+  }
+
+  public FoodServiceImpl(FoodRepository foodRepository, UserRepository userRepository) {
+    this(foodRepository, userRepository, null, null);
   }
 
   @Override
@@ -56,12 +70,8 @@ public class FoodServiceImpl implements FoodService {
   public FoodResponse getFoodById(UUID foodId, UUID currentUserId) {
     Food food =
         foodRepository
-            .findById(foodId)
+            .findVisibleFoodById(foodId, currentUserId)
             .orElseThrow(() -> new BusinessException(ErrorCode.FOOD_NOT_FOUND));
-
-    if (food.getOwner() != null && !food.getOwner().getId().equals(currentUserId)) {
-      throw new BusinessException(ErrorCode.FOOD_NOT_FOUND);
-    }
 
     return FoodResponse.fromEntity(food);
   }
@@ -137,6 +147,14 @@ public class FoodServiceImpl implements FoodService {
 
     if (!food.getOwner().getId().equals(currentUserId)) {
       throw new BusinessException(ErrorCode.FORBIDDEN);
+    }
+
+    if (userFoodLogRepository != null && userFoodLogRepository.existsByFoodId(foodId)) {
+      throw new BusinessException(ErrorCode.FOOD_IN_USE, "Món ăn đang được sử dụng trong nhật ký ăn uống");
+    }
+
+    if (mealPlanFoodRepository != null && mealPlanFoodRepository.existsByFoodId(foodId)) {
+      throw new BusinessException(ErrorCode.FOOD_IN_USE, "Món ăn đang được sử dụng trong thực đơn");
     }
 
     foodRepository.delete(food);

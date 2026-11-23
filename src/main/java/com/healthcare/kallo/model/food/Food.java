@@ -95,6 +95,10 @@ public class Food {
   private Integer vietfoodClassId;
 
   @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "feature_vector", columnDefinition = "jsonb")
+  private List<Double> featureVector = new ArrayList<>();
+
+  @JdbcTypeCode(SqlTypes.JSON)
   @Column(columnDefinition = "jsonb")
   private List<String> allergens = new ArrayList<>();
 

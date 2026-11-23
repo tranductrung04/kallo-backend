@@ -24,6 +24,7 @@ import com.healthcare.kallo.repository.food.FoodRepository;
 import com.healthcare.kallo.repository.nutri.UserFoodLogRepository;
 import com.healthcare.kallo.repository.profile.UserHealthProfileRepository;
 import com.healthcare.kallo.service.nutri.impl.FoodLogServiceImpl;
+import com.healthcare.kallo.service.plan.engine.VectorSimilarityEngine;
 import com.healthcare.kallo.service.report.DailySummaryService;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -52,6 +53,8 @@ class FoodLogServiceTest {
   @Mock private ApplicationEventPublisher eventPublisher;
 
   private final Clock clock = Clock.fixed(Instant.parse("2026-11-20T12:00:00Z"), ZoneId.of("UTC"));
+  @Mock private VectorSimilarityEngine vectorEngine;
+
   private FoodLogService foodLogService;
 
   private UUID userId;
@@ -68,6 +71,7 @@ class FoodLogServiceTest {
         userHealthProfileRepository,
         dailySummaryService,
         eventPublisher,
+        vectorEngine,
         clock
     );
 
@@ -114,7 +118,7 @@ class FoodLogServiceTest {
 
     when(userFoodLogRepository.findByUserIdAndClientUuid(userId, clientUuid)).thenReturn(Optional.empty());
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(foodRepository.findVisibleFoodById(foodId, userId)).thenReturn(Optional.of(food));
     when(userHealthProfileRepository.findByUserId(userId)).thenReturn(Optional.empty());
     when(userFoodLogRepository.save(any(UserFoodLog.class))).thenAnswer(invocation -> {
       UserFoodLog log = invocation.getArgument(0);
@@ -162,7 +166,7 @@ class FoodLogServiceTest {
 
     when(userFoodLogRepository.findByUserIdAndClientUuid(userId, clientUuid)).thenReturn(Optional.empty());
     when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(foodRepository.findVisibleFoodById(foodId, userId)).thenReturn(Optional.of(food));
     when(userHealthProfileRepository.findByUserId(userId)).thenReturn(Optional.of(profile));
     when(userFoodLogRepository.save(any(UserFoodLog.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

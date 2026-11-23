@@ -2,6 +2,7 @@ package com.healthcare.kallo.dto.response.profile;
 
 import com.healthcare.kallo.model.profile.enums.ActivityLevel;
 import com.healthcare.kallo.model.profile.enums.BmiCategory;
+import com.healthcare.kallo.model.profile.enums.ChronicConditionType;
 import com.healthcare.kallo.model.profile.enums.Gender;
 import com.healthcare.kallo.model.profile.enums.GoalType;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -40,10 +41,84 @@ public record HealthProfileResponse(
     boolean customMacro,
     int waterGoalMl,
     List<String> allergies,
+    @Schema(description = "List of chronic health conditions (e.g. DIABETES, HYPERTENSION)")
+    List<ChronicConditionType> chronicConditions,
     @Schema(description = "True if latest weight log suggests recalculating TDEE/calorie goal")
     boolean recalculationRecommended,
     Integer recommendedTdee,
     Integer recommendedDailyCalorieGoal,
     BigDecimal latestLoggedWeightKg,
     Instant createdAt,
-    Instant updatedAt) {}
+    Instant updatedAt) {
+
+  public HealthProfileResponse(
+      UUID id,
+      UUID userId,
+      Gender gender,
+      LocalDate birthDate,
+      int age,
+      BigDecimal heightCm,
+      BigDecimal weightKg,
+      ActivityLevel activityLevel,
+      GoalType goalType,
+      BigDecimal targetWeightKg,
+      BigDecimal weeklyRateKg,
+      BigDecimal bmi,
+      BmiCategory bmiCategory,
+      String bmiCategoryVi,
+      int bmr,
+      int tdee,
+      int dailyCalorieGoal,
+      boolean safetyClamped,
+      BigDecimal proteinGoalG,
+      BigDecimal carbsGoalG,
+      BigDecimal fatGoalG,
+      BigDecimal proteinPct,
+      BigDecimal carbsPct,
+      BigDecimal fatPct,
+      boolean customMacro,
+      int waterGoalMl,
+      List<String> allergies,
+      boolean recalculationRecommended,
+      Integer recommendedTdee,
+      Integer recommendedDailyCalorieGoal,
+      BigDecimal latestLoggedWeightKg,
+      Instant createdAt,
+      Instant updatedAt) {
+    this(
+        id,
+        userId,
+        gender,
+        birthDate,
+        age,
+        heightCm,
+        weightKg,
+        activityLevel,
+        goalType,
+        targetWeightKg,
+        weeklyRateKg,
+        bmi,
+        bmiCategory,
+        bmiCategoryVi,
+        bmr,
+        tdee,
+        dailyCalorieGoal,
+        safetyClamped,
+        proteinGoalG,
+        carbsGoalG,
+        fatGoalG,
+        proteinPct,
+        carbsPct,
+        fatPct,
+        customMacro,
+        waterGoalMl,
+        allergies,
+        List.of(),
+        recalculationRecommended,
+        recommendedTdee,
+        recommendedDailyCalorieGoal,
+        latestLoggedWeightKg,
+        createdAt,
+        updatedAt);
+  }
+}

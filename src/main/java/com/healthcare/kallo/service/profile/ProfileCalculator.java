@@ -189,8 +189,16 @@ public final class ProfileCalculator {
       BigDecimal customCarbsPct,
       BigDecimal customFatPct) {
 
+    boolean anyCustom =
+        customProteinPct != null || customCarbsPct != null || customFatPct != null;
     boolean hasCustom =
         customProteinPct != null && customCarbsPct != null && customFatPct != null;
+
+    if (anyCustom && !hasCustom) {
+      throw new BusinessException(
+          ErrorCode.INVALID_MACRO_RATIO,
+          "Khi tùy biến tỷ lệ dinh dưỡng (macro), bạn phải nhập đủ cả 3 chỉ số: đạm (protein), bột đường (carbs) và chất béo (fat)");
+    }
 
     BigDecimal pPct;
     BigDecimal cPct;

@@ -6,6 +6,8 @@ import com.healthcare.kallo.dto.request.profile.HealthProfileRequest;
 import com.healthcare.kallo.dto.response.profile.HealthProfileResponse;
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.model.profile.UserHealthProfile;
+import com.healthcare.kallo.model.profile.enums.ChronicConditionType;
+import com.healthcare.kallo.model.profile.enums.GoalType;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.profile.UserHealthProfileRepository;
 import com.healthcare.kallo.service.profile.HealthProfileService;
@@ -15,6 +17,8 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +56,27 @@ public class HealthProfileServiceImpl implements HealthProfileService {
         userRepository
             .findById(userId)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
+
+    if (request.goalType() == GoalType.LOSE_WEIGHT || request.goalType() == GoalType.GAIN_WEIGHT) {
+      if (request.targetWeightKg() == null) {
+        throw new BusinessException(
+            ErrorCode.VALIDATION_ERROR,
+            "Mục tiêu " + request.goalType() + " bắt buộc phải nhập cân nặng mục tiêu (targetWeightKg)");
+      }
+    }
+
+    if (request.targetWeightKg() != null && request.weightKg() != null) {
+      if (request.goalType() == GoalType.LOSE_WEIGHT && request.targetWeightKg().compareTo(request.weightKg()) >= 0) {
+        throw new BusinessException(
+            ErrorCode.VALIDATION_ERROR,
+            "Mục tiêu giảm cân (LOSE_WEIGHT) yêu cầu cân nặng mục tiêu (" + request.targetWeightKg() + " kg) phải nhỏ hơn cân nặng hiện tại (" + request.weightKg() + " kg)");
+      }
+      if (request.goalType() == GoalType.GAIN_WEIGHT && request.targetWeightKg().compareTo(request.weightKg()) <= 0) {
+        throw new BusinessException(
+            ErrorCode.VALIDATION_ERROR,
+            "Mục tiêu tăng cân (GAIN_WEIGHT) yêu cầu cân nặng mục tiêu (" + request.targetWeightKg() + " kg) phải lớn hơn cân nặng hiện tại (" + request.weightKg() + " kg)");
+      }
+    }
 
     LocalDate today = LocalDate.now(clock);
 
@@ -107,6 +132,17 @@ public class HealthProfileServiceImpl implements HealthProfileService {
       profile.setAllergies(new ArrayList<>(request.allergies()));
     } else if (profile.getAllergies() == null) {
       profile.setAllergies(new ArrayList<>());
+    }
+
+    if (request.chronicConditions() != null) {
+      profile.setChronicConditions(
+          request.chronicConditions().stream()
+              .filter(Objects::nonNull)
+              .map(Enum::name)
+              .distinct()
+              .toList());
+    } else if (profile.getChronicConditions() == null) {
+      profile.setChronicConditions(new ArrayList<>());
     }
 
     // Reset recalculation recommendation since user updated profile explicitly
@@ -177,6 +213,19 @@ public class HealthProfileServiceImpl implements HealthProfileService {
   private HealthProfileResponse toResponse(UserHealthProfile p) {
     LocalDate today = LocalDate.now(clock);
     int age = ProfileCalculator.calculateAge(p.getBirthDate(), today);
+    List<ChronicConditionType> conditions = (p.getChronicConditions() != null)
+        ? p.getChronicConditions().stream()
+            .map(c -> {
+              try {
+                return ChronicConditionType.valueOf(c);
+              } catch (Exception e) {
+                return null;
+              }
+            })
+            .filter(Objects::nonNull)
+            .toList()
+        : List.of();
+
     return new HealthProfileResponse(
         p.getId(),
         p.getUser().getId(),
@@ -205,6 +254,7 @@ public class HealthProfileServiceImpl implements HealthProfileService {
         p.isCustomMacro(),
         p.getWaterGoalMl(),
         p.getAllergies(),
+        conditions,
         p.isRecalculationRecommended(),
         p.getRecommendedTdee(),
         p.getRecommendedDailyCalorieGoal(),

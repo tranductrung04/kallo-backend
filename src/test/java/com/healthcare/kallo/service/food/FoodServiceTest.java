@@ -18,6 +18,8 @@ import com.healthcare.kallo.model.food.enums.FoodSource;
 import com.healthcare.kallo.model.food.enums.MealType;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.food.FoodRepository;
+import com.healthcare.kallo.repository.nutri.UserFoodLogRepository;
+import com.healthcare.kallo.repository.plan.MealPlanFoodRepository;
 import com.healthcare.kallo.service.food.impl.FoodServiceImpl;
 import java.math.BigDecimal;
 import java.util.List;
@@ -37,12 +39,14 @@ class FoodServiceTest {
 
   @Mock private FoodRepository foodRepository;
   @Mock private UserRepository userRepository;
+  @Mock private UserFoodLogRepository userFoodLogRepository;
+  @Mock private MealPlanFoodRepository mealPlanFoodRepository;
 
   private FoodService foodService;
 
   @BeforeEach
   void setUp() {
-    foodService = new FoodServiceImpl(foodRepository, userRepository);
+    foodService = new FoodServiceImpl(foodRepository, userRepository, userFoodLogRepository, mealPlanFoodRepository);
   }
 
   @Test
@@ -95,8 +99,9 @@ class FoodServiceTest {
     food.setCarbsPerServing(BigDecimal.valueOf(59.4));
     food.setFatPerServing(BigDecimal.valueOf(15.8));
     food.setOwner(null);
+    food.setVerified(true);
 
-    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(foodRepository.findVisibleFoodById(foodId, currentUserId)).thenReturn(Optional.of(food));
 
     FoodResponse response = foodService.getFoodById(foodId, currentUserId);
     assertThat(response).isNotNull();
@@ -108,16 +113,8 @@ class FoodServiceTest {
   void getFoodById_otherUserCustomFood() {
     UUID foodId = UUID.randomUUID();
     UUID userA = UUID.randomUUID();
-    UUID userB = UUID.randomUUID();
 
-    User ownerB = new User();
-    ownerB.setId(userB);
-
-    Food food = new Food();
-    food.setId(foodId);
-    food.setOwner(ownerB);
-
-    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(foodRepository.findVisibleFoodById(foodId, userA)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> foodService.getFoodById(foodId, userA))
         .isInstanceOf(BusinessException.class)
@@ -251,6 +248,71 @@ class FoodServiceTest {
     assertThatThrownBy(() -> foodService.deleteCustomFood(userA, foodId))
         .isInstanceOf(BusinessException.class)
         .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FORBIDDEN);
+  }
+
+  @Test
+  @DisplayName("deleteCustomFood() throws FOOD_IN_USE when food is referenced by food logs")
+  void deleteCustomFood_inUseByFoodLog() {
+    UUID foodId = UUID.randomUUID();
+    UUID userId = UUID.randomUUID();
+
+    User owner = new User();
+    owner.setId(userId);
+
+    Food food = new Food();
+    food.setId(foodId);
+    food.setOwner(owner);
+
+    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(userFoodLogRepository.existsByFoodId(foodId)).thenReturn(true);
+
+    assertThatThrownBy(() -> foodService.deleteCustomFood(userId, foodId))
+        .isInstanceOf(BusinessException.class)
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FOOD_IN_USE);
+  }
+
+  @Test
+  @DisplayName("deleteCustomFood() throws FOOD_IN_USE when food is referenced by meal plans")
+  void deleteCustomFood_inUseByMealPlan() {
+    UUID foodId = UUID.randomUUID();
+    UUID userId = UUID.randomUUID();
+
+    User owner = new User();
+    owner.setId(userId);
+
+    Food food = new Food();
+    food.setId(foodId);
+    food.setOwner(owner);
+
+    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(userFoodLogRepository.existsByFoodId(foodId)).thenReturn(false);
+    when(mealPlanFoodRepository.existsByFoodId(foodId)).thenReturn(true);
+
+    assertThatThrownBy(() -> foodService.deleteCustomFood(userId, foodId))
+        .isInstanceOf(BusinessException.class)
+        .hasFieldOrPropertyWithValue("errorCode", ErrorCode.FOOD_IN_USE);
+  }
+
+  @Test
+  @DisplayName("deleteCustomFood() successfully deletes when not in use")
+  void deleteCustomFood_success() {
+    UUID foodId = UUID.randomUUID();
+    UUID userId = UUID.randomUUID();
+
+    User owner = new User();
+    owner.setId(userId);
+
+    Food food = new Food();
+    food.setId(foodId);
+    food.setOwner(owner);
+
+    when(foodRepository.findById(foodId)).thenReturn(Optional.of(food));
+    when(userFoodLogRepository.existsByFoodId(foodId)).thenReturn(false);
+    when(mealPlanFoodRepository.existsByFoodId(foodId)).thenReturn(false);
+
+    foodService.deleteCustomFood(userId, foodId);
+
+    org.mockito.Mockito.verify(foodRepository).delete(food);
   }
 
   @Test

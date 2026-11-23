@@ -21,6 +21,7 @@ import com.healthcare.kallo.repository.nutri.UserFoodLogRepository;
 import com.healthcare.kallo.repository.profile.UserHealthProfileRepository;
 import com.healthcare.kallo.service.nutri.FoodLogService;
 import com.healthcare.kallo.service.report.DailySummaryService;
+import com.healthcare.kallo.service.plan.engine.VectorSimilarityEngine;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Clock;
@@ -43,6 +44,7 @@ public class FoodLogServiceImpl implements FoodLogService {
   private final UserHealthProfileRepository userHealthProfileRepository;
   private final DailySummaryService dailySummaryService;
   private final ApplicationEventPublisher eventPublisher;
+  private final VectorSimilarityEngine vectorEngine;
   private final Clock clock;
 
   public FoodLogServiceImpl(
@@ -52,6 +54,7 @@ public class FoodLogServiceImpl implements FoodLogService {
       UserHealthProfileRepository userHealthProfileRepository,
       DailySummaryService dailySummaryService,
       ApplicationEventPublisher eventPublisher,
+      VectorSimilarityEngine vectorEngine,
       Clock clock) {
     this.userFoodLogRepository = userFoodLogRepository;
     this.foodRepository = foodRepository;
@@ -59,6 +62,7 @@ public class FoodLogServiceImpl implements FoodLogService {
     this.userHealthProfileRepository = userHealthProfileRepository;
     this.dailySummaryService = dailySummaryService;
     this.eventPublisher = eventPublisher;
+    this.vectorEngine = vectorEngine;
     this.clock = clock;
   }
 
@@ -75,7 +79,7 @@ public class FoodLogServiceImpl implements FoodLogService {
     User user = userRepository.findById(userId)
         .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
 
-    Food food = foodRepository.findById(request.foodId())
+    Food food = foodRepository.findVisibleFoodById(request.foodId(), userId)
         .orElseThrow(() -> new BusinessException(ErrorCode.FOOD_NOT_FOUND));
 
     // 2. Nutrition Snapshot calculation
@@ -123,7 +127,20 @@ public class FoodLogServiceImpl implements FoodLogService {
 
     UserFoodLog saved = userFoodLogRepository.save(log);
 
-    // 3. Publish event & recalculate
+    // 3. Online Adaptive Learning for preference vector (skip unextracted zero vectors)
+    if (food.getFeatureVector() != null && !vectorEngine.isZeroVector(food.getFeatureVector())) {
+      userHealthProfileRepository.findByUserId(userId).ifPresent(profile -> {
+        List<Double> updated = vectorEngine.updatePreferenceAdaptive(
+            profile.getPreferenceVector(),
+            food.getFeatureVector(),
+            VectorSimilarityEngine.DEFAULT_LEARNING_RATE
+        );
+        profile.setPreferenceVector(updated);
+        userHealthProfileRepository.save(profile);
+      });
+    }
+
+    // 4. Publish event & recalculate
     eventPublisher.publishEvent(new MealLoggedEvent(userId, request.mealType().name(), loggedAt));
     dailySummaryService.recalculate(userId, request.loggedDate());
 

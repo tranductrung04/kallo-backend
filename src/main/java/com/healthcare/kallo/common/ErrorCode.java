@@ -59,6 +59,14 @@ public enum ErrorCode {
   WATER_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Water log not found"),
   DAILY_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "Daily summary not found"),
   AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI recognition service is temporarily unavailable"),
+  MEAL_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "Meal plan not found"),
+  MEAL_PLAN_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Meal plan item not found"),
+  INSUFFICIENT_FOOD_DATA(HttpStatus.BAD_REQUEST, "Insufficient suitable food items to generate meal plan"),
+  NO_SUITABLE_SWAP_FOOD(HttpStatus.BAD_REQUEST, "No suitable alternative food found for swap"),
+  MEAL_PLAN_NOT_SAVED(HttpStatus.BAD_REQUEST, "Meal plan must be saved before applying"),
+  MEAL_PLAN_ALREADY_APPLIED(HttpStatus.CONFLICT, "Meal plan has already been applied"),
+  MEAL_LOG_ALREADY_EXISTS(HttpStatus.CONFLICT, "Meal log already exists for this date and meal type"),
+  FOOD_IN_USE(HttpStatus.CONFLICT, "Food item is in use by meal plans or food logs"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

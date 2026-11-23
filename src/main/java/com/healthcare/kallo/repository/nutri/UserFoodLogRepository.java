@@ -42,13 +42,27 @@ public interface UserFoodLogRepository extends JpaRepository<UserFoodLog, UUID> 
       """)
   List<Object[]> sumNutrientsByDate(@Param("userId") UUID userId, @Param("date") LocalDate date);
 
-  @Query("""
-      SELECT DISTINCT l.food
-      FROM UserFoodLog l
-      WHERE l.user.id = :userId
-      ORDER BY l.loggedAt DESC
-      """)
+  @Query(
+      value = """
+          SELECT f.*
+          FROM foods f
+          JOIN (
+              SELECT food_id, MAX(logged_at) AS max_logged_at
+              FROM user_food_logs
+              WHERE user_id = :userId
+              GROUP BY food_id
+          ) recent ON f.id = recent.food_id
+          ORDER BY recent.max_logged_at DESC
+          """,
+      countQuery = """
+          SELECT count(DISTINCT food_id)
+          FROM user_food_logs
+          WHERE user_id = :userId
+          """,
+      nativeQuery = true)
   List<Food> findRecentFoods(@Param("userId") UUID userId, Pageable pageable);
 
   boolean existsByUserIdAndLoggedDateAndMealType(UUID userId, LocalDate date, com.healthcare.kallo.model.food.enums.MealType mealType);
+
+  boolean existsByFoodId(UUID foodId);
 }

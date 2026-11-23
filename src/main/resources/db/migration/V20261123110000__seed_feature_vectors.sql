@@ -1,0 +1,74 @@
+-- V20261123110000__seed_feature_vectors.sql
+-- Seed realistic 12-dimensional feature vectors for VietFood68 dishes
+-- Vector schema:
+-- [0: SOUP_BASED, 1: DRY_BASED, 2: BEEF, 3: PORK, 4: POULTRY, 5: SEAFOOD, 
+--  6: VEGETARIAN, 7: FRIED_FATTY, 8: STEAMED_BOILED, 9: SPICY, 10: SWEET, 11: HIGH_PROTEIN]
+
+UPDATE foods SET feature_vector = '[0.9, 0.1, 0.0, 0.6, 0.0, 0.7, 0.0, 0.3, 0.7, 0.2, 0.1, 0.6]'::jsonb WHERE vietfood_class_id = 0;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.6, 0.8, 0.1, 0.0, 0.5]'::jsonb WHERE vietfood_class_id = 1;
+UPDATE foods SET feature_vector = '[0.1, 0.9, 0.0, 0.7, 0.0, 0.0, 0.0, 0.3, 0.9, 0.1, 0.1, 0.5]'::jsonb WHERE vietfood_class_id = 2;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.2, 0.0, 0.8, 0.0, 0.8, 0.0, 0.1, 0.1, 0.5]'::jsonb WHERE vietfood_class_id = 3;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.0, 0.0, 0.0, 0.5, 0.0, 0.3, 0.1, 0.6]'::jsonb WHERE vietfood_class_id = 4;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.0, 0.2, 0.0, 0.0, 0.1]'::jsonb WHERE vietfood_class_id = 5;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.6, 0.0, 0.5, 0.0, 0.8, 0.3, 0.4]'::jsonb WHERE vietfood_class_id = 6;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.7, 0.0, 0.7, 0.0, 0.9, 0.0, 0.2, 0.1, 0.6]'::jsonb WHERE vietfood_class_id = 7;
+UPDATE foods SET feature_vector = '[0.8, 0.2, 1.0, 0.0, 0.0, 0.0, 0.0, 0.4, 0.8, 0.6, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 8;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 1.0, 0.2, 0.0, 0.0, 0.0, 0.6, 0.0, 0.2, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 9;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.2]'::jsonb WHERE vietfood_class_id = 10;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.5, 0.0, 0.0, 0.2]'::jsonb WHERE vietfood_class_id = 11;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.9, 0.7, 0.0, 0.0, 0.0, 0.5, 0.7, 0.8, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 12;
+UPDATE foods SET feature_vector = '[0.3, 0.9, 0.0, 1.0, 0.0, 0.0, 0.0, 0.6, 0.0, 0.3, 0.3, 0.7]'::jsonb WHERE vietfood_class_id = 13;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.0, 0.2, 0.4, 0.8, 0.3, 0.5, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 14;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.0, 0.6, 0.0, 0.9, 0.0, 0.5, 0.6, 0.5, 0.2, 0.7]'::jsonb WHERE vietfood_class_id = 15;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.0, 0.6, 0.0, 0.8, 0.0, 0.4, 0.7, 0.4, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 16;
+UPDATE foods SET feature_vector = '[0.0, 0.9, 0.0, 0.0, 0.0, 1.0, 0.0, 0.5, 0.6, 0.2, 0.0, 0.9]'::jsonb WHERE vietfood_class_id = 17;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.2, 0.1]'::jsonb WHERE vietfood_class_id = 18;
+UPDATE foods SET feature_vector = '[0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.3, 0.1, 0.1]'::jsonb WHERE vietfood_class_id = 19;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.2, 0.1]'::jsonb WHERE vietfood_class_id = 20;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.0, 0.7, 0.0, 0.0, 0.5, 0.2, 0.8, 0.0, 0.0, 0.6]'::jsonb WHERE vietfood_class_id = 21;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.3, 0.9, 0.1, 0.0, 0.8]'::jsonb WHERE vietfood_class_id = 22;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.0, 0.6, 0.0, 0.9, 0.0, 0.1, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 23;
+UPDATE foods SET feature_vector = '[0.0, 0.5, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]'::jsonb WHERE vietfood_class_id = 24;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.8, 0.0, 0.0, 0.2]'::jsonb WHERE vietfood_class_id = 25;
+UPDATE foods SET feature_vector = '[0.1, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.7, 0.2, 0.2, 0.2, 0.8]'::jsonb WHERE vietfood_class_id = 26;
+UPDATE foods SET feature_vector = '[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]'::jsonb WHERE vietfood_class_id = 27;
+UPDATE foods SET feature_vector = '[0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.1, 0.3, 0.1]'::jsonb WHERE vietfood_class_id = 28;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 1.0, 0.0, 0.1, 1.0, 0.0, 0.0, 1.0]'::jsonb WHERE vietfood_class_id = 29;
+UPDATE foods SET feature_vector = '[0.1, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0, 0.4, 0.6, 0.0, 0.0, 0.8]'::jsonb WHERE vietfood_class_id = 30;
+UPDATE foods SET feature_vector = '[0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.2, 0.1, 0.1]'::jsonb WHERE vietfood_class_id = 31;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1]'::jsonb WHERE vietfood_class_id = 32;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.7, 0.0, 0.8, 0.4, 0.1, 0.8, 0.1, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 33;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.9, 0.3, 0.0, 0.0, 0.0, 0.8, 0.0, 0.1, 0.2, 0.8]'::jsonb WHERE vietfood_class_id = 34;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.1, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 35;
+UPDATE foods SET feature_vector = '[0.9, 0.2, 0.0, 0.8, 0.0, 0.7, 0.0, 0.4, 0.7, 0.2, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 36;
+UPDATE foods SET feature_vector = '[0.9, 0.1, 0.0, 0.8, 0.0, 0.0, 0.4, 0.2, 0.9, 0.1, 0.0, 0.6]'::jsonb WHERE vietfood_class_id = 37;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.9, 0.0, 0.0, 0.1, 0.2]'::jsonb WHERE vietfood_class_id = 38;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.6, 0.6, 0.0, 0.7, 0.5, 0.3, 0.8, 0.5, 0.2, 0.8]'::jsonb WHERE vietfood_class_id = 39;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.3, 0.9, 0.1, 0.0, 0.7]'::jsonb WHERE vietfood_class_id = 40;
+UPDATE foods SET feature_vector = '[0.8, 0.3, 0.0, 0.2, 0.0, 0.2, 0.0, 0.8, 0.3, 0.4, 0.1, 0.3]'::jsonb WHERE vietfood_class_id = 41;
+UPDATE foods SET feature_vector = '[0.1, 0.9, 0.0, 0.0, 0.0, 1.0, 0.0, 0.3, 0.8, 0.2, 0.0, 0.9]'::jsonb WHERE vietfood_class_id = 42;
+UPDATE foods SET feature_vector = '[0.2, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.1, 0.8, 0.0, 0.0, 0.4]'::jsonb WHERE vietfood_class_id = 43;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.9, 0.0, 0.1, 1.0, 0.3, 0.0, 0.8]'::jsonb WHERE vietfood_class_id = 44;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.2, 0.3, 0.1]'::jsonb WHERE vietfood_class_id = 45;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.3, 0.8, 0.2, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 46;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.8, 0.0, 0.0, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 47;
+UPDATE foods SET feature_vector = '[0.0, 0.8, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.1]'::jsonb WHERE vietfood_class_id = 48;
+UPDATE foods SET feature_vector = '[0.0, 0.9, 0.0, 0.0, 0.0, 0.0, 1.0, 0.4, 0.0, 0.0, 0.2, 0.2]'::jsonb WHERE vietfood_class_id = 49;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.3, 0.6, 0.0, 0.2, 0.0, 0.9]'::jsonb WHERE vietfood_class_id = 50;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.2, 1.0, 0.0, 0.0, 1.0]'::jsonb WHERE vietfood_class_id = 51;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.3, 1.0, 0.0, 0.0, 0.9]'::jsonb WHERE vietfood_class_id = 52;
+UPDATE foods SET feature_vector = '[0.3, 0.8, 0.0, 1.0, 0.0, 0.0, 0.0, 0.7, 0.6, 0.1, 0.4, 0.8]'::jsonb WHERE vietfood_class_id = 53;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.7, 0.0, 0.2, 0.2, 0.8]'::jsonb WHERE vietfood_class_id = 54;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.1, 1.0, 0.0, 0.0, 1.0]'::jsonb WHERE vietfood_class_id = 55;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.8, 0.6, 0.5, 0.0, 0.0, 0.8]'::jsonb WHERE vietfood_class_id = 56;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.4, 0.0, 0.0, 0.6, 0.7, 0.1, 0.1, 0.6]'::jsonb WHERE vietfood_class_id = 57;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.5, 0.0, 0.7, 0.0, 0.3, 0.9, 0.2, 0.1, 0.4]'::jsonb WHERE vietfood_class_id = 58;
+UPDATE foods SET feature_vector = '[0.2, 0.9, 0.0, 0.9, 0.0, 0.0, 0.2, 0.5, 0.4, 0.3, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 59;
+UPDATE foods SET feature_vector = '[0.3, 0.8, 0.0, 0.7, 0.6, 0.7, 0.2, 0.4, 0.5, 0.4, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 60;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.8, 0.0, 0.5, 0.2, 0.8, 0.0, 0.1, 0.1, 0.6]'::jsonb WHERE vietfood_class_id = 61;
+UPDATE foods SET feature_vector = '[0.9, 0.1, 0.0, 0.0, 0.0, 0.9, 0.2, 0.4, 0.6, 0.3, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 62;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.9, 0.0, 0.1, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 63;
+UPDATE foods SET feature_vector = '[0.9, 0.1, 0.0, 1.0, 0.0, 0.0, 0.0, 0.4, 0.8, 0.3, 0.0, 0.7]'::jsonb WHERE vietfood_class_id = 64;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 0.0, 0.5, 0.5, 0.0, 0.7, 0.1, 0.3, 0.4, 0.3, 0.5]'::jsonb WHERE vietfood_class_id = 65;
+UPDATE foods SET feature_vector = '[0.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.2, 0.7, 0.0, 0.1, 0.1, 0.8]'::jsonb WHERE vietfood_class_id = 66;
+UPDATE foods SET feature_vector = '[1.0, 0.0, 0.0, 0.2, 0.0, 0.9, 0.2, 0.2, 0.8, 0.1, 0.1, 0.7]'::jsonb WHERE vietfood_class_id = 67;
