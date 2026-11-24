@@ -26,6 +26,11 @@ import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.http.HttpMethod;
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -94,18 +99,36 @@ public class SecurityConfig {
   }
 
   @Bean
+  CorsConfigurationSource corsConfigurationSource() {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOriginPatterns(List.of("*"));
+    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"));
+    configuration.setAllowedHeaders(List.of("*"));
+    configuration.setExposedHeaders(List.of("Authorization", "Content-Type", "Retry-After", "X-Total-Count"));
+    configuration.setAllowCredentials(true);
+    configuration.setMaxAge(3600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", configuration);
+    return source;
+  }
+
+  @Bean
   SecurityFilterChain filterChain(
       HttpSecurity http,
       CustomAuthenticationEntryPoint ep,
       CustomAccessDeniedHandler denied,
       BearerTokenResolver resolver)
       throws Exception {
-    return http.csrf(c -> c.disable())
+    return http.cors(c -> c.configurationSource(corsConfigurationSource()))
+        .csrf(c -> c.disable())
         .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .exceptionHandling(e -> e.authenticationEntryPoint(ep).accessDeniedHandler(denied))
         .authorizeHttpRequests(
             a ->
-                a.requestMatchers(PUBLIC_AUTH_ENDPOINTS)
+                a.requestMatchers(HttpMethod.OPTIONS, "/**")
+                    .permitAll()
+                    .requestMatchers(PUBLIC_AUTH_ENDPOINTS)
                     .permitAll()
                     .requestMatchers("/error", "/swagger-ui/**", "/v3/api-docs/**")
                     .permitAll()

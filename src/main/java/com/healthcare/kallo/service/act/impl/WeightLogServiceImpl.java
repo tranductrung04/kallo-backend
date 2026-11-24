@@ -77,7 +77,7 @@ public class WeightLogServiceImpl implements WeightLogService {
     WeightLog saved =
         weightLogs.findByUserIdAndClientUuid(userId, clientUuid)
             .orElseThrow(() -> new BusinessException(ErrorCode.NOT_FOUND));
-    publishChangedEvent(userId, saved.getLoggedAt());
+    publishChangedEvent(userId, saved.getLoggedAt(), saved.getWeightKg());
     return new WeightLogService.CreateResult(response(userId,saved), true);
   }
 
@@ -138,10 +138,10 @@ public class WeightLogServiceImpl implements WeightLogService {
     existing.setLoggedAt(request.loggedAt());
     existing.setNote(request.note());
     WeightLog updated = weightLogs.saveAndFlush(existing);
-    publishChangedEvent(userId, updated.getLoggedAt());
+    publishChangedEvent(userId, updated.getLoggedAt(), updated.getWeightKg());
     LocalDate newDate = localDate(userId, updated.getLoggedAt());
     if (!oldDate.equals(newDate)) {
-      events.publishEvent(new WeightChangedEvent(userId, oldDate));
+      events.publishEvent(new WeightChangedEvent(userId, oldDate, updated.getWeightKg(), updated.getLoggedAt()));
     }
     return response(userId,updated);
   }
@@ -157,7 +157,8 @@ public class WeightLogServiceImpl implements WeightLogService {
     if (existing.getDeletedAt() == null) {
       int updated = weightLogs.softDeleteByIdAndUserId(id, userId, clock.instant());
       if (updated > 0) {
-        publishChangedEvent(userId, existing.getLoggedAt());
+        Optional<WeightLog> latest = weightLogs.findLatestAtOrBefore(userId, clock.instant());
+        publishChangedEvent(userId, existing.getLoggedAt(), latest.map(WeightLog::getWeightKg).orElse(null));
       }
     }
   }
@@ -240,9 +241,13 @@ public class WeightLogServiceImpl implements WeightLogService {
     return instant.atZone(userTimeResolver.zoneOf(userId)).toLocalDate();
   }
 
-  private void publishChangedEvent(UUID userId, Instant instant) {
+  private void publishChangedEvent(UUID userId, Instant instant, BigDecimal weightKg) {
     ZoneId zone = userTimeResolver.zoneOf(userId);
     LocalDate localDate = instant.atZone(zone).toLocalDate();
-    events.publishEvent(new WeightChangedEvent(userId, localDate));
+    events.publishEvent(new WeightChangedEvent(userId, localDate, weightKg, instant));
+  }
+
+  private void publishChangedEvent(UUID userId, Instant instant) {
+    publishChangedEvent(userId, instant, null);
   }
 }
