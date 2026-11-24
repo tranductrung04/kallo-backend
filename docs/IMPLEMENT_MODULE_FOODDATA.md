@@ -1,46 +1,40 @@
 # Kế hoạch triển khai & Đặc tả chi tiết Module FOODDATA — Kallo Backend
 
-**Ngày hoàn thiện:** 19/11/2026 (Cập nhật đồng bộ theo thống nhất Kiến trúc & Sơ đồ lớp)  
-**Module:** FOODDATA — Dữ liệu món ăn & Quét mã vạch (SRS Mục 4.9, FR-FD-01 … FR-FD-07b)  
-**Tập dữ liệu AI tích hợp:** [data.yaml](file:///c:/Users/Loi/Desktop/FoodDetection/data.yaml) (Bộ 68 nhãn món ăn Việt Nam — VietFood68 của mô hình YOLOv11 / `best.pt`)  
-**Phạm vi sở hữu:** Nhánh A (Bảng `foods`, `barcode_misses`, Dịch vụ tìm kiếm tiếng Việt không dấu `pg_trgm`, Tích hợp Open Food Facts API v2 và API nội bộ cho AI Service)
+**Ngày đồng bộ mã nguồn:** 23/11/2026
+**Module:** FOODDATA — Dữ liệu món ăn & Quét mã vạch (SRS Mục 4.9, FR-FD-01 … FR-FD-07b)
+**Tập dữ liệu AI tích hợp:** VietFood68 (68 lớp, seed Flyway)
+**Phạm vi sở hữu:** Bảng `foods`, `barcode_misses`, tìm kiếm `pg_trgm`, Open Food Facts API v2.
 
+> **Quy ước tài liệu:** `AS-IS` mô tả code/migration hiện tại. `TO-BE` ghi thiết kế đã thống nhất nhưng chưa có migration/entity/API; không coi là chức năng đang chạy.
+> **AS-IS:** `foods` là bảng thực phẩm phẳng; dị ứng là `foods.allergens JSONB`; đã có `feature_vector` JSONB từ PLAN. Chưa có bảng `ingredients`, `food_ingredients`, `allergens`, `food_allergens` hoặc `user_allergies`.
+> **TO-BE:** Cho phép tạo món từ các ingredient đã có trong danh mục bằng bảng liên kết, và chuẩn hóa dữ liệu dị ứng; xem mục 1.1 và mục 2.2.
+
+---
+**Lưu ý trạng thái:** Các bảng/API/module hiện được triển khai trong source; nội dung acceptance/performance phía dưới là mục tiêu thiết kế, trừ khi được xác minh riêng bằng test/benchmark.
 ---
 
 ## 1. Phạm vi, Mục tiêu & Thống nhất Kiến trúc
 
 Module **FOODDATA** đóng vai trò là "kho từ điển thực phẩm và năng lượng" trung tâm của toàn bộ hệ thống Kallo. Mọi tác vụ ghi nhật ký ăn uống (**NUTRI**), tính toán tổng hợp calo hàng ngày (**DailySummary**), đề xuất thực đơn thông minh không dị ứng (**PLAN**), và hiển thị thống kê biểu đồ (**REPORT**) đều phụ thuộc trực tiếp vào tính chính xác của dữ liệu món ăn tại module này.
 
-### 1.1. Cầu nối thống nhất: Sơ đồ lớp (Conceptual Model) vs CSDL Triển khai (Physical Schema)
+### 1.1. Cầu nối mô hình khái niệm và schema hiện tại
 
-Để đồng bộ giữa **Biểu đồ lớp phân tích hướng đối tượng (OOAD/UML học thuật từ Visual Paradigm)** và **Mô hình triển khai thực tế Backend**:
+**AS-IS:** `foods` lưu thực phẩm dạng phẳng (món ăn, sản phẩm barcode, custom food), gồm nutrition trên 100g/serving, allergens JSONB, suitable meal types JSONB, và vector đặc trưng JSONB. Không có ingredient recipe relation hay normalized allergy catalog. Chi tiết đúng schema xem mục 2.1.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                   MÔ HÌNH QUAN NIỆM (CONCEPTUAL)                       │
-│  Food ──1:N──> FoodIngredient ──N:1──> Ingredient <──N:1── UserAllergy │
-│  ChronicCondition (limitsSugar, limitsPro) ──> MedicalHistory          │
-│  Admin extends Member                                                  │
-└────────────────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼  [Kỹ thuật Phi chuẩn hóa có kiểm soát - Denormalization]
-┌────────────────────────────────────────────────────────────────────────┐
-│                   MÔ HÌNH VẬT LÝ TRIỂN KHAI (PHYSICAL)                 │
-│  • Bảng `foods` (Phẳng + JSONB): gom toàn bộ thông tin dinh dưỡng,     │
-│    bổ sung sugar, fiber, suitable_meal_types và allergies JSONB.       │
-│  • Bảng `user_health_profiles`: lưu chronic_conditions JSONB           │
-│  • Bảng `users`: dùng role enum (ROLE_USER, ROLE_ADMIN) + JWT          │
-│  • Tách phép tính sang Domain Service (ProfileCalculator)              │
-│  ==> Không tốn 4 lượt JOIN, loại trừ N+1 Query, khớp 100% mô hình AI   │
-└────────────────────────────────────────────────────────────────────────┘
+**TO-BE đã thống nhất (chưa triển khai):**
+
+```text
+foods 1 ── * food_ingredients * ── 1 ingredients
+foods 1 ── * food_allergens * ── 1 allergens
+user_health_profiles 1 ── * user_allergies * ── 1 allergens
+user_health_profiles 1 ── * user_profile_conditions * ── 1 chronic_conditions
 ```
 
-1. **Gom `Ingredient` & `FoodIngredient` vào bảng `foods` phẳng:** 
-   - Mô hình YOLOv11 ([data.yaml](file:///c:/Users/Loi/Desktop/FoodDetection/data.yaml)) nhận diện **món ăn nguyên đĩa** (ví dụ: *Phở bò*, *Bún chả*), không bóc tách từng nguyên liệu thô rời rạc. Dữ liệu Open Food Facts cũng trả về đối tượng sản phẩm phẳng.
-   - Do đó, CSDL chỉ cần 1 bảng `foods` duy nhất, lưu nhãn dị ứng dưới dạng `allergies JSONB` (như `["PEANUT", "CRUSTACEANS"]`). Cách này loại bỏ 4 lượt JOIN CSDL, tối ưu thời gian phản hồi cho ứng dụng di động dưới $50\text{ms}$.
-2. **Kế thừa các trường hữu ích từ Sơ đồ lớp vào bảng `foods`:**
-   - Bổ sung thông số **Đường (`sugar`)** và **Chất xơ (`fiber`)** vào `Food`: nhằm chuẩn bị cho việc kiểm soát trần lượng đường (`calculateSugarLimit()`) đối với người dùng có bệnh nền tiểu đường (`DIABETES_TYPE1`, `DIABETES_TYPE2`) lưu tại `user_health_profiles.chronic_conditions`.
-   - Bổ sung trường **Bữa ăn phù hợp (`suitable_meal_types JSONB`)**: Gợi ý món phù hợp cho `BREAKFAST`, `LUNCH`, `DINNER`, `SNACK` phục vụ thuật toán sinh thực đơn 3 pha (Module PLAN ở Sprint 3).
+- Tạo món dạng recipe bằng cách chọn ingredient có sẵn và nhập lượng gram; backend tính nutrition tổng hợp và lưu snapshot vào các trường nutrition hiện có của `foods` để PLAN/NUTRI tiếp tục dùng.
+- Dị ứng của recipe được tổng hợp từ nguyên liệu; dị ứng người dùng và nhãn thực phẩm liên kết tới cùng danh mục `allergens`.
+- Bệnh nền dùng danh mục `chronic_conditions` và bảng liên kết `user_profile_conditions`; có thể thêm `diagnosed_at`, `severity` theo yêu cầu thiết kế.
+- Ingredient/catalog chuẩn hóa hỗ trợ nguồn dinh dưỡng/kiểm chứng; chưa có dữ liệu sodium, purine, potassium hoặc phosphorus đáng tin cậy trong schema hiện tại. Không mô tả lọc bệnh nền là tư vấn/chứng nhận y tế.
+- Các bảng đề xuất: `ingredients`, `food_ingredients(food_id, ingredient_id, quantity_grams)`, `allergens`, `food_allergens(food_id, allergen_id)`, `user_allergies(health_profile_id, allergen_id)`, `chronic_conditions`, `user_profile_conditions(health_profile_id, condition_id, diagnosed_at, severity)`. Đây là thiết kế TO-BE, chưa phải DDL đã chạy.
 3. **Quy định giao ước với Nhật ký ăn uống (`UserFoodLog` - Module NUTRI):**
    - Không chỉ lưu `servingMultiplier` như sơ đồ lớp, mà bắt buộc áp dụng **Nutrition Snapshot**: Đóng băng trực tiếp các giá trị dinh dưỡng thực tế (`calories`, `protein_g`, `carbs_g`, `fat_g`, `sugar_g`) và lưu kèm `client_uuid` (Idempotency) khi ghi nhật ký.
 4. **Phân quyền người dùng:** 
@@ -54,14 +48,15 @@ Module **FOODDATA** đóng vai trò là "kho từ điển thực phẩm và năn
 
 | Mã yêu cầu | Tên yêu cầu nghiệp vụ | Mức ưu tiên | Mô tả chi tiết kỹ thuật | Trạng thái |
 | :--- | :--- | :---: | :--- | :---: |
-| **FR-FD-01** | Lưu danh mục món ăn chuẩn | **M** | Quản lý tên món (có dấu và không dấu), nhóm món (`category`), khẩu phần chuẩn, calo, đa lượng (P/C/F), đường (`sugar`), chất xơ (`fiber`), bữa ăn phù hợp (`suitable_meal_types`), ảnh, mã vạch, nguồn dữ liệu (`SYSTEM`, `OFF`, `USER_CUSTOM`). | Chuẩn bị triển khai |
-| **FR-FD-02** | Phân cấp món ăn (System vs Custom) | **M** | Phân biệt rõ món **hệ thống** (chuẩn hóa 68 món Việt Nam + dữ liệu đóng gói OFF) và món **tùy chỉnh** (thuộc sở hữu cá nhân qua `owner_user_id`). Người dùng chỉ được sửa/xóa món do chính mình tạo. | Chuẩn bị triển khai |
-| **FR-FD-03** | Tìm kiếm món tiếng Việt không dấu | **M** | Tìm kiếm theo tên món không phân biệt dấu và chữ hoa/thường bằng PostgreSQL Full-Text (`unaccent` + `pg_trgm` GIN index). Lọc theo nhóm món, hỗ trợ phân trang chuẩn `PageResponse`. | Chuẩn bị triển khai |
-| **FR-FD-04** | Nhãn dị ứng thực phẩm (`allergens`) | **M** | Lưu danh sách chất gây dị ứng dưới dạng `JSONB` chuẩn (ví dụ: `PEANUT`, `SEAFOOD`, `GLUTEN`, `DAIRY`, `EGG`, `SOY`) để phục vụ cảnh báo tại NUTRI và loại trừ món tại PLAN. | Chuẩn bị triển khai |
-| **FR-FD-05** | Giá tham khảo (`reference_price_vnd`) | **S** | Lưu trữ khoảng giá tham khảo (VNĐ/khẩu phần) phục vụ thuật toán sinh thực đơn theo ngân sách tài chính tại Sprint 3. | Chuẩn bị triển khai |
-| **FR-FD-06** | Hạt giống dữ liệu (Seed 68 món VietFood) | **S** | Nạp tự động 68 món ăn Việt Nam từ `data.yaml` của mô hình YOLO AI kèm đầy đủ chỉ số năng lượng chuẩn xác theo Viện Dinh Dưỡng Quốc Gia. | Chuẩn bị triển khai |
-| **FR-FD-07a**| Tra cứu mã vạch nội bộ | **M** | Quét mã EAN-8/13/UPC trong CSDL nội bộ, phản hồi siêu tốc dưới 5ms nếu sản phẩm đã từng được lưu trữ hoặc quét trước đó. | Chuẩn bị triển khai |
-| **FR-FD-07b**| Tích hợp Open Food Facts v2 & Read-Through Cache | **S** | Khi CSDL nội bộ chưa có mã vạch, tự động gọi Open Food Facts API v2 (timeout 2500ms), chuẩn hóa lưu vào bảng `foods` (`source = OFF`). Nếu không tìm thấy, lưu vào `barcode_misses` (TTL 7 ngày). | Chuẩn bị triển khai |
+| **FR-FD-01** | Lưu danh mục món ăn chuẩn | **M** | Quản lý tên, nhóm món, khẩu phần, nutrition trên 100g/serving, ảnh, barcode, nguồn, dị ứng và bữa phù hợp. | AS-IS đã có |
+| **FR-FD-02** | Phân cấp món ăn | **M** | System/OFF dùng chung; custom food gắn `owner_user_id`, chỉ chính chủ được sửa/xóa. | AS-IS đã có |
+| **FR-FD-03** | Tìm kiếm món tiếng Việt không dấu | **M** | `unaccent` + `pg_trgm` và lọc category/phân trang theo repository hiện tại. | AS-IS đã có |
+| **FR-FD-04** | Nhãn dị ứng thực phẩm | **M** | Hiện lưu trên `foods.allergens JSONB`; chuẩn hóa catalog/relation là TO-BE. | AS-IS JSONB; TO-BE normalized |
+| **FR-FD-05** | Giá tham khảo | **S** | `reference_price_vnd` phục vụ hiển thị/PLAN. | AS-IS đã có |
+| **FR-FD-06** | Hạt giống VietFood68 | **S** | Seed migration có 68 class id, nutrition, allergen JSONB và suitable meal types. | AS-IS đã có |
+| **FR-FD-07a** | Tra cứu barcode nội bộ | **M** | Tra cứu `foods.barcode` và cache miss theo service hiện tại. | AS-IS đã có |
+| **FR-FD-07b** | Open Food Facts read-through cache | **S** | Gọi OFF với timeout/cấu hình hiện tại rồi lưu `source=OFF` hoặc `barcode_misses`. | AS-IS đã có; hiệu năng là mục tiêu |
+| **FR-FD-08 (TO-BE)** | Tạo recipe từ ingredient có sẵn | **M** | Chọn ingredient + quantity gram; backend tính nutrition/allergen và lưu recipe relations. | Chưa triển khai |
 
 ---
 
@@ -187,6 +182,33 @@ CREATE INDEX idx_barcode_misses_expiry ON barcode_misses (expires_at);
 | `reference_price_vnd` | `INTEGER` | `>= 0` | Giá ước tính (VNĐ) phục vụ thuật toán lên thực đơn theo ngân sách (Sprint 3). |
 | `is_verified` | `BOOLEAN` | `DEFAULT TRUE` | Đánh dấu thực phẩm đã được xác thực chỉ số dinh dưỡng đáng tin cậy. |
 | `owner_user_id` | `UUID` | `ON DELETE CASCADE` | `NULL` đối với món dùng chung toàn hệ thống; có giá trị đối với món tùy chỉnh của người dùng. |
+| `feature_vector` | `JSONB` | PLAN migration, mặc định vector 12 chiều | Vector đặc trưng do PLAN dùng để xếp hạng theo preference; không có trong food migration nền. |
+| `created_at`, `updated_at` | `TIMESTAMPTZ` | `NOT NULL` | Audit timestamps. |
+
+### 2.2 TO-BE — recipe và dị ứng chuẩn hóa (chưa triển khai)
+
+```sql
+CREATE TABLE ingredients (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    calories_per_100g NUMERIC(6,1) NOT NULL,
+    protein_per_100g NUMERIC(5,1) NOT NULL,
+    carbs_per_100g NUMERIC(5,1) NOT NULL,
+    fat_per_100g NUMERIC(5,1) NOT NULL,
+    sugar_per_100g NUMERIC(5,1) NOT NULL DEFAULT 0,
+    fiber_per_100g NUMERIC(5,1) NOT NULL DEFAULT 0,
+    allergens JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+CREATE TABLE food_ingredients (
+    food_id UUID NOT NULL REFERENCES foods(id) ON DELETE CASCADE,
+    ingredient_id UUID NOT NULL REFERENCES ingredients(id),
+    quantity_grams NUMERIC(7,1) NOT NULL CHECK (quantity_grams > 0),
+    PRIMARY KEY (food_id, ingredient_id),
+    CHECK (food_id <> ingredient_id)
+);
+```
+
+`ingredients` và `food_ingredients` chỉ là DDL đề xuất. Khi triển khai thực tế, nutrition per-serving/per-100g, allergens và feature vector của món recipe phải được backend tính từ ingredients và ghi lại vào `foods`; không nhận snapshot do client tự tính. Mở rộng sodium/purine/potassium/phosphorus chỉ thực hiện khi có nguồn dữ liệu dinh dưỡng có thể kiểm chứng.
 
 ---
 

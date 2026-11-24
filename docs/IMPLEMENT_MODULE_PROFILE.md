@@ -1,8 +1,10 @@
 # Kế hoạch triển khai & Đặc tả chi tiết Module PROFILE — Kallo Backend
 
-**Ngày hoàn thiện:** 17/11/2026  
-**Module:** PROFILE (SRS Mục 4.2, Phụ lục A)  
-**Phạm vi sở hữu:** Nhánh A (Bảng `user_health_profiles`, Domain Service `ProfileCalculator`, Các cổng tích hợp `ProfileStatusProvider`, `ProfileBodyMetrics`, Event Listener `ProfileWeightEventListener`)
+**Ngày đồng bộ mã nguồn:** 23/11/2026
+**Module:** PROFILE (SRS Mục 4.2, Phụ lục A)
+**Phạm vi sở hữu:** Bảng `user_health_profiles`, `ProfileCalculator`, `HealthProfileService`, các adapter `ProfileStatusProvider`/`ProfileBodyMetrics` và `ProfileWeightEventListener`.
+
+> **Quy ước tài liệu:** Các phần **AS-IS** mô tả chính xác schema và mã nguồn hiện có. Phần **TO-BE** là thiết kế đã thống nhất nhưng **chưa có migration, entity, API hay service**; không được xem là chức năng đang chạy.
 
 ---
 
@@ -12,26 +14,34 @@ Module **PROFILE** đóng vai trò là "trung tâm số liệu sinh học và m�
 
 ### 1.1. Bảng ánh xạ yêu cầu chức năng (FR-PRO-01 … FR-PRO-08)
 
+**AS-IS:** Profile hiện là entity `UserHealthProfile` riêng, có `allergies`, `chronic_conditions`, và `preference_vector` dạng JSONB. Chi tiết cột cơ sở nằm trong migration PROFILE; PLAN migration bổ sung 2 cột JSONB sau đó. Các mục FR bên dưới mô tả trạng thái triển khai của source hiện tại, không đồng nghĩa đã được đánh giá/chứng nhận y tế.
+
+**TO-BE đã thống nhất (chưa triển khai):** chuẩn hóa dị ứng bằng `allergens` + `food_allergens` + `user_allergies`; chuẩn hóa bệnh nền bằng `chronic_conditions` + `user_profile_conditions` liên kết đến `user_health_profiles`. Cần migration backfill từ JSONB hiện tại trước khi chuyển luồng đọc/ghi.
+
+### 1.1.1 Bản đồ trường dữ liệu hiện tại và TO-BE
+
+| Nội dung | AS-IS (đã có trong source/migration) | TO-BE (chưa triển khai) |
+|---|---|---|
+| Dị ứng user | `user_health_profiles.allergies JSONB` (`List<String>`) | `allergens`, `user_allergies` với FK tới danh mục dị ứng |
+| Bệnh nền user | `user_health_profiles.chronic_conditions JSONB` (`ChronicConditionType`) | `chronic_conditions` catalog + `user_profile_conditions` (FK `health_profile_id`, `condition_id`; tùy chọn `diagnosed_at`, `severity`) |
+
+#### Bảng FR (AS-IS)
 | Mã | Nội dung yêu cầu | Mức ưu tiên | Phase | Trạng thái hiện tại |
 | :--- | :--- | :---: | :---: | :---: |
-| **FR-PRO-01** | Nhập hồ sơ ban đầu: giới tính, ngày sinh/tuổi, chiều cao, cân nặng hiện tại. | **M** | 1 | Đã cài đặt hoàn tất |
-| **FR-PRO-02** | Chọn mức độ vận động (Ít vận động, Nhẹ, Vừa, Nhiều, Rất nhiều). | **M** | 1 | Đã cài đặt hoàn tất |
-| **FR-PRO-03** | Chọn mục tiêu thể trạng: Giảm cân / Giữ cân / Tăng cân; cân nặng mục tiêu và tốc độ thay đổi kg/tuần. | **M** | 1 | Đã cài đặt hoàn tất |
-| **FR-PRO-04** | Khai báo thực phẩm dị ứng / kiêng kỵ (danh mục chuẩn + nhập tự do qua `JSONB`). | **M** | 1 | Đã cài đặt hoàn tất |
-| **FR-PRO-05** | Tự động tính **BMI**, **BMR**, **TDEE** và **mục tiêu calo hàng ngày** có kẹp an toàn khi hồ sơ thay đổi. | **M** | 1 | Đã cài đặt hoàn tất |
-| **FR-PRO-06** | Tự động chia mục tiêu đa lượng macro (Protein/Carbs/Fat) theo mục tiêu; cho phép chỉnh tay tỷ lệ %. | **S** | 2 | Đã cài đặt hoàn tất |
-| **FR-PRO-07** | Đặt mục tiêu uống nước hàng ngày (tự động theo cân nặng $35 \text{ ml/kg}$ hoặc nhập số ml tùy chỉnh). | **S** | 2 | Đã cài đặt hoàn tất |
-| **FR-PRO-08** | Lắng nghe sự kiện cân nặng mới từ ACT, tự động phát hiện lệch TDEE $\ge 50 \text{ kcal}$ (~$2.5 - 3\text{ kg}$) và đề xuất tính lại mục tiêu. | **S** | 3 | Đã cài đặt hoàn tất |
+| **FR-PRO-01** | Nhập giới tính, ngày sinh, chiều cao, cân nặng. | **M** | 1 | AS-IS đã có |
+| **FR-PRO-02** | Chọn mức độ vận động. | **M** | 1 | AS-IS đã có |
+| **FR-PRO-03** | Chọn goal, target weight và weekly rate. | **M** | 1 | AS-IS đã có; target bắt buộc với LOSE/GAIN |
+| **FR-PRO-04** | Dị ứng và chronic conditions trên JSONB. | **M** | 1 | AS-IS đã có; chuẩn hóa TO-BE |
+| **FR-PRO-05** | Tính BMI, BMR, TDEE, calorie goal có safety clamp. | **M** | 1 | AS-IS đã có |
+| **FR-PRO-06** | Macro goals theo goal hoặc custom ratio. | **S** | 2 | AS-IS đã có; custom ratio cần đủ 3 tỷ lệ tổng 100% ±0.5 |
+| **FR-PRO-07** | Water goal tự động theo 35 ml/kg hoặc custom. | **S** | 2 | AS-IS đã có |
+| **FR-PRO-08** | Lắng nghe cân nặng mới và đề xuất tính lại. | **S** | 3 | AS-IS đã có qua `ProfileWeightEventListener`; ngưỡng đọc theo code hiện tại |
 
 ### 1.2. Tiêu chí chấp nhận (Acceptance Criteria)
 
 - **AC1:** Khi người dùng gửi yêu cầu nhập/sửa hồ sơ hợp lệ, hệ thống hoàn thành toàn bộ phép tính sinh học (BMI, BMR, TDEE, Calorie Goal, Macros, Nước) và phản hồi trong thời gian $\le 500\text{ ms}$ (đạt yêu cầu SRS $\le 1\text{ s}$).
-- **AC2:** Các giá trị ngoài miền sinh học hợp lý bị chặn ngay tại tầng Validation với mã lỗi rõ ràng:
-  - Chiều cao: $100.0 \text{ cm} \le \text{height} \le 250.0 \text{ cm}$.
-  - Cân nặng: $20.0 \text{ kg} \le \text{weight} \le 300.0 \text{ kg}$.
-  - Cân nặng mục tiêu: $20.0 \text{ kg} \le \text{targetWeight} \le 300.0 \text{ kg}$.
-  - Tuổi: Từ 13 đến 120 tuổi (dựa trên `birthDate` không ở tương lai).
-- **AC3:** Nếu mục tiêu giảm/tăng cân đưa lượng calo rơi xuống dưới ngưỡng an toàn sinh học ($1200\text{ kcal}$ với Nữ, $1500\text{ kcal}$ với Nam), hệ thống kích hoạt **Safety Clamping** (kẹp calo lên ngưỡng tối thiểu) và bật cờ `safetyClamped: true` trong phản hồi để hiển thị khuyến nghị cho người dùng.
+- **AC2 (AS-IS):** Validation request chặn chiều cao $100.0..250.0$ cm, cân nặng/cân nặng mục tiêu $20.0..300.0$ kg, ngày sinh trong quá khứ, tốc độ tuần $0.0..2.0$ kg và nước tùy chỉnh $500..10000$ ml. Tuổi hợp lệ $13..120$ được `ProfileCalculator` kiểm tra khi tính toán.
+- **AC3 (AS-IS):** Safety clamping áp dụng ngưỡng $1200$ kcal (Nữ), $1500$ kcal (Nam), $1350$ kcal (OTHER) và trả `safetyClamped`. `LOSE_WEIGHT`/`GAIN_WEIGHT` bắt buộc có `targetWeightKg`; mục tiêu giảm phải thấp hơn và tăng phải cao hơn cân nặng hiện tại.
 
 ---
 
@@ -58,7 +68,7 @@ Module **PROFILE** đóng vai trò là "trung tâm số liệu sinh học và m�
 | **D3** | Công thức năng lượng cơ bản BMR | Chuẩn hóa theo công thức **Mifflin-St Jeor** (Phụ lục A.2) | Đây là công thức được Hiệp hội Dinh dưỡng Hoa Kỳ (ADA) chứng minh là có độ chính xác cao nhất cho người trưởng thành |
 | **D4** | Chốt chặn an toàn sinh học (Safety Clamping) | Kẹp tốc độ giảm cân tối đa $1.0\text{ kg/tuần}$ (thâm hụt tối đa $\approx 1100\text{ kcal/ngày}$); calo ngày không dưới $1200\text{ kcal}$ (Nữ) hoặc $1500\text{ kcal}$ (Nam). Bật cờ `safetyClamped: true` | Ngăn chặn người dùng nhập mục tiêu giảm cân tiêu cực gây hạ đường huyết, suy nhược cơ thể hoặc rối loạn chuyển hoá (AC3) |
 | **D5** | Phân bổ đa lượng Macro | Tự động tính toán theo mục tiêu (Giảm cân: 30P/40C/30F; Giữ cân: 20P/50C/30F; Tăng cân: 25P/50C/25F); cho phép người dùng tùy chỉnh tỷ lệ % với ràng buộc tổng bằng 100% | Đáp ứng FR-PRO-06; quy đổi chuẩn $1\text{g P} = 4\text{kcal}$, $1\text{g C} = 4\text{kcal}$, $1\text{g F} = 9\text{kcal}$ |
-| **D6** | Lưu trữ thực phẩm dị ứng / kiêng kỵ | Lưu trực tiếp dưới dạng cột `allergies JSONB` trong bảng `user_health_profiles` | Cho phép lưu mảng danh mục chuẩn lẫn nhập tự do linh hoạt; không cần tạo bảng trung gian phức tạp; dễ dàng nối sang module NUTRI và PLAN |
+| **D6 (AS-IS)** | Lưu trữ dị ứng và bệnh nền | `allergies JSONB` và `chronic_conditions JSONB` nằm trên `user_health_profiles`; đây là cấu trúc hiện tại, không phải thiết kế chuẩn hóa cuối cùng. | NUTRI/PLAN hiện dùng dữ liệu JSONB; mô hình chuẩn hóa được ghi ở mục TO-BE. |
 | **D7** | Đề xuất tính lại mục tiêu khi có cân nặng mới (FR-PRO-08) | Lắng nghe `WeightChangedEvent`. Nếu chênh lệch $\| \text{TDEE}_{\text{mới}} - \text{TDEE}_{\text{cũ}} \| \ge 50\text{ kcal}$ (~$2.5 - 3\text{ kg}$), bật cờ `recalculationRecommended: true` và tính trước `recommendedDailyCalorieGoal` | Không âm thầm tự ý đổi calo của người dùng mà hiển thị gợi ý kèm số liệu cụ thể; cung cấp endpoint `POST /recalculate` để người dùng xác nhận áp dụng |
 | **D8** | Tích hợp liên module bằng Ports & Adapters | Cài đặt `ProfileStatusProviderImpl` và `ProfileBodyMetricsImpl` bằng Spring `@Component` | Ghi đè tự động các bean `@ConditionalOnMissingBean` của AUTH và ACT mà không cần sửa cấu hình gốc, tránh xung đột nhánh Git |
 | **D9** | Toàn vẹn dữ liệu & Xóa tài khoản | Bảng `user_health_profiles` có khóa ngoại `user_id REFERENCES users(id) ON DELETE CASCADE` và `UNIQUE(user_id)` | Quan hệ 1-1 chặt chẽ; đảm bảo khi người dùng xóa tài khoản (FR-AUTH-07), hồ sơ sức khỏe được giải phóng sạch sẽ, không để lại dữ liệu mồ côi |
@@ -68,7 +78,36 @@ Module **PROFILE** đóng vai trò là "trung tâm số liệu sinh học và m�
 
 ## 4. Mô hình dữ liệu & Migration Flyway
 
-Tệp migration: `src/main/resources/db/migration/V20261117203000__profile_schema.sql`
+**AS-IS:** migration nền: `src/main/resources/db/migration/V20261117203000__profile_schema.sql`; `preference_vector` và `chronic_conditions` được bổ sung sau bởi `V20261123100000__plan_schema.sql`.
+
+**TO-BE (chưa triển khai):** thay JSONB bằng các bảng sau, sau khi có migration backfill và cập nhật toàn bộ repository/service/API:
+
+```sql
+CREATE TABLE allergens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL
+);
+CREATE TABLE user_allergies (
+    health_profile_id UUID NOT NULL REFERENCES user_health_profiles(id) ON DELETE CASCADE,
+    allergen_id UUID NOT NULL REFERENCES allergens(id),
+    PRIMARY KEY (health_profile_id, allergen_id)
+);
+CREATE TABLE chronic_conditions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code VARCHAR(50) NOT NULL UNIQUE,
+    name VARCHAR(150) NOT NULL
+);
+CREATE TABLE user_profile_conditions (
+    health_profile_id UUID NOT NULL REFERENCES user_health_profiles(id) ON DELETE CASCADE,
+    condition_id UUID NOT NULL REFERENCES chronic_conditions(id),
+    diagnosed_at DATE,
+    severity VARCHAR(30),
+    PRIMARY KEY (health_profile_id, condition_id)
+);
+```
+
+Schema hiện có:
 
 ```sql
 CREATE TABLE user_health_profiles (
@@ -256,7 +295,7 @@ sequenceDiagram
     Note over Provider: Khi AUTH kiểm tra isCompleted(user)<br/>Provider trả về TRUE -> Token mới có profileCompleted: true
 ```
 
-### 6.2. Luồng tự động đề xuất tính lại calo khi cân nặng thay đổi (FR-PRO-08)
+### 6.2. Luồng tự động đề xuất tính lại calo khi cân nặng thay đổi (FR-PRO-08 — AS-IS)
 
 ```mermaid
 sequenceDiagram

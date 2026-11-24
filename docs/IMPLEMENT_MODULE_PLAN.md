@@ -1,14 +1,17 @@
-# Kế hoạch triển khai & Đặc tả chi tiết Module PLAN — Kallo Backend
+   # Kế hoạch triển khai & Đặc tả chi tiết Module PLAN — Kallo Backend
 
-**Ngày lập kế hoạch:** 22/11/2026 (Cập nhật phiên bản: Tích hợp Vector Sở thích & Xử lý Ràng buộc Bệnh lý Y tế)  
-**Module:** PLAN — Sinh thực đơn thông minh, Gợi ý theo sở thích cá nhân, Quản lý bữa ăn & Đổi món tương đương (SRS Mục 4.4.1, FR-PLAN-01 … FR-PLAN-06)  
-**Phạm vi sở hữu:** Nhánh A (Sprint 3: Issue `A-08`: Bảng `meal_plans`, `meal_plan_foods`; Mở rộng `foods.feature_vector`, `user_health_profiles.preference_vector` & `chronic_conditions`; Domain Engine `RuleBasedMenuGenerator`, `MealPlanService`; REST Controller `MealPlanController`)
+**Ngày đồng bộ mã nguồn:** 23/11/2026
+**Module:** PLAN — Sinh thực đơn thông minh, gợi ý theo sở thích, quản lý bữa ăn & đổi món tương đương
+**Phạm vi sở hữu:** `meal_plans`, `meal_plan_foods`, `foods.feature_vector`, `user_health_profiles.preference_vector/chronic_conditions`, `RuleBasedMenuGenerator`, `MealPlanService`, `MealPlanController`.
+
+> **AS-IS:** PLAN đã có migration, entity, service, engine, DTO và 7 endpoint. Các claim hiệu năng/SRS là mục tiêu nếu chưa có benchmark. Lọc y tế hiện dựa trên metadata hiện có, không phải tư vấn y khoa.
+> **TO-BE:** Chuẩn hóa ingredients, allergens và chronic conditions theo thiết kế trong `IMPLEMENT_MODULE_FOODDATA.md`; hiện PLAN vẫn đọc JSONB/profile và `foods.allergens`.
 
 ---
 
 ## 1. Phạm vi, Mục tiêu & Đối chiếu Sơ đồ lớp (Conceptual vs Physical)
 
-Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn dinh dưỡng cá nhân hóa dựa trên mục tiêu thể chất (TDEE, Calorie Goal, Macros), **học sở thích ăn uống của người dùng (Content-Based Recommendation)**, loại trừ tuyệt đối các chất gây dị ứng và **bảo đảm an toàn bệnh lý mạn tính (tiểu đường, huyết áp)** theo chuẩn dinh dưỡng y khoa.
+Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn dinh dưỡng cá nhân hóa dựa trên mục tiêu thể chất (TDEE, Calorie Goal, Macros), học sở thích ăn uống bằng content-based recommendation, và lọc theo metadata dị ứng/bệnh nền hiện có. Đây là heuristic ứng dụng, không phải tư vấn hay chứng nhận an toàn dinh dưỡng y khoa.
 
 ### 1.1. Cầu nối đối chiếu Sơ đồ lớp (Visual Paradigm UML) & Mô hình CSDL Triển khai
 
@@ -28,7 +31,9 @@ Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn di
 │                   MÔ HÌNH VẬT LÝ TRIỂN KHAI (PHYSICAL)                 │
 │  • Mở rộng `user_health_profiles`:                                     │
 │    - `preference_vector JSONB`: Mảng 12 chiều thể hiện gu ăn uống.     │
-│    - `chronic_conditions JSONB`: Danh sách bệnh lý (DIABETES, v.v.).   │
+│    - `chronic_conditions JSONB`: hiện lưu danh sách bệnh nền.          │
+│  • Hiện `allergies`/`chronic_conditions` vẫn dùng JSONB; catalog và     │
+│    bảng liên kết chuẩn hóa là TO-BE, chưa có migration.                 │
 │  • Mở rộng `foods`:                                                    │
 │    - `feature_vector JSONB`: Mảng 12 chiều đặc trưng món ăn.           │
 │  • Bảng `meal_plans`: Quản lý vòng đời (DRAFT, SAVED, APPLIED).        │
@@ -38,8 +43,9 @@ Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn di
 │  • Domain Engine `RuleBasedMenuGenerator`: Kết hợp Tối ưu Heuristic    │
 │    với Không gian Vector (Vector Space Model - Cosine Similarity)      │
 │    và Mặt nạ Y tế (Clinical Safety Masking). Phản hồi < 20ms.          │
-│  • Cơ chế Học thích nghi (Online Adaptive Learning): Tự động cập nhật  │
-│    `preference_vector` sau mỗi lần người dùng ghi `UserFoodLog`.       │
+│  • Cơ chế Học thích nghi (Online Adaptive Learning): `FoodLogService`  │
+│    cập nhật `preference_vector` từ food log thực tế; apply plan không   │
+│    tự cập nhật preference chỉ vì hệ thống đã đề xuất món.                │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -59,12 +65,12 @@ Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn di
 
 | Mã | Nội dung yêu cầu chức năng | Mức ưu tiên | Phạm vi Sprint 3 | Trạng thái |
 | :--- | :--- | :---: | :---: | :---: |
-| **FR-PLAN-01** | Tạo thực đơn cho 1 ngày (hoặc 7 ngày) theo **mục tiêu calo**, **dị ứng**, **ngân sách** và **bệnh lý**. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-PLAN-02** | Thực đơn chia theo 4 buổi (**Sáng 25%, Trưa 35%, Tối 30%, Phụ 10%**); hiển thị món, khẩu phần, tổng calo/macro và chi phí ước tính. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-PLAN-03** | **Đổi món (Swap)** bằng món tương đương về calo/macro/sở thích; Tạo lại toàn bộ thực đơn (Regenerate). | **S** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-PLAN-04** | Lưu, xem danh sách, xem chi tiết và xóa thực đơn; **Áp dụng thực đơn vào nhật ký ngày** (Batch tạo `UserFoodLog`). | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-PLAN-05** | **Tôn trọng dị ứng & bệnh lý tuyệt đối**: Không chứa món gây dị ứng; khống chế đường nghiêm ngặt với người tiểu đường. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-PLAN-06** | **Cá nhân hóa theo sở thích & Lịch sử**: Ưu tiên món hợp khẩu vị (Cosine Similarity), đồng thời tránh lặp món 2-3 ngày gần nhất. | **C** | Toàn bộ | Chuẩn bị cài đặt |
+| **FR-PLAN-01** | Tạo plan theo calo, dị ứng, ngân sách, điều kiện dữ liệu hiện có. | **M** | — | AS-IS endpoint/service có |
+| **FR-PLAN-02** | Chia theo meal type, trả món/khẩu phần/tổng nutrition/chi phí. | **M** | — | AS-IS endpoint/service có |
+| **FR-PLAN-03** | Swap một item theo ứng viên hiện có. Regenerate toàn bộ là behavior/service giới hạn theo source. | **S** | — | AS-IS có swap; không cam kết equivalence y khoa |
+| **FR-PLAN-04** | Save, list, get, delete, apply plan vào food logs. | **M** | — | AS-IS endpoints có |
+| **FR-PLAN-05** | Lọc allergy và metadata bệnh nền hiện có. | **M** | — | AS-IS giới hạn theo metadata; không “tuyệt đối” lâm sàng |
+| **FR-PLAN-06** | Xếp hạng theo cosine preference và recent-food penalty. | **C** | — | AS-IS heuristic có |
 
 ---
 
@@ -72,19 +78,14 @@ Module **PLAN** cung cấp khả năng tự động thiết kế thực đơn di
 
 - **AC1 (Độ chính xác Calo):** Tổng calo thực đơn ngày sinh ra nằm trong dung sai $\pm 5\%$ so với mục tiêu calo ngày của người dùng:
   $$| \text{TotalCalories} - \text{DailyCalorieGoal} | \le 0.05 \times \text{DailyCalorieGoal}$$
-- **AC2 (An toàn Dị ứng Tuyệt đối):** Thực đơn sinh ra tuyệt đối không chứa bất kỳ món ăn nào mà trường `allergens` giao với danh sách `allergies` trong hồ sơ `UserHealthProfile`:
+- **AC2 (AS-IS — lọc theo metadata có sẵn):** Generator loại món khi metadata `food.allergens` trùng với `profile.allergies`; độ tin cậy phụ thuộc dữ liệu món được gán đầy đủ. Đây không phải bảo đảm tuyệt đối nếu metadata thiếu/sai:
   $$\forall \text{food} \in \text{MealPlan}: \text{food.allergens} \cap \text{user.allergies} = \emptyset$$
-- **AC3 (Xử lý Bệnh lý Mạn tính — Tiểu đường vs Thích ngọt):** 
-  - Nếu người dùng có bệnh lý `DIABETES` (tiểu đường):
-    - Khống chế trần lượng đường tự do toàn ngày $\le 25\text{g/ngày}$ (theo chuẩn ADA/WHO).
-    - Loại bỏ thẳng tay các món ngọt tinh luyện (`sugar_per_serving > 10g` hoặc `sugar_per_100g > 15g`).
-    - Mặt nạ y tế đè chiều `SWEET` trong vector sở thích về $0.0$, triệt tiêu hoàn toàn điểm cộng món ngọt có hại.
-    - Trả về trường `medicalWarning` giải thích minh bạch việc ưu tiên đồ ngọt tự nhiên chỉ số GI thấp.
+- **AC3 (AS-IS — các rule đang có):** Với `DIABETES`, generator loại food vượt ngưỡng sugar theo serving/100g; với `GOUT`, `CHRONIC_KIDNEY_DISEASE`, `HYPERTENSION`, generator dùng rule metadata/name hiện có. Source hiện tại không có dữ liệu sodium/purine/potassium/phosphorus đầy đủ và không nên được mô tả là kiểm soát lâm sàng hoặc trần đường toàn ngày được chứng nhận.
 - **AC4 (Cá nhân hóa theo Sở thích — Cosine Similarity):** Thực đơn ưu tiên các món có độ tương đồng Cosine cao giữa $\vec{P}_u$ và $\vec{F}_f$, tăng điểm hài lòng của người dùng mà vẫn thỏa mãn ràng buộc calo.
 - **AC5 (Học thích nghi tự động — Online Learning):** Khi người dùng ghi nhận món ăn qua `POST /api/food-logs`, vector sở thích $\vec{P}_u$ tự động cập nhật với hệ số học $\gamma = 0.05$.
 - **AC6 (Kiểm soát Ngân sách):** Tổng chi phí ước tính $\le \text{max\_budget\_vnd}$ (nếu có yêu cầu).
 - **AC7 (Thời gian sinh thực đơn):** Thuật toán chạy trên Pure Java Engine phản hồi dưới **$20\text{ ms}$** cho 1 ngày, dưới **$80\text{ ms}$** cho 7 ngày.
-- **AC8 (Áp dụng vào Nhật ký):** Gọi `POST /api/meal-plans/{id}/apply` tạo hàng loạt `UserFoodLog` (`source = 'MEAL_PLAN'`) và kích hoạt `DailySummaryService.recalculate(userId, date)` ngay lập tức.
+- **AC8 (AS-IS — Apply):** Apply yêu cầu plan đã save, nhận query `date` tùy chọn (mặc định theo `planDate`), kiểm tra lại allergy/condition theo profile hiện tại và từ chối nếu meal type đã có log trong ngày đích; sau khi tạo logs sẽ recalculate daily summary. Apply không được xem là phản hồi xác nhận sở thích.
 
 ---
 
@@ -124,7 +125,8 @@ Nguyên tắc bất biến: **Clinical Safety Constraint $\succ$ Macronutrient T
 ┌────────────────────────────────────────────────────────────────────────┐
 │                        4 BƯỚC XỬ LÝ XUNG ĐỘT                           │
 │                                                                        │
-│ 1. HARD CEILING: Giới hạn trần đường tự do toàn ngày <= 25g.          │
+│ 1. HARD CEILING (DIABETES): trần đường ngày <= 25g, theo rule code.     │
+│    Đây là ngưỡng ứng dụng, không phải khuyến cáo lâm sàng phổ quát.     │
 │    Loại bỏ mọi món có đường tinh luyện cao (> 10g/khẩu phần).         │
 │                                                                        │
 │ 2. CONSTRAINT MASKING: Nhân phần tử (Hadamard product) với mặt nạ:    │
@@ -138,9 +140,9 @@ Nguyên tắc bất biến: **Clinical Safety Constraint $\succ$ Macronutrient T
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
-1. **Mặt nạ Y tế (Clinical Safety Mask):**
-   - Với bệnh nhân `DIABETES`: $\vec{M}_{\text{diabetes}} = [1, 1, 1, 1, 1, 1, 1, 0.5, 1, 1, \mathbf{0.0}, 1]$ (đè `SWEET` về 0.0, giảm `FRIED_FATTY` xuống 0.5).
-   - Với bệnh nhân `HYPERTENSION` (huyết áp cao): $\vec{M}_{\text{hypertension}} = [0.5, 1, 1, 1, 1, 1, 1, 0.3, 1, 0.2, 1, 1]$ (hạn chế nước dùng nhiều muối và đồ cay nóng).
+1. **Mặt nạ điều chỉnh preference (AS-IS):**
+   - Với `DIABETES`, engine giảm ưu tiên chiều `SWEET` và `FRIED_FATTY` theo vector mask.
+   - Với `HYPERTENSION`, mask chỉ ảnh hưởng thứ hạng; vì chưa có sodium định lượng, đây không chứng minh món ít muối hoặc phù hợp chuẩn DASH.
 2. **Vector Sở thích Hiệu dụng:**
    $$\vec{P}_{\text{effective}} = \vec{P}_u \odot \vec{M}_{\text{clinical}}$$
 
@@ -152,7 +154,7 @@ Nguyên tắc bất biến: **Clinical Safety Constraint $\succ$ Macronutrient T
 | :---: | :--- | :--- | :--- |
 | **D1** | **Chiến lược Thuật toán Sinh thực đơn** | **Thuật toán Tối ưu Tổ hợp Heuristic 3 pha kết hợp Vector Space Model**. | - Phản hồi cực nhanh ($< 20\text{ ms}$), không phụ thuộc LLM ngoài.<br>- Đảm bảo kiểm soát calo chặt chẽ $\pm 5\%$ và $100\%$ an toàn y tế. |
 | **D2** | **Cá nhân hóa Khẩu vị** | Áp dụng **Cosine Similarity** giữa $\vec{P}_{\text{effective}}$ và $\vec{F}_f$ vào hàm tính điểm ứng viên. | Gợi ý đúng món người dùng thích ăn, tăng tỷ lệ tuân thủ thực đơn của người dùng. |
-| **D3** | **An toàn Bệnh lý Mạn tính** | Cơ chế **Clinical Safety Masking** và **Hard Sugar Ceiling ($\le 25\text{g}$)**. | Ngăn chặn nguy cơ gợi ý đồ ngọt nguy hiểm cho người tiểu đường, đáp ứng chuẩn MNT y khoa. |
+| **D3 (AS-IS — heuristic)** | Lọc/ranking theo condition metadata và sugar constraints trong generator. | Không có dữ liệu vi chất/natri đầy đủ; không phải rule lâm sàng. | Định hướng hiện tại là giới hạn rule-based theo nguồn dữ liệu sẵn có; cần TO-BE data/schema y tế trước khi tuyên bố hỗ trợ lâm sàng. |
 | **D4** | **Tỷ lệ Phân bổ Calo Chuẩn** | Sáng (25%), Trưa (35%), Tối (30%), Phụ (10%). | Chuẩn khuyến nghị dinh dưỡng y học và khớp chính xác tài liệu SRS Phụ lục A. |
 | **D5** | **Đa dạng hóa Thực đơn** | Sử dụng **Weighted Random Selection** trong Top 5 ứng viên kết hợp **Penalty (+5.0)** cho món đã ăn 2-3 ngày gần đây. | Mỗi lần nhấn "Tạo lại", hệ thống sinh thực đơn mới mẻ, không bị rập khuôn. |
 | **D6** | **Khẩu phần Thực tế** | Hệ số nhân khẩu phần biến thiên trong tập: $\{0.75x, 1.0x, 1.25x, 1.5x\}$. | Phù hợp thực tế gia đình Việt Nam (3/4 bát, 1 bát, 1.5 bát). |
@@ -254,7 +256,7 @@ flowchart TD
     
     subgraph Phase1 ["Pha 1: Lọc cứng Y tế & Phân bổ Quota"]
         F1["Lọc Dị ứng: Loại bỏ món có Allergens giao với user.allergies"]
-        F2["Lọc Bệnh lý (DIABETES): Trần đường ngày <= 25g, loại món đường > 10g/khẩu phần"]
+        F2["Lọc DIABETES theo sugar metadata và constraint code; các condition khác phụ thuộc metadata hiện có"]
         F3["Tạo Mặt nạ Y tế: P_effective = P_raw (x) Mask_Clinical"]
         F4["Chia Calo 4 bữa: Sáng 25%, Trưa 35%, Tối 30%, Phụ 10%"]
         F1 --> F2 --> F3 --> F4
@@ -311,20 +313,22 @@ Toàn bộ Endpoint nằm dưới tiền tố `/api/meal-plans`, yêu cầu JWT 
 
 | Phương thức | Đường dẫn Endpoint | Vai trò nghiệp vụ | Mã lỗi chính |
 | :--- | :--- | :--- | :---: |
-| `POST` | `/api/meal-plans/generate` | Sinh thực đơn tự động (áp dụng lọc bệnh lý & học sở thích vector). | `PROFILE_NOT_FOUND`, `INSUFFICIENT_FOOD_DATA` |
+| `POST` | `/api/meal-plans/generate` | Sinh daily plan; body tùy chọn `planDate`, `days` (DTO cho phép 1..7 nhưng generator hiện tạo DAILY), `calorieTargetOverride`, `maxBudgetVnd`, `excludedFoodIds`. Override bị chặn dưới ngưỡng an toàn theo gender. | `PROFILE_NOT_FOUND`, `INSUFFICIENT_FOOD_DATA`, `VALIDATION_ERROR` |
 | `POST` | `/api/meal-plans/{id}/save` | Lưu thực đơn nháp vào kho thực đơn cá nhân (`status: SAVED`). | `MEAL_PLAN_NOT_FOUND` |
 | `GET` | `/api/meal-plans` | Lấy danh sách thực đơn của người dùng. | — |
 | `GET` | `/api/meal-plans/{id}` | Lấy chi tiết thực đơn kèm cảnh báo y tế và điểm sở thích. | `MEAL_PLAN_NOT_FOUND` |
 | `DELETE` | `/api/meal-plans/{id}` | Xóa một thực đơn. | `MEAL_PLAN_NOT_FOUND` |
 | `POST` | `/api/meal-plans/{id}/items/{itemId}/swap` | Đổi món tương đương về calo/macro và bảo toàn an toàn bệnh lý. | `MEAL_PLAN_ITEM_NOT_FOUND`, `NO_SUITABLE_SWAP_FOOD` |
-| `POST` | `/api/meal-plans/{id}/apply` | Áp dụng toàn bộ thực đơn vào nhật ký ăn uống (`UserFoodLog`). | `MEAL_PLAN_NOT_FOUND`, `ALREADY_APPLIED` |
+| `POST` | `/api/meal-plans/{id}/apply?date=YYYY-MM-DD` | Áp dụng toàn bộ thực đơn đã saved vào nhật ký; `date` là tùy chọn. | `MEAL_PLAN_NOT_FOUND`, `MEAL_PLAN_NOT_SAVED`, `MEAL_PLAN_ALREADY_APPLIED`, `MEAL_LOG_ALREADY_EXISTS` |
 
 ### Cấu trúc Response mẫu khi có xung đột Tiểu đường & Thích ngọt (`POST /api/meal-plans/generate`)
+
+> Đây là ví dụ minh họa. `medicalWarning` phải nêu giới hạn metadata/rule hiện tại; không diễn giải thành chứng nhận an toàn y khoa.
 
 ```json
 {
   "code": 200,
-  "message": "Meal plan generated successfully with medical safety constraints",
+  "message": "Meal plan generated with configured dietary constraints",
   "data": {
     "id": "e4b2d5a1-7c98-4f81-9b7e-8c3127a94b12",
     "name": "Thực đơn kiểm soát đường huyết 23/11/2026",
@@ -340,7 +344,7 @@ Toàn bộ Endpoint nằm dưới tiền tố `/api/meal-plans`, yêu cầu JWT 
     "estimatedCostVnd": 130000,
     "calorieDifferencePct": -0.81,
     "preferenceMatchScore": 0.82,
-    "medicalWarning": "Hồ sơ của bạn có ghi nhận Tiền sử Tiểu đường (DIABETES). Hệ thống đã kích hoạt Chế độ An toàn Y tế: Giới hạn tổng lượng đường trong ngày dưới 25g, loại bỏ các món có đường tinh luyện cao và ưu tiên các món ngọt tự nhiên chỉ số GI thấp (như ổi, sữa chua không đường) để ổn định đường huyết.",
+    "medicalWarning": "Hồ sơ có DIABETES. Hệ thống đã áp dụng rule sugar dựa trên dữ liệu món hiện có; kết quả chỉ mang tính hỗ trợ, không thay thế tư vấn chuyên môn.",
     "meals": [
       {
         "mealType": "BREAKFAST",
@@ -393,19 +397,25 @@ Toàn bộ Endpoint nằm dưới tiền tố `/api/meal-plans`, yêu cầu JWT 
 
 ---
 
-## 7. Phân rã công việc (Task Breakdown) cho Module PLAN (Sprint 3)
+## 7. Phân rã công việc (Task Breakdown) — trạng thái AS-IS
+
+> Các task bên dưới là lịch sử/phạm vi ban đầu. PLAN đã có source hiện tại; không đọc bảng này như danh sách việc chưa làm. Các kiểm thử là tên/kịch bản đặc tả, không khẳng định đã chạy nếu không có kết quả CI tương ứng.
 
 | Mã Task | Tên công việc kỹ thuật | Phụ thuộc | Thời lượng | Kết quả nghiệm thu (Deliverables) |
 | :---: | :--- | :---: | :---: | :--- |
 | **PLAN-01** | Viết Flyway migration `V20261123100000__plan_schema.sql` (bổ sung cột vector, bệnh lý và 2 bảng thực đơn). | — | 0.5 ngày | Migration chạy thành công trên CSDL. |
 | **PLAN-02** | Cập nhật Entities `UserHealthProfile`, `Food` và tạo Entities `MealPlan`, `MealPlanFood`. | PLAN-01 | 0.5 ngày | Toàn bộ Entity khớp 100% sơ đồ UML và mô hình vector. |
-| **PLAN-03** | Xây dựng Pure Domain Engine `VectorSimilarityEngine` (Tính Cosine Similarity, Mặt nạ Y tế, Cập nhật thích nghi $\gamma$). | PLAN-02 | 0.5 ngày | Engine toán học vector độc lập I/O, Unit test $100\%$. |
-| **PLAN-04** | Xây dựng Pure Domain Engine `RuleBasedMenuGenerator` (Thuật toán 3 pha + Lọc cứng tiểu đường trần 25g đường). | PLAN-03 | 1.0 ngày | Tốc độ $< 20\text{ ms}$, sai số calo $\le \pm 5\%$, an toàn bệnh lý. |
+| **PLAN-03** | Xây dựng Pure Domain Engine `VectorSimilarityEngine` (Tính Cosine Similarity, Mặt nạ Y tế, Cập nhật thích nghi $\\gamma$). | PLAN-02 | 0.5 ngày | Engine toán học vector độc lập I/O, Unit test $100\\%$. |
+| **PLAN-04** | Xây dựng Pure Domain Engine `RuleBasedMenuGenerator` (Thuật toán 3 pha + Lọc cứng tiểu đường trần 25g đường). | PLAN-03 | 1.0 ngày | Tốc độ $< 20\\text{ ms}$, sai số calo $\\le \\pm 5\\%$, an toàn bệnh lý. |
 | **PLAN-05** | Xây dựng `MealPlanServiceImpl` (CRUD thực đơn, đổi món tương đương, cảnh báo y tế). | PLAN-04 | 1.0 ngày | Hoàn chỉnh nghiệp vụ sinh và quản lý thực đơn. |
 | **PLAN-06** | Cài đặt logic "Apply to Diary": Tạo hàng loạt `UserFoodLog` và kích hoạt `DailySummaryService.recalculate`. | PLAN-05 | 0.5 ngày | Áp dụng thực đơn mượt mà, cập nhật bảng nóng tức thì. |
 | **PLAN-07** | Tích hợp Online Adaptive Learning: Cập nhật `preference_vector` khi ghi nhật ký ăn uống ở `FoodLogServiceImpl`. | PLAN-03 | 0.5 ngày | Hệ thống tự động học khẩu vị người dùng sau mỗi bữa ăn. |
 | **PLAN-08** | Xây dựng REST Controller `MealPlanController` và OpenAPI Swagger Docs. | PLAN-06 | 0.5 ngày | Cụm 7 endpoints RESTful chuẩn chỉnh. |
 | **PLAN-09** | Bộ Unit Tests & Integration Tests (Kiểm tra xung đột Tiểu đường vs Thích ngọt, Cosine Similarity, Sai số calo). | PLAN-08 | 1.0 ngày | 100% test pass. |
+
+### 7.1 Source of truth hiện tại
+
+Migration `V20261123100000__plan_schema.sql` tạo `meal_plans`, `meal_plan_foods`, thêm `feature_vector`, `preference_vector`, `chronic_conditions`; migration kế tiếp thêm `max_budget_vnd`. Chuẩn hóa dị ứng/bệnh nền, ingredients/recipes, sodium/purine và các rule y khoa đầy đủ là TO-BE.
 
 ---
 

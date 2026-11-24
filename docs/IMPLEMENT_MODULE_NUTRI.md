@@ -1,8 +1,11 @@
 # Kế hoạch triển khai & Đặc tả chi tiết Module NUTRI — Kallo Backend
 
-**Ngày lập kế hoạch:** 19/11/2026  
-**Module:** NUTRI — Nhật ký dinh dưỡng, Nước uống & Bảng tổng hợp hàng ngày (SRS Mục 4.3, FR-NUT-01 … FR-NUT-13)  
-**Phạm vi sở hữu:** Nhánh A (Sprint 2: Bảng `user_food_logs`, `water_logs`, `daily_summaries`; Domain Service `DailySummaryService`, `FoodLogService`, `WaterLogService`; Tích hợp MinIO và AI Service YOLOv11 qua `AI_SERVICE_URL`)
+**Ngày đồng bộ mã nguồn:** 23/11/2026
+**Module:** NUTRI — Nhật ký dinh dưỡng, nước uống & tổng hợp hàng ngày (SRS Mục 4.3, FR-NUT-01 … FR-NUT-13)
+**Phạm vi sở hữu:** `user_food_logs`, `water_logs`, `daily_summaries`; `FoodLogService`, `WaterLogService`, `DailySummaryService`; tích hợp nhận diện AI theo cấu hình hiện tại.
+
+> **AS-IS:** Schema, entity, service và controller đã có. Bảng giới hạn nước là `amount_ml <= 5000`. Dị ứng hiện lưu JSONB trên profile và food; cấu trúc chuẩn hóa (ingredients/allergens/conditions) là TO-BE, xem `IMPLEMENT_MODULE_FOODDATA.md`.
+> **TO-BE:** Không coi các claim về MinIO/AI, offline sync, favorites hoặc event như đã triển khai nếu không có route/service tương ứng trong source.
 
 ---
 
@@ -52,18 +55,18 @@ Module **NUTRI** đóng vai trò là **trái tim vận hành dữ liệu** của
 
 | Mã | Nội dung yêu cầu | Mức ưu tiên | Phase Sprint 2 | Trạng thái |
 | :--- | :--- | :---: | :---: | :---: |
-| **FR-NUT-01** | Ghi nhật ký bữa ăn theo 4 buổi: **Sáng (BREAKFAST), Trưa (LUNCH), Tối (DINNER), Bữa phụ (SNACK)**. | **M** | 1 | Chuẩn bị cài đặt |
-| **FR-NUT-02** | Chụp/chọn ảnh món ăn $\rightarrow$ Upload MinIO $\rightarrow$ Gọi AI Service (YOLOv11) $\rightarrow$ Trả về danh sách món nhận diện kèm độ tin cậy và dinh dưỡng. | **M** | 3 | Chuẩn bị cài đặt |
-| **FR-NUT-03** | Cho phép người dùng xác nhận, sửa món/khẩu phần hoặc thêm/bớt món trước khi lưu vào nhật ký. | **M** | 1 & 3 | Chuẩn bị cài đặt |
+| **FR-NUT-01** | Ghi nhật ký bữa ăn theo 4 buổi: **Sáng (BREAKFAST), Trưa (LUNCH), Tối (DINNER), Bữa phụ (SNACK)**. | **M** | 1 | AS-IS đã có |
+| **FR-NUT-02** | Chụp/chọn ảnh món ăn $\rightarrow$ Upload MinIO $\rightarrow$ Gọi AI Service (YOLOv11) $\rightarrow$ Trả về danh sách món nhận diện kèm độ tin cậy và dinh dưỡng. | **M** | 3 | AS-IS đã có |
+| **FR-NUT-03** | Cho phép người dùng xác nhận, sửa món/khẩu phần hoặc thêm/bớt món trước khi lưu vào nhật ký. | **M** | 1 & 3 | AS-IS đã có |
 | **FR-NUT-04** | Tra cứu món ăn theo tên (tiếng Việt không dấu qua PostgreSQL `pg_trgm`). | **M** | — | Đã xong ở FOODDATA, tái sử dụng |
 | **FR-NUT-05** | Quét mã vạch thực phẩm đóng gói để tra cứu và ghi log. | **M** | — | Đã xong ở FOODDATA, tái sử dụng |
-| **FR-NUT-06** | Tạo, sửa, xóa món ăn tùy chỉnh cá nhân (`source = USER_CUSTOM`, `owner_user_id = current_user_id`). | **M** | 1 | Chuẩn bị cài đặt |
-| **FR-NUT-07** | Xem nhật ký theo ngày: phân theo 4 buổi ăn, hiển thị tổng calo/macro đã nạp và so sánh với mục tiêu ngày. | **M** | 1 | Chuẩn bị cài đặt |
-| **FR-NUT-08** | Sửa/xóa mục log đã ghi; sao chép bữa ăn từ ngày khác; tự động kích hoạt tính toán lại `daily_summaries`. | **S** | 2 | Chuẩn bị cài đặt |
-| **FR-NUT-09** | Danh sách món ăn gần đây (`recent`) và món ăn yêu thích (`favorite`) để ghi nhật ký nhanh. | **S** | 1 | Chuẩn bị cài đặt |
-| **FR-NUT-10** | Cảnh báo dị ứng: Đối chiếu thành phần món ăn với danh sách dị ứng (`allergies`) trong hồ sơ PROFILE của người dùng. | **S** | 1 & 3 | Chuẩn bị cài đặt |
-| **FR-NUT-11** | Ghi nhận lượng nước uống (ml), xóa log nước, theo dõi tổng nước trong ngày so với mục tiêu ngày. | **M** | 1 | Chuẩn bị cài đặt |
-| **FR-NUT-12** | Lưu trữ ảnh chụp gốc của bữa ăn lên Object Storage (MinIO) và lưu URL vào bản ghi nhật ký. | **M** | 3 | Chuẩn bị cài đặt |
+| **FR-NUT-06** | Tạo, sửa, xóa món ăn tùy chỉnh cá nhân (`source = USER_CUSTOM`, `owner_user_id = current_user_id`). | **M** | 1 | AS-IS đã có |
+| **FR-NUT-07** | Xem nhật ký theo ngày: phân theo 4 buổi ăn, hiển thị tổng calo/macro đã nạp và so sánh với mục tiêu ngày. | **M** | 1 | AS-IS đã có |
+| **FR-NUT-08** | Sửa/xóa mục log đã ghi; sao chép bữa ăn từ ngày khác; tự động kích hoạt tính toán lại `daily_summaries`. | **S** | 2 | AS-IS đã có |
+| **FR-NUT-09** | Danh sách món gần đây (`recent`) để ghi log nhanh. Favorite list chưa có endpoint/schema riêng. | **S** | 1 | Recent: AS-IS; favorite: TO-BE |
+| **FR-NUT-10** | Cảnh báo dị ứng: Đối chiếu thành phần món ăn với danh sách dị ứng (`allergies`) trong hồ sơ PROFILE của người dùng. | **S** | 1 & 3 | AS-IS đã có |
+| **FR-NUT-11** | Ghi nhận lượng nước uống (ml), xóa log nước, theo dõi tổng nước trong ngày so với mục tiêu ngày. | **M** | 1 | AS-IS đã có |
+| **FR-NUT-12** | Lưu trữ ảnh chụp gốc của bữa ăn lên Object Storage (MinIO) và lưu URL vào bản ghi nhật ký. | **M** | 3 | AS-IS đã có |
 | **FR-NUT-13** | Cơ chế thu thập ảnh người dùng sửa sai nhãn AI để phục vụ cải thiện mô hình (lưu cờ `feedback_given`). | **C** | 3 | Thiết kế sẵn trường dữ liệu |
 
 ---
@@ -76,7 +79,7 @@ Module **NUTRI** đóng vai trò là **trái tim vận hành dữ liệu** của
 - **AC3 (Tính toán lại tức thời DailySummary):** Mọi hành động thêm, sửa, xóa trên `user_food_logs` hoặc `water_logs` phải kích hoạt hàm `DailySummaryService.recalculate(userId, date)`:
   - Cập nhật dòng `daily_summaries` tương ứng trong cùng giao dịch hoặc ngay sau commit.
   - Bắn sự kiện `DailySummaryChangedEvent` và `DailyProgressChangedEvent` sang các module nhánh B.
-- **AC4 (Cảnh báo dị ứng):** Nếu món ăn có chứa bất kỳ mã dị ứng nào trùng với danh sách dị ứng trong hồ sơ sức khỏe (`user_health_profiles.allergies`), response trả về phải có trường `has_allergy_warning: true` kèm danh sách chất gây dị ứng vi phạm.
+- **AC4 (AS-IS):** FoodLog service đối chiếu allergies trong profile với `foods.allergens` và trả cảnh báo theo response hiện tại. Dữ liệu hiện là JSONB; độ an toàn phụ thuộc tính đầy đủ/chính xác của metadata món. Chuẩn hóa qua ingredient/allergen relations là TO-BE.
 - **AC5 (Độ trễ nhận diện ảnh AI):** Upload ảnh và nhận diện món ăn phản hồi dưới **$3.0\text{ s}$** với môi trường thật. Trường hợp ảnh không hợp lệ hoặc AI không nhận diện được (độ tin cậy $< 0.4$), hệ thống trả về danh sách rỗng kèm gợi ý tìm kiếm thủ công, không báo lỗi 500.
 
 ---
@@ -85,9 +88,9 @@ Module **NUTRI** đóng vai trò là **trái tim vận hành dữ liệu** của
 
 | Module đối tác | Chi tiết kết nối và trách nhiệm | Trạng thái tích hợp ở Sprint 2 |
 | :--- | :--- | :--- |
-| **PROFILE (Nhánh A)** | Đọc mục tiêu `daily_calorie_goal`, `water_goal_ml`, `allergies` từ `user_health_profiles`. | **Sẵn sàng** (Đã hoàn thành 100% ở Sprint 1) |
-| **FOODDATA (Nhánh A)** | Đọc dữ liệu món ăn hệ thống và món mã vạch từ bảng `foods`. | **Sẵn sàng** (Đã hoàn thành 100% ở Sprint 1) |
-| **ACT (Nhánh B)** | Cần đọc `calories_burned`, `steps` và `weight_kg` để tổng hợp vào `DailySummary`. | Đã có interface `ActivityWeightQueryPort` (Nhánh A dùng Stub/Adapter) |
+| **PROFILE (Nhánh A)** | Đọc `daily_calorie_goal`, `water_goal_ml`, `allergies` từ `user_health_profiles`. | AS-IS tích hợp trong source; acceptance/benchmark kiểm riêng |
+| **FOODDATA (Nhánh A)** | Đọc food system/custom/barcode từ `foods`. | AS-IS tích hợp trong source; dữ liệu recipe/allergen chuẩn hóa là TO-BE |
+| **ACT (Nhánh B)** | Đọc `calories_burned`, `steps` và `weight_kg` để tổng hợp DailySummary. | AS-IS dùng `ActivityDailyAggregator` qua `ObjectProvider`; không có `ActivityWeightQueryPort` trong source hiện tại |
 | **SYS (Nhánh B)** | Lắng nghe `DailySummaryChangedEvent` để gửi thông báo cảnh báo calo; `MealLoggedEvent`, `WaterLoggedEvent` cho bộ máy nhắc nhở. | Cần bắn event sau khi lưu log thành công |
 | **GAME (Nhánh B)** | Cần đọc dữ liệu thực tế từ `DailyProgressProvider` để tính Streak, Leaderboard và Badges. | **Thay thế `EmptyDailyProgressProvider`** bằng triển khai đọc từ `daily_summaries` |
 | **SYS — Sync (Nhánh B)** | Đồng bộ ngoại tuyến: Xử lý `SyncEntityType.FOOD_LOG` và `SyncEntityType.WATER_LOG`. | Cung cấp 2 bean `SyncEntityHandler` cho `SyncRegistry` |
@@ -155,7 +158,7 @@ CREATE INDEX idx_user_food_logs_food ON user_food_logs (food_id);
 CREATE TABLE water_logs (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id                 UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    amount_ml               INTEGER NOT NULL CHECK (amount_ml > 0 AND amount_ml <= 3000),
+    amount_ml               INTEGER NOT NULL CHECK (amount_ml > 0 AND amount_ml <= 5000),
     logged_date             DATE NOT NULL,
     logged_at               TIMESTAMPTZ NOT NULL DEFAULT now(),
     client_uuid             UUID NOT NULL,
@@ -303,7 +306,9 @@ sequenceDiagram
 
 ---
 
-## 7. Phân rã công việc (Task Breakdown) cho Sprint 2
+## 7. Phân rã công việc (Task Breakdown) — lịch sử triển khai
+
+> NUTRI hiện đã có các migration/source tương ứng. Bảng task dưới đây là kế hoạch ban đầu, không phải danh sách công việc còn tồn.
 
 | Mã Task | Tên công việc kỹ thuật | Phụ thuộc | Thời lượng dự kiến | Kết quả nghiệm thu (Deliverables) |
 | :---: | :--- | :---: | :---: | :--- |
@@ -311,7 +316,7 @@ sequenceDiagram
 | **NUTRI-02** | Xây dựng JPA Entities (`UserFoodLog`, `WaterLog`, `DailySummary`) và Enums. | NUTRI-01 | 0.5 ngày | Entities khớp chính xác sơ đồ lớp và kiến trúc Snapshot. |
 | **NUTRI-03** | Xây dựng Spring Data Repositories với các câu truy vấn tổng hợp `SUM()`. | NUTRI-02 | 0.5 ngày | Các query `sumNutrientsByDate`, `findRecentFoods` hoạt động chính xác. |
 | **NUTRI-04** | Xây dựng `FoodLogService` và `WaterLogService` (CRUD, Snapshot, Allergic Warning). | NUTRI-03 | 1.0 ngày | Logic đóng băng dinh dưỡng, kiểm tra dị ứng, chống trùng lặp `client_uuid`. |
-| **NUTRI-05** | Xây dựng `DailySummaryService.recalculate` và tích hợp `ActivityWeightQueryPort`. | NUTRI-04 | 1.0 ngày | Tính toán tổng hợp, cập nhật bảng `daily_summaries`, phát sự kiện. |
+| **NUTRI-05** | Xây dựng `DailySummaryService.recalculate` và tích hợp `ActivityDailyAggregator`. | NUTRI-04 | 1.0 ngày | Tính toán tổng hợp, cập nhật bảng `daily_summaries`, phát sự kiện. |
 | **NUTRI-06** | Triển khai 2 Adapter: `DailySummaryProgressProvider` (cho GAME) và `UserActivityPort` (cho SYS). | NUTRI-05 | 0.5 ngày | Ghi đè bean rỗng, kết nối liền mạch sang module GAME và SYS. |
 | **NUTRI-07** | Xây dựng các REST Controllers (`FoodLogController`, `WaterLogController`, `DailySummaryController`). | NUTRI-05 | 0.5 ngày | Hoàn thiện toàn bộ endpoints RESTful kèm Swagger OpenAPI. |
 | **NUTRI-08** | Tích hợp MinIO upload và gọi AI Service nhận diện món ăn (`recognize`). | NUTRI-07 | 1.0 ngày | Upload ảnh thành công, gọi mô hình YOLO AI và ánh xạ nhãn món ăn. |

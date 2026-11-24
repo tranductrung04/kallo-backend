@@ -1,8 +1,11 @@
 # Kế hoạch triển khai & Đặc tả chi tiết Module REPORT — Kallo Backend
 
-**Ngày lập kế hoạch:** 22/11/2026  
-**Module:** REPORT — Báo cáo thống kê, Chuỗi thời gian & Dự báo cân nặng thông minh (SRS Mục 4.6, FR-REP-01 … FR-REP-08)  
-**Phạm vi sở hữu:** Nhánh A (Sprint 3: Issue `A-09`: Tận dụng bảng nóng `daily_summaries`; Kỹ thuật Lấp đầy chuỗi ngày Scaffolding; Thuật toán Dự báo cân nặng EMA $\alpha = 0.3$; Domain Service `ReportService`, `WeightForecastService`; REST Controller `ReportController`)
+**Ngày đồng bộ mã nguồn:** 23/11/2026
+**Module:** REPORT — Báo cáo thống kê, chuỗi thời gian & dự báo cân nặng (SRS Mục 4.6, FR-REP-01 … FR-REP-08)
+**Phạm vi sở hữu:** `ReportController`, `ReportServiceImpl`, `WeightForecastService`; đọc `daily_summaries` và profile.
+
+> **AS-IS:** REPORT controller/service/DTO và migration nguồn đã có. Query dùng `date` cho dashboard/calories/macros/weight; summary dùng `startDate`/`endDate`. Nội dung SRS, performance và ví dụ dưới đây là mục tiêu/illustration nếu chưa được xác minh qua tests/benchmark.
+> **TO-BE:** Chỉ nội dung được nêu rõ là chưa có trong source mới thuộc kế hoạch tương lai; các yêu cầu không được coi là đã nghiệm thu chỉ vì route tồn tại.
 
 ---
 
@@ -54,28 +57,27 @@ Module **REPORT** đảm nhận nhiệm vụ trực quan hóa toàn bộ hành t
 
 | Mã | Nội dung yêu cầu chức năng | Mức ưu tiên | Phạm vi Sprint 3 | Trạng thái |
 | :--- | :--- | :---: | :---: | :---: |
-| **FR-REP-01** | **Dashboard** tổng quan tiến độ dinh dưỡng, nước uống, vận động của ngày hiện tại, cập nhật thời gian thực. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-02** | Biểu đồ **calo nạp vào / tiêu hao** theo Ngày / Tuần / Tháng. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-03** | Biểu đồ **macro** (Protein/Carbs/Fat) theo Ngày / Tuần / Tháng. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-04** | Biểu đồ **cân nặng** theo thời gian so với cân nặng mục tiêu. | **M** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-05** | **Dự đoán xu hướng cân nặng** và **thời điểm dự kiến đạt mục tiêu** (Weight trend prediction & Goal date). | **S** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-06** | Thống kê nước uống và bước chân theo kỳ. | **S** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-07** | Hiển thị trạng thái “vượt/thiếu” so với mục tiêu calo, macro. | **S** | Toàn bộ | Chuẩn bị cài đặt |
-| **FR-REP-08** | Xuất báo cáo tuần/tháng (Structured Export Data) phục vụ chia sẻ ảnh / PDF. | **C** | Toàn bộ | Chuẩn bị cài đặt |
+| **FR-REP-01** | Dashboard tiến độ dinh dưỡng, nước, vận động theo ngày | **M** | — | AS-IS endpoint/service có; nghiệm thu riêng |
+| **FR-REP-02** | Chuỗi thời gian calo nạp/tiêu hao | **M** | — | AS-IS endpoint/service có; nghiệm thu riêng |
+| **FR-REP-03** | Chuỗi thời gian macro | **M** | — | AS-IS endpoint/service có; nghiệm thu riêng |
+| **FR-REP-04** | Biểu đồ cân nặng và mục tiêu | **M** | — | AS-IS endpoint/service có; nghiệm thu riêng |
+| **FR-REP-05** | Dự báo cân nặng và ngày đạt mục tiêu | **S** | — | AS-IS heuristic EMA; không phải dự báo y tế đã kiểm chứng |
+| **FR-REP-06** | Thống kê nước và bước chân theo kỳ | **S** | — | AS-IS theo response/service |
+| **FR-REP-07** | Trạng thái so với mục tiêu calo/macro | **S** | — | AS-IS một phần theo Dashboard DTO |
+| **FR-REP-08** | Dữ liệu tổng hợp phục vụ export | **C** | — | AS-IS summary endpoint; file PDF/ảnh không thuộc backend hiện tại |
 
 ---
 
 ### 1.3. Tiêu chí chấp nhận (Acceptance Criteria)
 
-- **AC1 (Tốc độ phản hồi Dashboard):** Endpoint `GET /api/reports/dashboard` phản hồi dưới **$50\text{ ms}$** với tải thông thường, đọc trực tiếp 1 bản ghi từ `daily_summaries` theo ngày của người dùng.
+- **AC1 (mục tiêu hiệu năng, chưa benchmark):** `GET /api/reports/dashboard` hướng tới dưới **$50\text{ ms}$** với tải thông thường; service đọc DailySummary theo ngày người dùng.
 - **AC2 (Tính liên tục của Biểu đồ):** Dữ liệu chuỗi thời gian tuần (7 ngày) hoặc tháng (30 ngày) trả về đủ $100\%$ các mốc ngày liên tục. Ngày không có log hiển thị $0\text{ kcal}$ và cờ `hasData = false`.
 - **AC3 (Điều kiện tiên quyết Dự báo Cân nặng):**
-  - Nếu số ngày có dữ liệu $< 14$: Trả về `status: "INSUFFICIENT_DATA"`, `dataPointsCount = K`, `minimumRequired = 14`, kèm thông báo hướng dẫn.
+  - Nếu số ngày có dữ liệu $< 14$: Trả về `status: "INSUFFICIENT_DATA"`, `dataPointsUsed = K`, `minimumRequired = 14`, kèm thông báo hướng dẫn.
   - Tuyệt đối không trả về số ngày đạt mục tiêu nếu dữ liệu chưa đủ độ tin cậy.
 - **AC4 (Độ chính xác Thuật toán EMA Dự báo):** Khi đủ $\ge 14$ ngày dữ liệu, áp dụng trọng số hàm mũ $\alpha = 0.3$ trên mức thâm hụt ròng $(\text{Calories In} - \text{TDEE} - \text{Calories Burned})$ để dự phóng chuỗi 30 ngày tiếp theo theo nguyên lý $7700\text{ kcal} \approx 1\text{ kg}$ mỡ cơ thể.
 - **AC5 (Đánh giá Xu hướng Mục tiêu):**
-  - Nếu mục tiêu là giảm cân (`LOSE_WEIGHT`) nhưng thâm hụt năng lượng ròng là dương ($\Delta E > 0$, tức là đang dư calo): Báo trạng thái `trend: "OFF_TRACK"` và `estimatedGoalDate: null`.
-  - Nếu mục tiêu là tăng cân (`GAIN_WEIGHT`) nhưng thâm hụt năng lượng ròng là âm ($\Delta E < 0$, tức là đang thiếu calo): Báo trạng thái `trend: "OFF_TRACK"`.
+  - Theo source hiện tại, engine tính `netDeficit = caloriesConsumed - tdee - caloriesBurned` (giá trị âm tương ứng deficit theo cách đặt tên trong code) và kiểm tra dấu của `dailyWeightChangeKg` theo `goalType`. Đây là heuristic, không phải dự đoán y tế đã kiểm chứng.
   - Nếu xu hướng đúng hướng: Ước tính chính xác ngày đạt mục tiêu $\text{LocalDate}$.
 
 ---
@@ -85,8 +87,8 @@ Module **REPORT** đảm nhận nhiệm vụ trực quan hóa toàn bộ hành t
 | Module đối tác | Chi tiết kết nối và trách nhiệm | Trạng thái tích hợp |
 | :--- | :--- | :--- |
 | **NUTRI (Nhánh A)** | Bảng `daily_summaries` được tự động cập nhật bởi `DailySummaryService.recalculate` mỗi khi người dùng ghi/sửa/xóa nhật ký ăn uống hoặc nước. | **Đã hoàn thiện ở Sprint 2** |
-| **ACT (Nhánh B)** | Đọc lịch sử cân nặng từ `weight_logs` hoặc `daily_summaries.weight_kg` để vẽ biểu đồ diễn biến cân nặng. | Sẵn sàng qua `ActivityWeightQueryPort` |
-| **PROFILE (Nhánh A)** | Đọc mục tiêu `daily_calorie_goal`, `protein_goal_g`, `carbs_goal_g`, `fat_goal_g`, `target_weight_kg`, `tdee` từ `user_health_profiles`. | **Đã hoàn thiện ở Sprint 1** |
+| **ACT (Nhánh B)** | REPORT dùng `daily_summaries.weight_kg` và fallback cân nặng/profile hiện có để vẽ xu hướng. | Tích hợp bằng repository hiện có; không có `ActivityWeightQueryPort` riêng trong REPORT source |
+| **PROFILE (Nhánh A)** | Đọc mục tiêu calo/macro, target weight và TDEE từ `user_health_profiles`. | AS-IS tích hợp trong source; benchmark/acceptance kiểm riêng |
 
 ---
 
@@ -231,7 +233,7 @@ Toàn bộ Endpoint nằm dưới tiền tố `/api/reports`, được bảo v�
 }
 ```
 
-#### 2. Biểu đồ Calo In vs Calo Out (`GET /api/reports/calories?period=WEEK&endDate=2026-11-23`)
+#### 2. Biểu đồ Calo In vs Calo Out (`GET /api/reports/calories?period=WEEK&date=2026-11-23`)
 
 *Response Body (HTTP 200 OK):*
 ```json
@@ -354,7 +356,7 @@ sequenceDiagram
 
     %% 2. Time Series with Scaffolding
     Mobile->>Ctrl: GET /api/reports/calories?period=WEEK
-    Ctrl->>RepService: getCaloriesReport(userId, WEEK, endDate)
+    Ctrl->>RepService: getCaloriesReport(userId, WEEK, date)
     RepService->>SumRepo: findByUserIdAndDateBetween(userId, start, end)
     RepService->>RepService: Date Scaffolding: Ghép danh sách ngày liên tục & Điền 0 ngày thiếu
     RepService-->>Ctrl: CaloriesReportResponse
