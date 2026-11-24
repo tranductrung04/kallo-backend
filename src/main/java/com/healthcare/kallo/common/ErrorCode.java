@@ -51,6 +51,12 @@ public enum ErrorCode {
   CHAT_AI_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI service timed out"),
   CHAT_AI_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI service is temporarily unavailable"),
   CHAT_CONVERSATION_BUSY(HttpStatus.CONFLICT, "Conversation already has a pending message"),
+  PROFILE_NOT_FOUND(HttpStatus.NOT_FOUND, "Hồ sơ người dùng không tồn tại"),
+  UNDERAGE_GOAL_RESTRICTION(HttpStatus.BAD_REQUEST, "Người dưới 18 tuổi chỉ được chọn giữ cân"),
+  UNSAFE_TARGET_BMI(HttpStatus.BAD_REQUEST, "Mục tiêu cân nặng khiến BMI nhỏ hơn 18.5"),
+  INVALID_WEEKLY_RATE(HttpStatus.BAD_REQUEST, "Tốc độ thay đổi cân nặng không hợp lệ"),
+  INVALID_INGREDIENT(HttpStatus.BAD_REQUEST, "Nguyên liệu dị ứng không tồn tại hoặc đã bị vô hiệu hóa"),
+  INVALID_CONDITION(HttpStatus.BAD_REQUEST, "Bệnh mạn tính không tồn tại trong hệ thống"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

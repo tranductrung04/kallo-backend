@@ -40,6 +40,16 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails()));
   }
 
+  @ExceptionHandler(com.healthcare.kallo.service.profile.ProfileException.class)
+  public ResponseEntity<ApiResponse<?>> profileException(com.healthcare.kallo.service.profile.ProfileException e) {
+    org.springframework.http.HttpStatus status = org.springframework.http.HttpStatus.BAD_REQUEST;
+    if (e.getErrorCode() == com.healthcare.kallo.model.profile.ProfileErrorCode.PROFILE_NOT_FOUND) {
+      status = org.springframework.http.HttpStatus.NOT_FOUND;
+    }
+    return ResponseEntity.status(status).body(
+        ApiResponse.error(e.getErrorCode().name(), e.getErrorCode().getMessage()));
+  }
+
   @Override
   protected ResponseEntity<Object> handleMethodArgumentNotValid(
       MethodArgumentNotValidException e,

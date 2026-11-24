@@ -1,0 +1,666 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - PROFILE API
+  version: 1.0.0
+  description: |
+    API quản lý hồ sơ sức khỏe, chỉ số sinh học, mục tiêu thể chất, danh mục bệnh mạn tính và dị ứng nguyên liệu của người dùng.
+    Mọi endpoint đều yêu cầu xác thực JWT Bearer Token hợp lệ và email đã được xác minh.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+tags:
+  - name: health-profile
+    description: Hồ sơ sinh học, chỉ số cơ thể, BMR, TDEE, Calo goal & Macros
+  - name: chronic-conditions
+    description: Quản lý danh mục bệnh mạn tính và liên kết bệnh của người dùng
+  - name: allergies
+    description: Quản lý dị ứng nguyên liệu thực phẩm của người dùng
+paths:
+  /api/v1/users/me/profile:
+    get:
+      tags: [health-profile]
+      summary: Lấy thông tin hồ sơ sức khỏe & chỉ số hiện tại
+      description: |
+        Trả về thông tin hồ sơ sức khỏe và toàn bộ chỉ số tính toán (BMR, TDEE, Calo goal, Macros, Nước).
+        Nếu chưa có hồ sơ, trả về mã lỗi PRF_404 (PROFILE_NOT_FOUND).
+      responses:
+        '200':
+          description: Lấy thông tin hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProfile'
+              example:
+                success: true
+                data:
+                  userId: "c0a80101-8c7a-1d2e-818c-7a1d2e000000"
+                  gender: "FEMALE"
+                  dob: "1995-08-15"
+                  age: 31
+                  heightCm: 162.5
+                  weightKg: 58.0
+                  bmi: 22.0
+                  activityLevel: "MODERATELY_ACTIVE"
+                  goalType: "LOSE_WEIGHT"
+                  targetWeightKg: 53.0
+                  weeklyRateKg: 0.50
+                  bmr: 1317.88
+                  tdee: 2042.71
+                  dailyCalorieGoal: 1492.71
+                  macronutrients:
+                    proteinGrams: 116.0
+                    fatGrams: 41.46
+                    carbGrams: 163.89
+                  waterLiters: 2.03
+                  rateClamped: false
+                  recalculationRecommended: false
+                  recommendedTdee: null
+                  recommendedDailyCalorieGoal: null
+                  latestLoggedWeightKg: 58.0
+                  goalAdvice: null
+                  version: 1
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Người dùng chưa tạo hồ sơ sức khỏe
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+              example:
+                success: false
+                data: null
+                error:
+                  code: "PROFILE_NOT_FOUND"
+                  message: "Hồ sơ người dùng không tồn tại"
+                  details: null
+    put:
+      tags: [health-profile]
+      summary: Tạo mới hoặc cập nhật toàn bộ hồ sơ sức khỏe
+      description: |
+        Tạo mới (Onboarding) hoặc cập nhật hồ sơ sức khỏe.
+        Hệ thống tự động tính toán lại toàn bộ chỉ số BMR, TDEE, Calorie Goal, Macros, Lượng nước.
+        Đồng thời phát sự kiện ProfileUpdatedEvent sang module ACT để đồng bộ cân nặng chuẩn.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileRequest'
+            example:
+              gender: "FEMALE"
+              dob: "1995-08-15"
+              heightCm: 162.5
+              weightKg: 58.0
+              activityLevel: "MODERATELY_ACTIVE"
+              goalType: "LOSE_WEIGHT"
+              targetWeightKg: 53.0
+              weeklyRateKg: 0.50
+      responses:
+        '200':
+          description: Tạo mới hoặc cập nhật hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProfile'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/users/me/profile/recalculate:
+    post:
+      tags: [health-profile]
+      summary: Xác nhận tính toán lại hồ sơ từ cân nặng gợi ý
+      description: |
+        Áp dụng cân nặng ghi nhận gần nhất (`latestLoggedWeightKg`) làm cân nặng chính thức của hồ sơ.
+        Tính toán lại BMR, TDEE, Calo Goal, Macros, Nước.
+        Nếu cân nặng đã đạt mục tiêu (chạm đích), hệ thống tự động chuyển `goalType` về `MAINTAIN_WEIGHT`, gán `targetWeightKg = null`, `weeklyRateKg = 0.00` và trả về `goalAdvice = "TARGET_REACHED"`.
+      responses:
+        '200':
+          description: Tính toán lại và cập nhật hồ sơ thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseProfile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/chronic-conditions:
+    get:
+      tags: [chronic-conditions]
+      summary: Lấy danh mục bệnh mạn tính hệ thống
+      description: Trả về danh sách tất cả các bệnh mạn tính đang hoạt động (isActive = true) trong hệ thống.
+      responses:
+        '200':
+          description: Danh sách bệnh mạn tính hệ thống
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseChronicConditions'
+              example:
+                success: true
+                data:
+                  - id: "e6f98765-4321-4321-4321-fedcba987654"
+                    code: "DIABETES_T2"
+                    name: "Tiểu đường tuýp 2"
+                    description: "Bệnh lý đái tháo đường không phụ thuộc insulin"
+                    isActive: true
+                  - id: "d5e87654-3210-3210-3210-edcba9876543"
+                    code: "HYPERTENSION"
+                    name: "Tăng huyết áp"
+                    description: "Huyết áp tâm thu >= 140 mmHg hoặc tâm trương >= 90 mmHg"
+                    isActive: true
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/users/me/chronic-conditions:
+    get:
+      tags: [chronic-conditions]
+      summary: Lấy danh sách bệnh mạn tính của người dùng
+      description: Trả về các bệnh mạn tính mà người dùng hiện đang ghi nhận trong hồ sơ.
+      responses:
+        '200':
+          description: Danh sách bệnh của người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserChronicConditions'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [chronic-conditions]
+      summary: Cập nhật danh sách bệnh mạn tính của người dùng
+      description: |
+        Thay thế toàn bộ danh sách bệnh mạn tính của người dùng.
+        Gửi mảng `conditions: []` để xóa toàn bộ bệnh đã ghi nhận.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserChronicConditionsRequest'
+            example:
+              conditions:
+                - conditionId: "e6f98765-4321-4321-4321-fedcba987654"
+                  diagnosedAt: "2023-05-10"
+                  note: "Đang duy trì thuốc ổn định"
+      responses:
+        '200':
+          description: Cập nhật danh sách bệnh thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserChronicConditions'
+        '400':
+          description: ID bệnh không hợp lệ hoặc không tồn tại (INVALID_CONDITION)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/users/me/allergies:
+    get:
+      tags: [allergies]
+      summary: Lấy danh sách dị ứng nguyên liệu của người dùng
+      description: |
+        Trả về danh sách các nguyên liệu dị ứng của người dùng.
+        Bao gồm cả các nguyên liệu đang bị ẩn (active = false) trong danh mục gốc để đảm bảo lịch sử an toàn sức khỏe.
+      responses:
+        '200':
+          description: Danh sách dị ứng của người dùng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserAllergies'
+              example:
+                success: true
+                data:
+                  - ingredientId: "00000000-0000-0000-0000-000000000001"
+                    name: "Peanuts (Lạc / Đậu phộng)"
+                    note: "Dị ứng phản vệ độ 2"
+                    active: true
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    put:
+      tags: [allergies]
+      summary: Cập nhật danh sách dị ứng nguyên liệu của người dùng
+      description: |
+        Thay thế toàn bộ danh sách dị ứng nguyên liệu của người dùng.
+        Gửi mảng `allergies: []` để xóa sạch danh sách dị ứng.
+        Quy tắc xác thực:
+        - Chặn lỗi INVALID_INGREDIENT nếu nguyên liệu mới thêm vào không tồn tại hoặc đã bị vô hiệu hóa (active = false).
+        - Cho phép giữ lại các nguyên liệu đã tồn tại từ trước dù hiện tại đã bị ẩn (active = false).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserAllergiesRequest'
+            example:
+              allergies:
+                - ingredientId: "00000000-0000-0000-0000-000000000001"
+                  note: "Dị ứng phản vệ mức độ nặng"
+      responses:
+        '200':
+          description: Cập nhật danh sách dị ứng thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseUserAllergies'
+        '400':
+          description: Nguyên liệu không tồn tại hoặc bị vô hiệu hóa (INVALID_INGREDIENT)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # 1. Envelopes
+    ApiResponseProfile:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/ProfileResponse' }
+        error: { type: object, nullable: true }
+
+    ApiResponseChronicConditions:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ChronicConditionResponse' }
+        error: { type: object, nullable: true }
+
+    ApiResponseUserChronicConditions:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UserChronicConditionResponse' }
+        error: { type: object, nullable: true }
+
+    ApiResponseUserAllergies:
+      type: object
+      required: [success, data]
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/UserAllergyResponse' }
+        error: { type: object, nullable: true }
+
+    ApiResponseError:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        data: { type: object, nullable: true, example: null }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: "UNSAFE_TARGET_BMI" }
+            message: { type: string, example: "Mục tiêu cân nặng khiến BMI nhỏ hơn 18.5" }
+            details: { type: object, nullable: true }
+
+    # 2. Domain Models
+    ProfileRequest:
+      type: object
+      required: [gender, dob, heightCm, weightKg, activityLevel, goalType]
+      properties:
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+          description: Giới tính sinh học
+        dob:
+          type: string
+          format: date
+          example: "1995-08-15"
+          description: Ngày sinh (phải trong quá khứ)
+        heightCm:
+          type: number
+          minimum: 50.0
+          maximum: 250.0
+          example: 162.5
+          description: Chiều cao tính theo centimet
+        weightKg:
+          type: number
+          minimum: 20.0
+          maximum: 300.0
+          example: 58.0
+          description: Cân nặng hiện tại tính theo kilogram
+        activityLevel:
+          type: string
+          enum: [SEDENTARY, LIGHTLY_ACTIVE, MODERATELY_ACTIVE, VERY_ACTIVE, EXTRA_ACTIVE]
+          description: Mức độ vận động thể chất hàng ngày
+        goalType:
+          type: string
+          enum: [LOSE_WEIGHT, MAINTAIN_WEIGHT, GAIN_WEIGHT]
+          description: Mục tiêu thể chất
+        targetWeightKg:
+          type: number
+          nullable: true
+          minimum: 20.0
+          maximum: 300.0
+          example: 53.0
+          description: Cân nặng mục tiêu (bắt buộc khi LOSE_WEIGHT hoặc GAIN_WEIGHT)
+        weeklyRateKg:
+          type: number
+          nullable: true
+          minimum: 0.00
+          maximum: 1.50
+          example: 0.50
+          description: Tốc độ thay đổi cân nặng mỗi tuần (0.00 khi MAINTAIN_WEIGHT)
+
+    ProfileResponse:
+      type: object
+      required:
+        - userId
+        - gender
+        - dob
+        - age
+        - heightCm
+        - weightKg
+        - bmi
+        - activityLevel
+        - goalType
+        - bmr
+        - tdee
+        - dailyCalorieGoal
+        - macronutrients
+        - waterLiters
+        - rateClamped
+        - recalculationRecommended
+        - version
+      properties:
+        userId:
+          type: string
+          format: uuid
+        gender:
+          type: string
+          enum: [MALE, FEMALE]
+        dob:
+          type: string
+          format: date
+        age:
+          type: integer
+          example: 31
+        heightCm:
+          type: number
+          example: 162.5
+        weightKg:
+          type: number
+          example: 58.0
+        bmi:
+          type: number
+          example: 22.0
+        activityLevel:
+          type: string
+          enum: [SEDENTARY, LIGHTLY_ACTIVE, MODERATELY_ACTIVE, VERY_ACTIVE, EXTRA_ACTIVE]
+        goalType:
+          type: string
+          enum: [LOSE_WEIGHT, MAINTAIN_WEIGHT, GAIN_WEIGHT]
+        targetWeightKg:
+          type: number
+          nullable: true
+          example: 53.0
+        weeklyRateKg:
+          type: number
+          example: 0.50
+        bmr:
+          type: number
+          example: 1317.88
+        tdee:
+          type: number
+          example: 2042.71
+        dailyCalorieGoal:
+          type: number
+          example: 1492.71
+        macronutrients:
+          $ref: '#/components/schemas/Macronutrients'
+        waterLiters:
+          type: number
+          example: 2.03
+        rateClamped:
+          type: boolean
+          example: false
+        recalculationRecommended:
+          type: boolean
+          example: false
+        recommendedTdee:
+          type: number
+          nullable: true
+          example: null
+        recommendedDailyCalorieGoal:
+          type: number
+          nullable: true
+          example: null
+        latestLoggedWeightKg:
+          type: number
+          nullable: true
+          example: 58.0
+        goalAdvice:
+          type: string
+          nullable: true
+          example: "TARGET_REACHED"
+          description: Thông báo khi chạm đích hoặc có lời khuyên mục tiêu
+        version:
+          type: integer
+          example: 1
+
+    Macronutrients:
+      type: object
+      required: [proteinGrams, fatGrams, carbGrams]
+      properties:
+        proteinGrams:
+          type: number
+          example: 116.0
+        fatGrams:
+          type: number
+          example: 41.46
+        carbGrams:
+          type: number
+          example: 163.89
+
+    ChronicConditionResponse:
+      type: object
+      required: [id, code, name, isActive]
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: "DIABETES_T2"
+        name:
+          type: string
+          example: "Tiểu đường tuýp 2"
+        description:
+          type: string
+          nullable: true
+        isActive:
+          type: boolean
+          example: true
+
+    UpdateUserChronicConditionsRequest:
+      type: object
+      required: [conditions]
+      properties:
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserChronicConditionItemRequest'
+
+    UserChronicConditionItemRequest:
+      type: object
+      required: [conditionId]
+      properties:
+        conditionId:
+          type: string
+          format: uuid
+        diagnosedAt:
+          type: string
+          format: date
+          nullable: true
+          example: "2023-01-15"
+        note:
+          type: string
+          nullable: true
+          example: "Tình trạng ổn định"
+
+    UserChronicConditionResponse:
+      type: object
+      required: [conditionId, code, name]
+      properties:
+        conditionId:
+          type: string
+          format: uuid
+        code:
+          type: string
+          example: "HYPERTENSION"
+        name:
+          type: string
+          example: "Tăng huyết áp"
+        description:
+          type: string
+          nullable: true
+        diagnosedAt:
+          type: string
+          format: date
+          nullable: true
+        note:
+          type: string
+          nullable: true
+
+    UpdateUserAllergiesRequest:
+      type: object
+      required: [allergies]
+      properties:
+        allergies:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAllergyItemRequest'
+
+    UserAllergyItemRequest:
+      type: object
+      required: [ingredientId]
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+        note:
+          type: string
+          nullable: true
+          example: "Dị ứng khi ăn phải"
+
+    UserAllergyResponse:
+      type: object
+      required: [ingredientId, name, active]
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: "Peanuts (Lạc / Đậu phộng)"
+        note:
+          type: string
+          nullable: true
+        active:
+          type: boolean
+          example: true
+
+  responses:
+    Unauthorized:
+      description: Người dùng chưa xác thực hoặc token không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication required"
+              details: null
+
+    NotFound:
+      description: Không tìm thấy tài nguyên
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "NOT_FOUND"
+              message: "Resource not found"
+              details: null
+
+    BadRequest:
+      description: Dữ liệu gửi lên không hợp lệ hoặc vi phạm quy tắc an toàn y sinh
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          examples:
+            underageGoalRestriction:
+              summary: Người dưới 18 tuổi chọn giảm/tăng cân
+              value:
+                success: false
+                data: null
+                error:
+                  code: "UNDERAGE_GOAL_RESTRICTION"
+                  message: "Người dưới 18 tuổi chỉ được chọn giữ cân"
+                  details: null
+            unsafeTargetBmi:
+              summary: Mục tiêu khiến BMI < 18.5
+              value:
+                success: false
+                data: null
+                error:
+                  code: "UNSAFE_TARGET_BMI"
+                  message: "Mục tiêu cân nặng khiến BMI nhỏ hơn 18.5"
+                  details: null
+            invalidWeeklyRate:
+              summary: Tốc độ thay đổi cân nặng không hợp lệ
+              value:
+                success: false
+                data: null
+                error:
+                  code: "INVALID_WEEKLY_RATE"
+                  message: "Tốc độ thay đổi cân nặng không hợp lệ"
+                  details: null
