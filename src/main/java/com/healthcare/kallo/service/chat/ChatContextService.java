@@ -16,7 +16,9 @@ import com.healthcare.kallo.service.chat.context.ActivityContext;
 import com.healthcare.kallo.service.chat.context.ChatContext;
 import com.healthcare.kallo.service.chat.context.ContextMetadata;
 import com.healthcare.kallo.service.chat.context.FoodPreferenceContext;
+import com.healthcare.kallo.service.chat.context.LongTermHealthTrendContext;
 import com.healthcare.kallo.service.chat.context.NutritionGoalsContext;
+import com.healthcare.kallo.service.chat.context.NutritionHistoryContext;
 import com.healthcare.kallo.service.chat.context.TodayNutritionContext;
 import com.healthcare.kallo.service.chat.context.UserProfileContext;
 import com.healthcare.kallo.service.chat.context.WeightTrendContext;
@@ -87,14 +89,68 @@ public class ChatContextService {
     TodayNutritionContext nutrition = todayNutrition(today, progress);
     ActivityContext activity = activity(userId, today, zone, progress);
     FoodPreferenceContext preferences = preferences(userId);
+    NutritionHistoryContext sevenDay = history(userId, today.minusDays(6), today, profile, zone);
+    LongTermHealthTrendContext thirtyDay = longTermTrend(userId, today.minusDays(29), today, profile, zone);
 
-    return new ChatContext(userProfile, goals, nutrition, activity, preferences, trend,
+    return new ChatContext(userProfile, goals, nutrition, activity, preferences, trend, sevenDay, thirtyDay,
         new ContextMetadata("2.0", asOf, zone.getId()));
   }
 
   private TodayNutritionContext todayNutrition(LocalDate today, DailyProgress progress) {
     return new TodayNutritionContext(today,
-        integer(progress == null ? null : progress.caloriesIn()), null, null, null, List.of());
+        integer(progress == null ? null : progress.caloriesIn()),
+        progress == null ? null : progress.proteinG(), progress == null ? null : progress.carbsG(),
+        progress == null ? null : progress.fatG(), List.of());
+  }
+
+  private NutritionHistoryContext history(UUID userId, LocalDate from, LocalDate to,
+      UserHealthProfile profile, ZoneId zone) {
+    List<DailyProgress> rows = dailyProgress.findRange(userId, from, to);
+    Map<LocalDate, BigDecimal> weightsByDate = weightByDate(userId, from, to, zone);
+    List<NutritionHistoryContext.DailySummary> daily = rows.stream().map(row -> {
+      BigDecimal weight = weightsByDate.get(row.localDate());
+      boolean met = row.calorieGoal() != null && row.caloriesIn() != null
+          && row.caloriesIn() >= row.calorieGoal() * 0.9
+          && row.caloriesIn() <= row.calorieGoal() * 1.1;
+      return new NutritionHistoryContext.DailySummary(row.localDate(), row.caloriesIn(), row.proteinG(),
+          row.carbsG(), row.fatG(), weight, met);
+    }).toList();
+    return new NutritionHistoryContext(rows.size(), average(rows, DailyProgress::caloriesIn),
+        average(rows, DailyProgress::proteinG), average(rows, DailyProgress::carbsG),
+        average(rows, DailyProgress::fatG), average(weightsByDate.values()),
+        daily.isEmpty() ? null : BigDecimal.valueOf(daily.stream().filter(NutritionHistoryContext.DailySummary::calorieGoalMet).count())
+            .divide(BigDecimal.valueOf(daily.size()), 4, java.math.RoundingMode.HALF_UP), daily);
+  }
+
+  private LongTermHealthTrendContext longTermTrend(UUID userId, LocalDate from, LocalDate to,
+      UserHealthProfile profile, ZoneId zone) {
+    List<DailyProgress> rows = dailyProgress.findRange(userId, from, to);
+    Map<LocalDate, BigDecimal> weights = weightByDate(userId, from, to, zone);
+    BigDecimal start = weights.get(from);
+    BigDecimal end = weights.get(to);
+    if (start == null) start = weights.values().stream().findFirst().orElse(profile == null ? null : profile.getWeightKg());
+    if (end == null) end = weights.values().stream().reduce((first, last) -> last).orElse(profile == null ? null : profile.getWeightKg());
+    return new LongTermHealthTrendContext(start, end, start == null || end == null ? null : end.subtract(start),
+        average(rows, DailyProgress::caloriesIn), average(rows, DailyProgress::proteinG),
+        average(rows, DailyProgress::carbsG), average(rows, DailyProgress::fatG));
+  }
+
+  private Map<LocalDate, BigDecimal> weightByDate(UUID userId, LocalDate from, LocalDate to, ZoneId zone) {
+    return weights.findByUserIdAndLoggedAtInRange(userId, from.atStartOfDay(zone).toInstant(),
+            to.plusDays(1).atStartOfDay(zone).toInstant()).stream()
+        .collect(Collectors.toMap(log -> log.getLoggedAt().atZone(zone).toLocalDate(), WeightLog::getWeightKg,
+            (first, last) -> last));
+  }
+
+  private <T extends Number> BigDecimal average(List<DailyProgress> rows, Function<DailyProgress, T> value) {
+    return average(rows.stream().map(value).filter(java.util.Objects::nonNull)
+        .map(number -> BigDecimal.valueOf(number.doubleValue())).toList());
+  }
+
+  private BigDecimal average(java.util.Collection<BigDecimal> values) {
+    if (values.isEmpty()) return null;
+    return values.stream().reduce(BigDecimal.ZERO, BigDecimal::add)
+        .divide(BigDecimal.valueOf(values.size()), 2, java.math.RoundingMode.HALF_UP);
   }
 
   private ActivityContext activity(UUID userId, LocalDate today, ZoneId zone, DailyProgress progress) {
