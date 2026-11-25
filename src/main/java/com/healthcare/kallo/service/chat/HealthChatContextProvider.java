@@ -47,6 +47,8 @@ public class HealthChatContextProvider implements ChatContextProvider {
     }
     if (context.healthTrend() != null) profile.put("weightTrend", context.healthTrend());
     profile.put("foodPreferences", context.foodPreferences());
+    if (context.sevenDayNutrition() != null) profile.put("sevenDayNutrition", context.sevenDayNutrition());
+    if (context.thirtyDayTrend() != null) profile.put("thirtyDayTrend", context.thirtyDayTrend());
 
     Map<String, Object> today = new LinkedHashMap<>();
     Map<String, Object> nutritionMap = new LinkedHashMap<>();
