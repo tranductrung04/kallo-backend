@@ -1,113 +1,82 @@
 package com.healthcare.kallo.service.chat;
 
-import com.healthcare.kallo.model.auth.User;
-import com.healthcare.kallo.repository.auth.UserRepository;
-import com.healthcare.kallo.repository.profile.UserAllergyRepository;
-import com.healthcare.kallo.service.act.ProfileBodyMetrics;
-import com.healthcare.kallo.service.game.DailyProgress;
-import com.healthcare.kallo.service.game.DailyProgressProvider;
-import com.healthcare.kallo.service.profile.port.IngredientLookup;
-import com.healthcare.kallo.service.profile.port.IngredientSummary;
-import java.math.BigDecimal;
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.ZoneId;
+import com.healthcare.kallo.service.chat.context.ActivityContext;
+import com.healthcare.kallo.service.chat.context.ChatContext;
+import com.healthcare.kallo.service.chat.context.FoodPreferenceContext;
+import com.healthcare.kallo.service.chat.context.NutritionGoalsContext;
+import com.healthcare.kallo.service.chat.context.TodayNutritionContext;
+import com.healthcare.kallo.service.chat.context.UserProfileContext;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
 @Component
 public class HealthChatContextProvider implements ChatContextProvider {
-  private final UserRepository users;
-  private final ObjectProvider<ProfileBodyMetrics> bodyMetrics;
-  private final ObjectProvider<DailyProgressProvider> dailyProgress;
-  private final ObjectProvider<UserAllergyRepository> userAllergies;
-  private final ObjectProvider<IngredientLookup> ingredientLookup;
-  private final Clock clock;
+  private final ChatContextService contextService;
 
-  public HealthChatContextProvider(UserRepository users, ObjectProvider<ProfileBodyMetrics> bodyMetrics,
-      ObjectProvider<DailyProgressProvider> dailyProgress, ObjectProvider<UserAllergyRepository> userAllergies,
-      ObjectProvider<IngredientLookup> ingredientLookup, Clock clock) {
-    this.users = users;
-    this.bodyMetrics = bodyMetrics;
-    this.dailyProgress = dailyProgress;
-    this.userAllergies = userAllergies;
-    this.ingredientLookup = ingredientLookup;
-    this.clock = clock;
+  public HealthChatContextProvider(ChatContextService contextService) {
+    this.contextService = contextService;
   }
 
   @Override
   public ChatContextData get(UUID userId) {
-    User user = users.findById(userId).orElse(null);
-    if (user == null) return ChatContextData.empty();
-    ZoneId zone = zoneOrDefault(user.getTimezone());
-    LocalDate today = LocalDate.now(clock.withZone(zone));
-
+    ChatContext context = contextService.get(userId);
     Map<String, Object> profile = new LinkedHashMap<>();
-    profile.put("displayName", user.getDisplayName());
-    profile.put("timezone", user.getTimezone());
-    ProfileBodyMetrics metrics = bodyMetrics.getIfAvailable();
-    if (metrics != null) {
-      metrics.heightCm(userId).ifPresent(value -> profile.put("heightCm", decimal(value)));
-      metrics.weightKg(userId).ifPresent(value -> profile.put("weightKg", decimal(value)));
+    UserProfileContext user = context.userProfile();
+    if (user != null) {
+      put(profile, "age", user.age());
+      put(profile, "gender", user.gender());
+      put(profile, "heightCm", user.heightCm());
+      put(profile, "currentWeightKg", user.currentWeightKg());
+      put(profile, "targetWeightKg", user.targetWeightKg());
+      put(profile, "activityLevel", user.activityLevel());
     }
+    NutritionGoalsContext goals = context.nutritionGoals();
+    if (goals != null) {
+      Map<String, Object> goalMap = new LinkedHashMap<>();
+      put(goalMap, "dailyCalories", goals.dailyCalories());
+      put(goalMap, "tdee", goals.tdee());
+      put(goalMap, "proteinG", goals.proteinG());
+      put(goalMap, "carbsG", goals.carbsG());
+      put(goalMap, "fatG", goals.fatG());
+      put(goalMap, "waterMl", goals.waterMl());
+      profile.put("nutritionGoals", goalMap);
+      profile.putAll(goalMap);
+    }
+    if (context.healthTrend() != null) profile.put("weightTrend", context.healthTrend());
+    profile.put("foodPreferences", context.foodPreferences());
 
-    Map<String, Object> todaySummary = new LinkedHashMap<>();
-    DailyProgress progress = dailyProgress.getIfAvailable() == null ? null
-        : dailyProgress.getIfAvailable().find(userId, today).orElse(null);
-    if (progress != null) {
-      todaySummary.put("date", progress.localDate().toString());
-      todaySummary.put("mealsLogged", progress.mealsLogged());
-      put(todaySummary, "consumedKcal", progress.caloriesIn());
-      put(todaySummary, "calorieGoal", progress.calorieGoal());
-      todaySummary.put("waterMl", progress.waterMl());
-      put(todaySummary, "waterGoalMl", progress.waterGoalMl());
-      todaySummary.put("steps", progress.steps());
-      put(todaySummary, "caloriesBurned", progress.caloriesBurned());
+    Map<String, Object> today = new LinkedHashMap<>();
+    Map<String, Object> nutritionMap = new LinkedHashMap<>();
+    TodayNutritionContext nutrition = context.todayNutrition();
+    if (nutrition != null) {
+      put(nutritionMap, "date", nutrition.date());
+      put(nutritionMap, "consumedKcal", nutrition.consumedKcal());
+      put(nutritionMap, "proteinG", nutrition.proteinG());
+      put(nutritionMap, "carbsG", nutrition.carbsG());
+      put(nutritionMap, "fatG", nutrition.fatG());
+      put(nutritionMap, "meals", nutrition.meals());
+      today.put("nutrition", nutritionMap);
+      today.putAll(nutritionMap);
     }
-    return new ChatContextData(profile, todaySummary, resolveAllergies(userId));
+    ActivityContext activity = context.activity();
+    if (activity != null) {
+      put(today, "steps", activity.steps());
+      put(today, "activeCalories", activity.activeCalories());
+      put(today, "exerciseMinutes", activity.exerciseMinutes());
+      put(today, "activities", activity.activities());
+      put(today, "waterMl", activity.waterMl());
+    }
+    List<String> allergyNames = context.foodPreferences().allergies().stream()
+        .map(FoodPreferenceContext.Allergy::name).toList();
+    return new ChatContextData(profile, today, allergyNames);
   }
 
-  private List<String> resolveAllergies(UUID userId) {
-    UserAllergyRepository allergyRepo = userAllergies.getIfAvailable();
-    IngredientLookup lookup = ingredientLookup.getIfAvailable();
-    if (allergyRepo == null || lookup == null) {
-      return List.of();
-    }
-    Set<UUID> ingredientIds = allergyRepo.findAllByIdUserId(userId).stream()
-        .map(allergy -> allergy.getId().getIngredientId())
-        .collect(Collectors.toSet());
-    if (ingredientIds.isEmpty()) {
-      return List.of();
-    }
-    Map<UUID, IngredientSummary> summaries = lookup.findSummariesByIds(ingredientIds);
-    return ingredientIds.stream()
-        .map(summaries::get)
-        .filter(Objects::nonNull)
-        .map(IngredientSummary::name)
-        .sorted()
-        .toList();
-  }
-
-  private ZoneId zoneOrDefault(String timezone) {
-    try {
-      return ZoneId.of(timezone == null ? "Asia/Ho_Chi_Minh" : timezone);
-    } catch (java.time.DateTimeException exception) {
-      return ZoneId.of("Asia/Ho_Chi_Minh");
-    }
-  }
-
-  private Object decimal(BigDecimal value) {
-    return value.stripTrailingZeros().scale() <= 0 ? value.intValue() : value;
-  }
-
-  private void put(Map<String, Object> target, String key, Object value) {
-    if (value != null) target.put(key, value);
+  private void put(Map<String, Object> map, String key, Object value) {
+    if (value != null) map.put(key, value);
   }
 }
