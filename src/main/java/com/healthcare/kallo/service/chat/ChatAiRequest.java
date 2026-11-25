@@ -5,9 +5,9 @@ import java.util.Map;
 import java.util.UUID;
 
 public record ChatAiRequest(UUID conversationId, String locale, ChatSystemContext systemContext,
-    List<ChatHistoryMessage> messages, ChatOptions options) {
+    List<ChatHistoryMessage> messages, ChatOptions options, String historySummary) {
   public ChatAiRequest(UUID conversationId, List<ChatHistoryMessage> messages) {
-    this(conversationId, "vi", ChatSystemContext.empty(), messages, new ChatOptions(512, false));
+    this(conversationId, "vi", ChatSystemContext.empty(), messages, new ChatOptions(512, false), null);
   }
 
   public record ChatHistoryMessage(String role, String content) {}
@@ -31,12 +31,16 @@ public record ChatAiRequest(UUID conversationId, String locale, ChatSystemContex
     Map<String, Object> profile = new java.util.LinkedHashMap<>(context.profile());
     if (!context.allergies().isEmpty()) profile.put("allergies", context.allergies());
     return new ChatAiRequest(conversationId, locale,
-        new ChatSystemContext(profile, context.today(), context.allergies()), messages, options);
+        new ChatSystemContext(profile, context.today(), context.allergies()), messages, options, historySummary);
   }
 
   public ChatAiRequest streaming() {
     return new ChatAiRequest(conversationId, locale, systemContext, messages,
-        new ChatOptions(options.maxTokens(), true));
+        new ChatOptions(options.maxTokens(), true), historySummary);
+  }
+
+  public ChatAiRequest withHistorySummary(String summary) {
+    return new ChatAiRequest(conversationId, locale, systemContext, messages, options, summary);
   }
 
   public String lastUserMessage() {
