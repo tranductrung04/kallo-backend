@@ -57,6 +57,15 @@ public enum ErrorCode {
   INVALID_WEEKLY_RATE(HttpStatus.BAD_REQUEST, "Tốc độ thay đổi cân nặng không hợp lệ"),
   INVALID_INGREDIENT(HttpStatus.BAD_REQUEST, "Nguyên liệu dị ứng không tồn tại hoặc đã bị vô hiệu hóa"),
   INVALID_CONDITION(HttpStatus.BAD_REQUEST, "Bệnh mạn tính không tồn tại trong hệ thống"),
+  FOOD_NOT_FOUND(HttpStatus.NOT_FOUND, "Food item not found"),
+  INGREDIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "Ingredient not found"),
+  CANNOT_MODIFY_SYSTEM_FOOD(HttpStatus.FORBIDDEN, "Cannot modify or delete system food"),
+  CANNOT_MODIFY_SYSTEM_INGREDIENT(HttpStatus.FORBIDDEN, "Cannot modify or delete system ingredient"),
+  FORBIDDEN_FOOD_ACCESS(HttpStatus.FORBIDDEN, "You do not have permission to access or modify this food item"),
+  FORBIDDEN_INGREDIENT_ACCESS(HttpStatus.FORBIDDEN, "You cannot use ingredients owned by another user"),
+  INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
+  BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
+  NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "No valid food items detected in the uploaded image"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

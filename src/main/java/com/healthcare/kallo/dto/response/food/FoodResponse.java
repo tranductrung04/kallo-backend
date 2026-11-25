@@ -1,0 +1,40 @@
+package com.healthcare.kallo.dto.response.food;
+
+import com.healthcare.kallo.model.food.enums.FoodCategory;
+import com.healthcare.kallo.model.food.enums.FoodSource;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+public record FoodResponse(
+    UUID id,
+    String name,
+    FoodCategory category,
+    String defaultServingName,
+    BigDecimal defaultServingGrams,
+    BigDecimal caloriesPer100g,
+    BigDecimal proteinPer100g,
+    BigDecimal carbsPer100g,
+    BigDecimal fatPer100g,
+    BigDecimal sugarPer100g,
+    BigDecimal fiberPer100g,
+    Integer caloriesPerServing,
+    BigDecimal proteinPerServing,
+    BigDecimal carbsPerServing,
+    BigDecimal fatPerServing,
+    BigDecimal sugarPerServing,
+    BigDecimal fiberPerServing,
+    String imageUrl,
+    String barcode,
+    FoodSource source,
+    Integer vietfoodClassId,
+    List<String> suitableMealTypes,
+    Integer referencePriceVnd,
+    boolean isVerified,
+    UUID ownerUserId,
+    List<FoodIngredientItemResponse> ingredients,
+    List<String> allergens,
+    Instant createdAt,
+    Instant updatedAt
+) {}

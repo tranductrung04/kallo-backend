@@ -1,0 +1,1181 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - FOODDATA API
+  version: 1.0.0
+  description: |
+    API Từ điển Thực phẩm, Nguyên liệu, Recipe & Tra cứu Mã vạch (SRS Mục 4.9, FR-FD-01 … FR-FD-08).
+    
+    ### Tính năng chính:
+    1. **Tìm kiếm Món ăn & Nguyên liệu:** Hỗ trợ Full-text Trigram tìm kiếm không dấu siêu tốc (VD: "pho", "com", "bun").
+    2. **Tra cứu Dị ứng Onboarding:** Cung cấp danh mục 10 nhóm nguyên liệu dị ứng nền chuẩn hệ thống cho màn hình khai báo dị ứng.
+    3. **Tự tạo Nguyên liệu cá nhân (Custom Ingredients):** Người dùng nhập chỉ số calo/macro trên 100g nguyên liệu thô.
+    4. **Ghép món Recipe từ Nguyên liệu:** Người dùng chọn danh sách nguyên liệu và số gam; Backend tự động tính toán toàn bộ Snapshot dinh dưỡng 100g và Khẩu phần.
+    5. **Tự động đồng bộ Recipe:** Khi sửa chỉ số một nguyên liệu cá nhân, toàn bộ món Recipe của người dùng đó sẽ tự động được cập nhật lại chỉ số dinh dưỡng.
+    6. **Tra cứu Mã vạch 3 tầng (Read-Through Cache):** Kiểm tra DB nội bộ (≤ 10ms) -> Kiểm tra Miss Cache 7 ngày -> Tự động truy vấn và đồng bộ từ Open Food Facts v2.
+    7. **Bảo toàn dữ liệu (Soft Delete):** Xóa nguyên liệu dùng `is_active = false`, xóa món dùng `deleted_at = now()` giúp không bao giờ làm vỡ lịch sử nhật ký ăn uống ở module NUTRI.
+
+    Mọi endpoint đều yêu cầu xác thực JWT Bearer Token hợp lệ.
+
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: foods
+    description: Quản lý từ điển món ăn, tìm kiếm, tạo món nhập tay và ghép món Recipe
+  - name: ingredients
+    description: Quản lý danh mục nguyên liệu hệ thống, nguyên liệu dị ứng và nguyên liệu cá nhân
+  - name: barcode
+    description: Tra cứu thực phẩm theo mã vạch qua bộ đệm Read-Through Cache & Open Food Facts
+
+paths:
+  # =========================================================================
+  # FOODS ENDPOINTS
+  # =========================================================================
+  /api/foods/search:
+    get:
+      tags: [foods]
+      summary: Tìm kiếm món ăn có phân trang
+      description: |
+        Tìm kiếm món ăn kết hợp cả món Hệ thống (`SYSTEM`), sản phẩm mã vạch (`OFF`) và món Tùy chỉnh (`USER_CUSTOM`) của chính người dùng hiện tại.
+        Hỗ trợ tìm kiếm tiếng Việt không dấu (VD: "pho", "bun bo", "com tam").
+      parameters:
+        - name: q
+          in: query
+          description: Từ khóa tìm kiếm (có dấu hoặc không dấu)
+          required: false
+          schema:
+            type: string
+          example: "com tam"
+        - name: category
+          in: query
+          description: Lọc theo phân loại nhóm món ăn
+          required: false
+          schema:
+            $ref: '#/components/schemas/FoodCategory'
+        - name: page
+          in: query
+          description: Số trang (bắt đầu từ 0)
+          required: false
+          schema:
+            type: integer
+            default: 0
+          example: 0
+        - name: size
+          in: query
+          description: Số lượng phần tử mỗi trang (tối đa 100)
+          required: false
+          schema:
+            type: integer
+            default: 20
+          example: 20
+      responses:
+        '200':
+          description: Danh sách món ăn phân trang
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePageFoodSearch'
+              example:
+                success: true
+                data:
+                  items:
+                    - id: "10000000-0000-0000-0000-00000000001a"
+                      name: "Cơm tấm"
+                      category: "RICE"
+                      defaultServingName: "1 đĩa sườn bì chả"
+                      defaultServingGrams: 400.0
+                      caloriesPerServing: 740
+                      proteinPerServing: 32.8
+                      carbsPerServing: 90.0
+                      fatPerServing: 27.2
+                      imageUrl: null
+                      source: "SYSTEM"
+                      isVerified: true
+                  page: 0
+                  size: 20
+                  totalElements: 1
+                  totalPages: 1
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/foods/{id}:
+    get:
+      tags: [foods]
+      summary: Lấy chi tiết món ăn
+      description: |
+        Lấy thông tin chi tiết đầy đủ của một món ăn theo UUID.
+        Bao gồm toàn bộ chỉ số dinh dưỡng trên 100g, trên 1 khẩu phần, danh sách nguyên liệu cấu thành và danh sách các nhóm dị ứng có trong món.
+        **Lưu ý bảo mật (IDOR):** Không thể xem món cá nhân của người dùng khác.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn
+          schema:
+            type: string
+            format: uuid
+          example: "10000000-0000-0000-0000-00000000001a"
+      responses:
+        '200':
+          description: Chi tiết món ăn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+              example:
+                success: true
+                data:
+                  id: "10000000-0000-0000-0000-00000000001a"
+                  name: "Cơm tấm"
+                  category: "RICE"
+                  defaultServingName: "1 đĩa sườn bì chả"
+                  defaultServingGrams: 400.0
+                  caloriesPer100g: 185.0
+                  proteinPer100g: 8.2
+                  carbsPer100g: 22.5
+                  fatPer100g: 6.8
+                  sugarPer100g: 1.5
+                  fiberPer100g: 1.0
+                  caloriesPerServing: 740
+                  proteinPerServing: 32.8
+                  carbsPerServing: 90.0
+                  fatPerServing: 27.2
+                  sugarPerServing: 6.0
+                  fiberPerServing: 4.0
+                  imageUrl: null
+                  barcode: null
+                  source: "SYSTEM"
+                  vietfoodClassId: 26
+                  suitableMealTypes: ["BREAKFAST", "LUNCH", "DINNER"]
+                  referencePriceVnd: 55000
+                  isVerified: true
+                  ownerUserId: null
+                  ingredients: []
+                  allergens: []
+                  createdAt: "2026-11-24T12:00:00Z"
+                  updatedAt: "2026-11-24T12:00:00Z"
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ForbiddenFoodAccess'
+        '404':
+          $ref: '#/components/responses/FoodNotFound'
+
+  /api/foods/custom:
+    post:
+      tags: [foods]
+      summary: Tạo món ăn tùy chỉnh (Nhập trực tiếp số calo/macro)
+      description: |
+        Dành cho người dùng muốn tự tạo nhanh một món ăn bằng cách nhập thẳng các chỉ số dinh dưỡng (calo, protein, carbs, fat...) trên 100g.
+        Backend sẽ tự động quy đổi ra giá trị trên 1 khẩu phần dựa vào `defaultServingGrams`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFoodRequest'
+            example:
+              name: "Cơm gạo lứt ức gà áp chảo"
+              category: "STAPLE"
+              defaultServingName: "1 hộp cơm"
+              defaultServingGrams: 350.0
+              caloriesPer100g: 145.0
+              proteinPer100g: 12.5
+              carbsPer100g: 18.0
+              fatPer100g: 2.5
+              sugarPer100g: 0.5
+              fiberPer100g: 2.0
+              suitableMealTypes: ["LUNCH", "DINNER"]
+              imageUrl: null
+      responses:
+        '201':
+          description: Tạo món thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/foods/recipe:
+    post:
+      tags: [foods]
+      summary: Tạo món ăn từ nguyên liệu (Recipe Calculation)
+      description: |
+        Cho phép người dùng ghép một món ăn từ danh sách các nguyên liệu (Hệ thống hoặc Cá nhân) kèm khối lượng gam tương ứng.
+        
+        **Cơ chế tự động của Backend:**
+        1. Kiểm tra quyền truy cập các nguyên liệu (Chặn IDOR nếu dùng nguyên liệu cá nhân của người khác).
+        2. Tự động tính toán tổng số gam và tổng calo, protein, carbs, fat, đường, chất xơ.
+        3. Tự động suy ra chỉ số quy chuẩn trên 100g món ăn và trên 1 khẩu phần ăn (`caloriesPerServing`).
+        4. Tự động tổng hợp danh sách các chất dị ứng có trong món từ các nguyên liệu thành phần.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecipeFoodRequest'
+            example:
+              name: "Bát Yến Mạch Sữa Hạnh Nhân"
+              category: "STAPLE"
+              defaultServingName: "1 tô lớn"
+              suitableMealTypes: ["BREAKFAST"]
+              imageUrl: null
+              items:
+                - ingredientId: "00000000-0000-0000-0000-000000000004"
+                  quantityGrams: 30.0
+                - ingredientId: "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+                  quantityGrams: 150.0
+      responses:
+        '201':
+          description: Tạo món Recipe thành công kèm Snapshot tính toán tự động
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ForbiddenIngredientAccess'
+        '404':
+          $ref: '#/components/responses/IngredientNotFound'
+
+  /api/foods/custom/{id}:
+    put:
+      tags: [foods]
+      summary: Cập nhật món ăn tùy chỉnh
+      description: |
+        Cập nhật thông tin và dinh dưỡng của món ăn do người dùng tự tạo.
+        Chỉ chính chủ nhân mới có quyền cập nhật món của mình. Món hệ thống (`SYSTEM`) không thể sửa đổi.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn cần sửa
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomFoodRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemFood'
+        '404':
+          $ref: '#/components/responses/FoodNotFound'
+
+    delete:
+      tags: [foods]
+      summary: Xóa món ăn tùy chỉnh (Soft Delete)
+      description: |
+        Xóa mềm món ăn tùy chỉnh bằng cách đánh dấu `deleted_at = now()`.
+        Món ăn sẽ không còn xuất hiện trên giao diện tìm kiếm của người dùng, nhưng toàn bộ nhật ký ăn uống cũ trong quá khứ ở module `NUTRI` vẫn được bảo toàn nguyên vẹn.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn cần xóa
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Xóa mềm thành công (Không có nội dung trả về)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemFood'
+        '404':
+          $ref: '#/components/responses/FoodNotFound'
+
+  # =========================================================================
+  # INGREDIENTS ENDPOINTS
+  # =========================================================================
+  /api/ingredients:
+    get:
+      tags: [ingredients]
+      summary: Tra cứu danh mục nguyên liệu & Dị ứng Onboarding
+      description: |
+        Phục vụ 2 mục đích chính trên Frontend:
+        1. **Màn hình Onboarding khai báo Dị ứng:** Gọi với `?allergenOnly=true` để lấy danh sách 10 nhóm dị ứng chuẩn của hệ thống (`PEANUT`, `DAIRY`, `EGG`...).
+        2. **Màn hình tìm nguyên liệu ghép Recipe:** Gọi với `?q=...` để tìm kiếm nguyên liệu theo tên không dấu (trả về cả nguyên liệu hệ thống và nguyên liệu cá nhân do user tự tạo).
+      parameters:
+        - name: q
+          in: query
+          required: false
+          description: Từ khóa tìm kiếm tên nguyên liệu (không dấu)
+          schema:
+            type: string
+          example: "lac"
+        - name: allergenOnly
+          in: query
+          required: false
+          description: Nếu `true`, chỉ trả về các nguyên liệu dị ứng chuẩn hệ thống (dùng cho Onboarding)
+          schema:
+            type: boolean
+            default: false
+          example: false
+      responses:
+        '200':
+          description: Danh sách nguyên liệu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseListIngredient'
+              example:
+                success: true
+                data:
+                  - id: "00000000-0000-0000-0000-000000000001"
+                    code: "PEANUT"
+                    name: "Đậu phụng (Lạc)"
+                    caloriesPer100g: 567.0
+                    proteinPer100g: 25.8
+                    carbsPer100g: 16.1
+                    fatPer100g: 49.2
+                    sugarPer100g: 4.7
+                    fiberPer100g: 8.5
+                    isAllergen: true
+                    source: "SYSTEM"
+                    ownerUserId: null
+                    isActive: true
+                    createdAt: "2026-11-24T12:00:00Z"
+                    updatedAt: "2026-11-24T12:00:00Z"
+                error: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/ingredients/custom:
+    post:
+      tags: [ingredients]
+      summary: Tự tạo nguyên liệu cá nhân
+      description: |
+        Tạo nguyên liệu cá nhân mới để dùng ghép vào các món Recipe.
+        
+        **Ràng buộc nghiệp vụ:**
+        * Giới hạn tối đa 30 nguyên liệu cá nhân / người dùng / ngày (Chống spam).
+        * Tổng `proteinPer100g + carbsPer100g + fatPer100g <= 105.0g`.
+        * `caloriesPer100g <= 950.0`.
+        * Nguyên liệu cá nhân luôn có `is_allergen = false` (Không tự động đưa vào danh mục dị ứng hệ thống).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomIngredientRequest'
+            example:
+              name: "Sốt xoài tự làm"
+              caloriesPer100g: 120.0
+              proteinPer100g: 1.2
+              carbsPer100g: 28.0
+              fatPer100g: 0.5
+              sugarPer100g: 22.0
+              fiberPer100g: 2.5
+      responses:
+        '201':
+          description: Tạo nguyên liệu thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseIngredient'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+
+  /api/ingredients/custom/{id}:
+    put:
+      tags: [ingredients]
+      summary: Cập nhật nguyên liệu cá nhân (Tự động tính lại Snapshot Recipe)
+      description: |
+        Cập nhật tên hoặc chỉ số dinh dưỡng 100g của một nguyên liệu cá nhân.
+        
+        **Cơ chế Cascade tự động:**
+        Khi lưu thành công, Backend sẽ tự động quét tất cả các món ăn Recipe cá nhân đang chứa nguyên liệu này để tính toán lại toàn bộ chỉ số Nutrition Snapshot của các món đó.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của nguyên liệu cần sửa
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomIngredientRequest'
+      responses:
+        '200':
+          description: Cập nhật thành công và các món Recipe liên quan đã được đồng bộ lại calo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseIngredient'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemIngredient'
+        '404':
+          $ref: '#/components/responses/IngredientNotFound'
+
+    delete:
+      tags: [ingredients]
+      summary: Xóa nguyên liệu cá nhân (Soft Delete)
+      description: |
+        Xóa mềm nguyên liệu cá nhân (`is_active = false`).
+        Nguyên liệu bị xóa sẽ ẩn khỏi danh sách gợi ý tìm kiếm, nhưng các món Recipe và nhật ký ăn uống cũ chứa nguyên liệu này vẫn hoạt động bình thường.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của nguyên liệu cần xóa
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Xóa mềm thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemIngredient'
+        '404':
+          $ref: '#/components/responses/IngredientNotFound'
+
+  # =========================================================================
+  # BARCODE ENDPOINTS
+  # =========================================================================
+  /api/foods/barcode/{code}:
+    get:
+      tags: [barcode]
+      summary: Quét mã vạch thực phẩm qua Read-Through Cache & Open Food Facts
+      description: |
+        Tra cứu thông tin dinh dưỡng thực phẩm đóng gói bằng mã vạch (EAN-13, UPC...).
+        
+        **Cơ chế hoạt động 3 tầng của Backend:**
+        1. **Tầng 1 (Local DB Hit):** Tra cứu ngay trong bảng `foods` nội bộ (Thời gian phản hồi $\le 10\text{ms}$).
+        2. **Tầng 2 (Miss Cache Hit):** Nếu mã vạch đã từng được tra cứu trên Open Food Facts trong 7 ngày qua nhưng không tồn tại, trả ngay lỗi 404 để tránh gọi ra mạng bên ngoài.
+        3. **Tầng 3 (Read-Through OFF API v2):** Tự động gọi API Open Food Facts với timeout cứng 2.5s. Nếu tìm thấy, tự động lưu vào CSDL nội bộ với nguồn `OFF` và trả về kết quả cho ứng dụng.
+        
+        **Gợi ý UX trên Frontend:** Khi nhận mã lỗi `BARCODE_NOT_FOUND`, ứng dụng hiển thị popup: *"Không tìm thấy thông tin sản phẩm. Bạn có muốn tự tạo món ăn mới với mã vạch này không?"*.
+      parameters:
+        - name: code
+          in: path
+          required: true
+          description: Chuỗi mã vạch (3 đến 64 ký tự chữ số hoặc dấu gạch nối)
+          schema:
+            type: string
+          example: "8936036010014"
+      responses:
+        '200':
+          description: Tìm thấy thông tin thực phẩm
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+              example:
+                success: true
+                data:
+                  id: "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d"
+                  name: "Mì Hảo Hảo tôm chua cay"
+                  category: "OTHER"
+                  defaultServingName: "1 gói (75g)"
+                  defaultServingGrams: 75.0
+                  caloriesPer100g: 450.0
+                  proteinPer100g: 8.0
+                  carbsPer100g: 60.0
+                  fatPer100g: 18.0
+                  sugarPer100g: 3.0
+                  fiberPer100g: 2.0
+                  caloriesPerServing: 338
+                  proteinPerServing: 6.0
+                  carbsPerServing: 45.0
+                  fatPerServing: 13.5
+                  sugarPerServing: 2.3
+                  fiberPerServing: 1.5
+                  imageUrl: "https://images.openfoodfacts.org/images/products/893/603/601/0014/front_vi.4.400.jpg"
+                  barcode: "8936036010014"
+                  source: "OFF"
+                  vietfoodClassId: null
+                  suitableMealTypes: ["BREAKFAST", "LUNCH", "DINNER", "SNACK"]
+                  referencePriceVnd: null
+                  isVerified: true
+                  ownerUserId: null
+                  ingredients: []
+                  allergens: []
+                  createdAt: "2026-11-24T12:00:00Z"
+                  updatedAt: "2026-11-24T12:00:00Z"
+                error: null
+        '400':
+          description: Định dạng mã vạch không hợp lệ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+              example:
+                success: false
+                data: null
+                error:
+                  code: "INVALID_BARCODE"
+                  message: "Invalid barcode format"
+                  details: null
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Không tìm thấy sản phẩm trong hệ thống và Open Food Facts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseError'
+              example:
+                success: false
+                data: null
+                error:
+                  code: "BARCODE_NOT_FOUND"
+                  message: "Barcode not found in local database or Open Food Facts"
+                  details: null
+
+# =========================================================================
+# COMPONENTS (SCHEMAS & RESPONSES)
+# =========================================================================
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Nhập JWT Access Token (Bearer Token) nhận được từ API đăng nhập hoặc làm mới token.
+
+  schemas:
+    # ENUMS
+    FoodCategory:
+      type: string
+      enum:
+        - STAPLE
+        - NOODLE
+        - RICE
+        - SOUP
+        - MEAT
+        - SEAFOOD
+        - VEGETABLE
+        - SNACK
+        - BEVERAGE
+        - OTHER
+      description: Nhóm phân loại thực phẩm
+
+    FoodSource:
+      type: string
+      enum:
+        - SYSTEM
+        - OFF
+        - USER_CUSTOM
+      description: Nguồn gốc món/nguyên liệu (SYSTEM = Hệ thống, OFF = Open Food Facts, USER_CUSTOM = Người dùng tự tạo)
+
+    MealType:
+      type: string
+      enum:
+        - BREAKFAST
+        - LUNCH
+        - DINNER
+        - SNACK
+      description: Bữa ăn phù hợp
+
+    # REQUEST SCHEMAS
+    CustomIngredientRequest:
+      type: object
+      required:
+        - name
+        - caloriesPer100g
+        - proteinPer100g
+        - carbsPer100g
+        - fatPer100g
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Tên hiển thị của nguyên liệu
+          example: "Sốt Mayonnaise ít béo"
+        caloriesPer100g:
+          type: number
+          minimum: 0.0
+          maximum: 950.0
+          description: Năng lượng (kcal) trên 100g nguyên liệu thô
+          example: 250.0
+        proteinPer100g:
+          type: number
+          minimum: 0.0
+          description: Lượng Protein (g) trên 100g
+          example: 1.5
+        carbsPer100g:
+          type: number
+          minimum: 0.0
+          description: Lượng Carbs (g) trên 100g
+          example: 8.0
+        fatPer100g:
+          type: number
+          minimum: 0.0
+          description: Lượng Chất béo (g) trên 100g
+          example: 24.0
+        sugarPer100g:
+          type: number
+          minimum: 0.0
+          default: 0.0
+          description: Lượng Đường (g) trên 100g
+          example: 3.5
+        fiberPer100g:
+          type: number
+          minimum: 0.0
+          default: 0.0
+          description: Lượng Chất xơ (g) trên 100g
+          example: 0.5
+
+    CustomFoodRequest:
+      type: object
+      required:
+        - name
+        - category
+        - defaultServingName
+        - defaultServingGrams
+        - caloriesPer100g
+        - proteinPer100g
+        - carbsPer100g
+        - fatPer100g
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Tên món ăn
+          example: "Salad ức gà sốt mè rang"
+        category:
+          $ref: '#/components/schemas/FoodCategory'
+        defaultServingName:
+          type: string
+          maxLength: 100
+          description: Tên đơn vị khẩu phần thường dùng (VD: "1 đĩa", "1 tô", "1 phần")
+          example: "1 đĩa vừa"
+        defaultServingGrams:
+          type: number
+          minimum: 1.0
+          description: Trọng lượng của 1 khẩu phần (gam)
+          example: 250.0
+        caloriesPer100g:
+          type: number
+          minimum: 0.0
+          description: Calo trên 100g
+          example: 110.0
+        proteinPer100g:
+          type: number
+          minimum: 0.0
+          description: Protein trên 100g
+          example: 14.0
+        carbsPer100g:
+          type: number
+          minimum: 0.0
+          description: Carbs trên 100g
+          example: 5.0
+        fatPer100g:
+          type: number
+          minimum: 0.0
+          description: Fat trên 100g
+          example: 4.0
+        sugarPer100g:
+          type: number
+          minimum: 0.0
+          default: 0.0
+          description: Đường trên 100g
+          example: 2.0
+        fiberPer100g:
+          type: number
+          minimum: 0.0
+          default: 0.0
+          description: Chất xơ trên 100g
+          example: 1.8
+        suitableMealTypes:
+          type: array
+          items:
+            type: string
+          description: Các bữa ăn phù hợp
+          example: ["LUNCH", "DINNER"]
+        imageUrl:
+          type: string
+          nullable: true
+          description: Đường dẫn hình ảnh nếu có
+          example: null
+
+    RecipeItemRequest:
+      type: object
+      required:
+        - ingredientId
+        - quantityGrams
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+          description: UUID của nguyên liệu thành phần (Hệ thống hoặc do chính user tạo)
+          example: "00000000-0000-0000-0000-000000000001"
+        quantityGrams:
+          type: number
+          minimum: 0.1
+          description: Khối lượng gam của nguyên liệu này trong công thức
+          example: 50.0
+
+    RecipeFoodRequest:
+      type: object
+      required:
+        - name
+        - category
+        - defaultServingName
+        - items
+      properties:
+        name:
+          type: string
+          maxLength: 255
+          description: Tên món ăn công thức
+          example: "Bát Yến Mạch Trái Cây Sáng"
+        category:
+          $ref: '#/components/schemas/FoodCategory'
+        defaultServingName:
+          type: string
+          maxLength: 100
+          description: Tên khẩu phần
+          example: "1 tô"
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RecipeItemRequest'
+          description: Danh sách các nguyên liệu thành phần
+        suitableMealTypes:
+          type: array
+          items:
+            type: string
+          description: Các bữa ăn phù hợp
+          example: ["BREAKFAST"]
+        imageUrl:
+          type: string
+          nullable: true
+          example: null
+
+    # RESPONSE SCHEMAS
+    IngredientResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+          nullable: true
+          description: Mã định danh chuẩn cho nguyên liệu hệ thống (VD: PEANUT, GLUTEN)
+        name:
+          type: string
+        caloriesPer100g:
+          type: number
+        proteinPer100g:
+          type: number
+        carbsPer100g:
+          type: number
+        fatPer100g:
+          type: number
+        sugarPer100g:
+          type: number
+        fiberPer100g:
+          type: number
+        isAllergen:
+          type: boolean
+          description: true nếu là nhóm dị ứng hệ thống
+        source:
+          $ref: '#/components/schemas/FoodSource'
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: null nếu là nguyên liệu hệ thống dùng chung
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FoodIngredientItemResponse:
+      type: object
+      properties:
+        ingredientId:
+          type: string
+          format: uuid
+        ingredientName:
+          type: string
+        quantityGrams:
+          type: number
+          nullable: true
+        isAllergen:
+          type: boolean
+        caloriesPer100g:
+          type: number
+
+    FoodResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/FoodCategory'
+        defaultServingName:
+          type: string
+        defaultServingGrams:
+          type: number
+        caloriesPer100g:
+          type: number
+        proteinPer100g:
+          type: number
+        carbsPer100g:
+          type: number
+        fatPer100g:
+          type: number
+        sugarPer100g:
+          type: number
+        fiberPer100g:
+          type: number
+        caloriesPerServing:
+          type: integer
+          description: Calo quy đổi trên 1 khẩu phần ăn mặc định
+        proteinPerServing:
+          type: number
+        carbsPerServing:
+          type: number
+        fatPerServing:
+          type: number
+        sugarPerServing:
+          type: number
+        fiberPerServing:
+          type: number
+        imageUrl:
+          type: string
+          nullable: true
+        barcode:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/FoodSource'
+        vietfoodClassId:
+          type: integer
+          nullable: true
+          description: ID lớp tương ứng trong tập dữ liệu VietFood68 (nếu có)
+        suitableMealTypes:
+          type: array
+          items:
+            type: string
+        referencePriceVnd:
+          type: integer
+          nullable: true
+          description: Giá tham khảo tại Việt Nam (VND)
+        isVerified:
+          type: boolean
+        ownerUserId:
+          type: string
+          format: uuid
+          nullable: true
+        ingredients:
+          type: array
+          items:
+            $ref: '#/components/schemas/FoodIngredientItemResponse'
+          description: Danh sách nguyên liệu cấu thành món ăn
+        allergens:
+          type: array
+          items:
+            type: string
+          description: Tên các nguyên liệu dị ứng có trong món ăn (VD: ["Đậu phụng (Lạc)", "Trứng các loại"])
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    FoodSearchItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category:
+          $ref: '#/components/schemas/FoodCategory'
+        defaultServingName:
+          type: string
+        defaultServingGrams:
+          type: number
+        caloriesPerServing:
+          type: integer
+        proteinPerServing:
+          type: number
+        carbsPerServing:
+          type: number
+        fatPerServing:
+          type: number
+        imageUrl:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/FoodSource'
+        isVerified:
+          type: boolean
+
+    # STANDARD WRAPPERS
+    ApiResponseErrorDetail:
+      type: object
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
+    ApiResponseError:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          nullable: true
+          example: null
+        error:
+          $ref: '#/components/schemas/ApiResponseErrorDetail'
+
+    ApiResponseFoodDetail:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/FoodResponse'
+        error:
+          type: object
+          nullable: true
+          example: null
+
+    ApiResponsePageFoodSearch:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: '#/components/schemas/FoodSearchItemResponse'
+            page:
+              type: integer
+              example: 0
+            size:
+              type: integer
+              example: 20
+            totalElements:
+              type: integer
+              example: 100
+            totalPages:
+              type: integer
+              example: 5
+        error:
+          type: object
+          nullable: true
+          example: null
+
+    ApiResponseIngredient:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          $ref: '#/components/schemas/IngredientResponse'
+        error:
+          type: object
+          nullable: true
+          example: null
+
+    ApiResponseListIngredient:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/IngredientResponse'
+        error:
+          type: object
+          nullable: true
+          example: null
+
+  # COMMON RESPONSES
+  responses:
+    Unauthorized:
+      description: Chưa xác thực JWT hoặc Token hết hạn
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "UNAUTHORIZED"
+              message: "Authentication required"
+              details: null
+
+    ValidationError:
+      description: Dữ liệu gửi lên không đúng định dạng hoặc vi phạm ràng buộc
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "VALIDATION_ERROR"
+              message: "Validation failed"
+              details: null
+
+    FoodNotFound:
+      description: Không tìm thấy món ăn
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "FOOD_NOT_FOUND"
+              message: "Food item not found"
+              details: null
+
+    IngredientNotFound:
+      description: Không tìm thấy nguyên liệu
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "INGREDIENT_NOT_FOUND"
+              message: "Ingredient not found"
+              details: null
+
+    ForbiddenFoodAccess:
+      description: Không có quyền truy cập hoặc chỉnh sửa món ăn của người dùng khác (IDOR Prevention)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "FORBIDDEN_FOOD_ACCESS"
+              message: "You do not have permission to access or modify this food item"
+              details: null
+
+    ForbiddenIngredientAccess:
+      description: Không có quyền sử dụng nguyên liệu cá nhân của người dùng khác (IDOR Prevention)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "FORBIDDEN_INGREDIENT_ACCESS"
+              message: "You cannot use ingredients owned by another user"
+              details: null
+
+    CannotModifySystemFood:
+      description: Không được phép sửa hoặc xóa món ăn chuẩn của hệ thống
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "CANNOT_MODIFY_SYSTEM_FOOD"
+              message: "Cannot modify or delete system food"
+              details: null
+
+    CannotModifySystemIngredient:
+      description: Không được phép sửa hoặc xóa nguyên liệu chuẩn của hệ thống
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "CANNOT_MODIFY_SYSTEM_INGREDIENT"
+              message: "Cannot modify or delete system ingredient"
+              details: null
+
+    TooManyRequests:
+      description: Vượt quá giới hạn tạo nguyên liệu cá nhân trong ngày (Tối đa 30 nguyên liệu/ngày)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "TOO_MANY_REQUESTS"
+              message: "Too many requests"
+              details: null
