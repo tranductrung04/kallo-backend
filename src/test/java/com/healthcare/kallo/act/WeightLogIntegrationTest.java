@@ -169,9 +169,9 @@ class WeightLogIntegrationTest extends ActIntegrationTestBase {
     User user = verifiedUser();
     String token = accessToken(user);
     ZoneId zone = ZoneId.of(user.getTimezone());
-    LocalDate today = LocalDate.now(zone);
-    Instant original = today.minusDays(1).atTime(23, 0).atZone(zone).toInstant();
-    Instant moved = today.atTime(1, 0).atZone(zone).toInstant();
+    LocalDate day = LocalDate.now(zone).minusDays(2);
+    Instant original = day.atTime(23, 0).atZone(zone).toInstant();
+    Instant moved = day.plusDays(1).atTime(1, 0).atZone(zone).toInstant();
     String created =
         mockMvc.perform(post("/api/weight-logs").header("Authorization", bearer(token))
                 .contentType(APPLICATION_JSON)

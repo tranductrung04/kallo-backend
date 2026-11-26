@@ -6,7 +6,10 @@
 | Module | `chat` – trợ lý AI tư vấn dinh dưỡng & sức khoẻ |
 | Package gốc | `com.healthcare.kallo` |
 | Ngày soạn | 16/11/2026 |
-| Trạng thái | Phase 0 hoàn tất; hợp đồng AI chờ xác nhận |
+| Trạng thái | Đã chuyển sang gọi LLM tương thích OpenAI trực tiếp từ backend (`OpenAiCompatibleChatClient`) |
+
+> [!NOTE]
+> **Cập nhật 27/11/2026:** Module `chat` đã gỡ bỏ AI service trung gian (`AI_SERVICE_URL`), chuyển sang gọi trực tiếp **OpenAI-compatible LLM** (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` qua `OpenAiCompatibleChatClient` + `ChatPromptBuilder`) kết hợp `HealthChatContextProvider`, `ChatSafetyService`, `ChatContextBuilder` và `ChatSummaryService` (`@Async` rolling summary). Tài liệu thiết kế ban đầu bên dưới được giữ lại làm tham khảo lịch sử.
 
 ---
 

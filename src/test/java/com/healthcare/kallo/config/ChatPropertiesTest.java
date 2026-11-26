@@ -12,12 +12,15 @@ class ChatPropertiesTest {
           .withUserConfiguration(PropertiesConfig.class)
           .withPropertyValues(
               "app.chat.enabled=true",
-              "app.chat.ai.base-url=http://localhost:8000",
-              "app.chat.ai.api-key=",
-              "app.chat.ai.connect-timeout=2s",
-              "app.chat.ai.read-timeout=30s",
-              "app.chat.ai.mock-enabled=true",
+              "app.chat.llm.base-url=http://localhost:11434/v1",
+              "app.chat.llm.api-key=",
+              "app.chat.llm.model=qwen2.5:7b",
+              "app.chat.llm.connect-timeout=5s",
+              "app.chat.llm.read-timeout=60s",
+              "app.chat.llm.temperature=0.4",
+              "app.chat.llm.max-tokens=1024",
               "app.chat.history-window=12",
+              "app.chat.max-context-chars=12000",
               "app.chat.max-message-length=2000",
               "app.chat.rate-limit.per-minute=10",
               "app.chat.rate-limit.per-day=200",
@@ -27,21 +30,27 @@ class ChatPropertiesTest {
               "app.chat.sse-heartbeat-seconds=15");
 
   @Test
-  void mockAiMayOmitApiKey() {
-    runner.run(context -> assertThat(context).hasNotFailed());
+  void bindsOpenAiCompatibleLlmPropertiesWithoutApiKey() {
+    runner.run(context -> {
+      assertThat(context).hasNotFailed();
+      ChatProperties props = context.getBean(ChatProperties.class);
+      assertThat(props.enabled()).isTrue();
+      assertThat(props.llm().model()).isEqualTo("qwen2.5:7b");
+      assertThat(props.maxContextChars()).isEqualTo(12000);
+    });
   }
 
   @Test
-  void realAiMayStartWithUnavailableFallbackBeforePhaseTwoClient() {
+  void rejectsPendingTimeoutShorterThanLlmReadTimeout() {
     runner
-        .withPropertyValues("app.chat.ai.mock-enabled=false")
-        .run(context -> assertThat(context).hasNotFailed());
+        .withPropertyValues("app.chat.pending-timeout=30s")
+        .run(context -> assertThat(context).hasFailed());
   }
 
   @Test
-  void historyWindowCannotExceedAiContextLimit() {
+  void historyWindowCannotExceedLimit() {
     runner
-        .withPropertyValues("app.chat.history-window=13")
+        .withPropertyValues("app.chat.history-window=21")
         .run(context -> assertThat(context).hasFailed());
   }
 

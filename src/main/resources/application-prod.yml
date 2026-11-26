@@ -33,8 +33,6 @@ spring:
 
 app:
   chat:
-    ai:
-      mock-enabled: false
     sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
     sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
   storage:

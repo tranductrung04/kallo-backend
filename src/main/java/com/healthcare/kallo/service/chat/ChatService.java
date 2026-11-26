@@ -25,8 +25,11 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -36,6 +39,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class ChatService {
   private static final Logger log = LoggerFactory.getLogger(ChatService.class);
   private static final int MAX_STREAMED_OUTPUT_LENGTH = 20_000;
+  private static final Pattern SENTENCE_BOUNDARY = Pattern.compile("(?:\\n|[.!?]\\s+)");
+
   private final ConversationRepository conversations;
   private final ChatMessageRepository messages;
   private final ChatAiClient aiClient;
@@ -46,10 +51,20 @@ public class ChatService {
   private final ChatTxService tx;
   private final ChatMetrics metrics;
   private final NotificationService notifications;
+  private final ObjectProvider<ChatSummaryService> summaryService;
 
   public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
       ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
       ChatProperties properties, ChatTxService tx, ChatMetrics metrics, NotificationService notifications) {
+    this(conversations, messages, aiClient, contextBuilder, safety, rateLimiter, properties, tx, metrics,
+        notifications, null);
+  }
+
+  @Autowired
+  public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
+      ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
+      ChatProperties properties, ChatTxService tx, ChatMetrics metrics, NotificationService notifications,
+      ObjectProvider<ChatSummaryService> summaryService) {
     this.conversations = conversations;
     this.messages = messages;
     this.aiClient = aiClient;
@@ -60,6 +75,7 @@ public class ChatService {
     this.tx = tx;
     this.metrics = metrics;
     this.notifications = notifications;
+    this.summaryService = summaryService;
   }
 
   public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
@@ -80,22 +96,42 @@ public class ChatService {
 
   private ChatReplyResponse generateReply(UUID userId, ChatTxService.SavedMessage saved) {
     if (saved.alreadyAnswered()) return reply(saved.userMessage(), saved.assistantMessage());
+
+    ChatSafetyService.InputPolicyDecision policy = safety.checkInputPolicy(saved.userMessage().getContent());
+    if (policy.blocked()) {
+      ChatAiReply safeReply = new ChatAiReply(
+          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true, null, null);
+      if (!tx.completeAssistant(saved.assistantMessage(), policy.safeResponse(), safeReply, 0L, false)) {
+        throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
+      }
+      metrics.recordMessage("completed");
+      return reply(saved.userMessage(), saved.assistantMessage());
+    }
+
     ChatAiReply generated;
     String checked;
+    boolean allergenWarning;
     long latencyMs;
     var aiTimer = metrics.startAiTimer();
     try {
       long started = System.nanoTime();
-      ChatAiRequest aiRequest = contextBuilder.build(userId, saved.conversation().getId(), saved.userMessage(),
-          properties.historyWindow());
+      ChatAiRequest aiRequest = contextBuilder.build(
+          userId, saved.conversation().getId(), saved.userMessage(), properties.historyWindow(),
+          properties.maxContextChars());
       generated = aiClient.generate(aiRequest);
-      var validation = safety.validateOutputWithGuardrails(generated.content(),
-          aiRequest.systemContext().allergies(), generated.suggestedFoods());
+      boolean hasMedical = !aiRequest.systemContext().chronicConditions().isEmpty() || generated.disclaimerAdded();
+      var validation = safety.validateOutputWithGuardrails(
+          generated.content(),
+          aiRequest.systemContext().allAllergyTerms(),
+          generated.suggestedFoods(),
+          hasMedical);
       checked = validation.content();
-      if (validation.replaced() || validation.suggestedFoods().size() != generated.suggestedFoods().size()) {
+      allergenWarning = validation.replaced() || validation.suggestedFoods().size() != generated.suggestedFoods().size();
+      if (allergenWarning) {
         metrics.recordAllergenHit();
-        generated = new ChatAiReply(checked, validation.suggestedFoods(), generated.promptTokens(),
-            generated.completionTokens(), generated.modelVersion());
+      }
+      if (allergenWarning || validation.disclaimerAdded()) {
+        generated = generated.withContentAndFoods(checked, validation.suggestedFoods(), validation.disclaimerAdded());
       }
       latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
       metrics.recordAiLatency(aiTimer);
@@ -109,16 +145,17 @@ public class ChatService {
       metrics.recordAiLatency(aiTimer);
       metrics.recordAiError("unavailable");
       metrics.recordMessage("failed");
-      log.error("Chat AI call failed conversationId={} messageId={}", saved.conversation().getId(),
+      log.error("Chat LLM call failed conversationId={} messageId={}", saved.conversation().getId(),
           saved.userMessage().getId(), exception);
       tx.markFailed(saved.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, saved.userMessage().getId());
     }
-    if (!tx.completeAssistant(saved.assistantMessage(), checked, generated, latencyMs)) {
+    if (!tx.completeAssistant(saved.assistantMessage(), checked, generated, latencyMs, allergenWarning)) {
       metrics.recordAiError("conversation_busy");
       throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
     }
     metrics.recordMessage("completed");
+    triggerAsyncSummary(saved.conversation().getId());
     return reply(saved.userMessage(), saved.assistantMessage());
   }
 
@@ -181,15 +218,38 @@ public class ChatService {
           ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
       return;
     }
+
+    ChatSafetyService.InputPolicyDecision policy = safety.checkInputPolicy(saved.userMessage().getContent());
+    if (policy.blocked()) {
+      ChatAiReply safeReply = new ChatAiReply(
+          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true, null, null);
+      if (!tx.completeAssistant(saved.assistantMessage(), policy.safeResponse(), safeReply, 0L, false)) {
+        throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
+      }
+      metrics.recordMessage("completed");
+      handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
+      handler.onDelta(policy.safeResponse());
+      handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(saved.conversation().getId(),
+          ChatMessageResponse.from(saved.userMessage()), ChatMessageResponse.from(saved.assistantMessage())));
+      return;
+    }
+
     ChatTxService.SavedMessage active = saved;
     StringBuilder contentBuilder = new StringBuilder();
+    StringBuilder streamedBuilder = new StringBuilder();
+    StringBuilder sentenceBuffer = new StringBuilder();
     long started = System.nanoTime();
     var aiTimer = metrics.startAiTimer();
     AtomicBoolean latencyRecorded = new AtomicBoolean();
+    AtomicBoolean heldBack = new AtomicBoolean();
     try {
       handler.onMeta(saved.conversation().getId(), saved.userMessage().getId(), saved.assistantMessage().getId());
-      ChatAiRequest aiRequest = contextBuilder.build(userId, active.conversation().getId(), active.userMessage(),
-          properties.historyWindow()).streaming();
+      ChatAiRequest aiRequest = contextBuilder.build(
+          userId, active.conversation().getId(), active.userMessage(), properties.historyWindow(),
+          properties.maxContextChars()).streaming();
+      List<String> allAllergies = aiRequest.systemContext().allAllergyTerms();
+      boolean hasMedicalContext = !aiRequest.systemContext().chronicConditions().isEmpty();
+
       aiClient.stream(aiRequest, new ChatAiStreamHandler() {
         @Override
         public void onDelta(String text) {
@@ -199,27 +259,76 @@ public class ChatService {
             throw new ChatSseException("CHAT_AI_OUTPUT_TOO_LARGE", "AI output exceeds maximum length");
           }
           contentBuilder.append(text);
-          if (aiRequest.systemContext().allergies().isEmpty()) handler.onDelta(text);
+          if (heldBack.get()) return;
+          if (allAllergies.isEmpty()) {
+            streamedBuilder.append(text);
+            handler.onDelta(text);
+            return;
+          }
+          sentenceBuffer.append(text);
+          if (SENTENCE_BOUNDARY.matcher(sentenceBuffer).find()) {
+            String segment = sentenceBuffer.toString();
+            sentenceBuffer.setLength(0);
+            if (safety.containsAnyAllergen(segment, allAllergies)) {
+              heldBack.set(true);
+            } else {
+              streamedBuilder.append(segment);
+              handler.onDelta(segment);
+            }
+          }
         }
 
         @Override
         public void onComplete(ChatAiStreamResult result) {
-          var validation = safety.validateOutputWithGuardrails(contentBuilder.toString(),
-              aiRequest.systemContext().allergies(), result.suggestedFoods());
+          if (!heldBack.get() && sentenceBuffer.length() > 0) {
+            String tail = sentenceBuffer.toString();
+            sentenceBuffer.setLength(0);
+            if (safety.containsAnyAllergen(tail, allAllergies)) {
+              heldBack.set(true);
+            } else {
+              streamedBuilder.append(tail);
+              handler.onDelta(tail);
+            }
+          }
+          String raw = contentBuilder.toString();
+          var validation = safety.validateOutputWithGuardrails(
+              raw,
+              allAllergies,
+              result.suggestedFoods(),
+              hasMedicalContext || result.disclaimerAdded());
           String checked = validation.content();
-          ChatAiReply reply = new ChatAiReply(checked, validation.suggestedFoods(), result.promptTokens(),
-              result.completionTokens(), result.modelVersion());
-          if (validation.replaced() || validation.suggestedFoods().size() != result.suggestedFoods().size()) {
+          boolean allergenWarning = validation.replaced()
+              || validation.suggestedFoods().size() != result.suggestedFoods().size();
+          ChatAiReply reply = new ChatAiReply(
+              checked,
+              validation.suggestedFoods(),
+              result.promptTokens(),
+              result.completionTokens(),
+              result.modelVersion(),
+              result.intent(),
+              result.disclaimerAdded() || validation.disclaimerAdded(),
+              result.updatedSummary(),
+              result.suggestedTitle());
+          if (allergenWarning) {
             metrics.recordAllergenHit();
           }
           if (!tx.completeAssistant(active.assistantMessage(), checked, reply,
-              TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started))) {
+              TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started), allergenWarning)) {
             metrics.recordAiError("conversation_busy");
             throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, active.userMessage().getId());
           }
           if (latencyRecorded.compareAndSet(false, true)) metrics.recordAiLatency(aiTimer);
           metrics.recordMessage("completed");
-          if (!aiRequest.systemContext().allergies().isEmpty() || validation.replaced()) handler.onReplace(checked);
+          triggerAsyncSummary(active.conversation().getId());
+
+          String alreadyStreamed = streamedBuilder.toString();
+          if (validation.replaced() || heldBack.get()) {
+            handler.onReplace(checked);
+          } else if (checked.length() > alreadyStreamed.length() && checked.startsWith(alreadyStreamed)) {
+            handler.onDelta(checked.substring(alreadyStreamed.length()));
+          } else if (!checked.equals(alreadyStreamed)) {
+            handler.onReplace(checked);
+          }
           handler.onDone(new ChatResponseStreamHandler.ChatReplyResponseData(active.conversation().getId(),
               ChatMessageResponse.from(active.userMessage()), ChatMessageResponse.from(active.assistantMessage())));
           if (handler.clientDisconnected()) notifyReply(userId, active);
@@ -250,8 +359,16 @@ public class ChatService {
     }
   }
 
+  private void triggerAsyncSummary(UUID conversationId) {
+    ChatSummaryService service = summaryService == null ? null : summaryService.getIfAvailable();
+    if (service != null) {
+      service.summarizeIfNeeded(conversationId, properties.historyWindow());
+    }
+  }
+
   @Transactional(readOnly = true)
   public ConversationPageResponse listConversations(UUID userId, int page, int size) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     if (page < 0 || size < 1 || size > 100) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     var result = conversations.findRecentByUserId(userId, PageRequest.of(page, size));
     return new ConversationPageResponse(result.getContent().stream().map(ConversationResponse::from).toList(),
@@ -268,11 +385,13 @@ public class ChatService {
 
   @Transactional(readOnly = true)
   public ConversationResponse getConversation(UUID userId, UUID conversationId) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     return ConversationResponse.from(conversation(userId, conversationId));
   }
 
   @Transactional
   public ConversationResponse renameConversation(UUID userId, UUID conversationId, ConversationUpdateRequest request) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     Conversation conversation = conversation(userId, conversationId);
     conversation.setTitle(safety.validateAndNormalizeTitle(request.title()));
     return ConversationResponse.from(conversation);
@@ -280,6 +399,7 @@ public class ChatService {
 
   @Transactional
   public void deleteConversation(UUID userId, UUID conversationId) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     Conversation conversation = conversation(userId, conversationId);
     conversation.setDeletedAt(Instant.now());
     conversation.setInitialClientMessageId(null);
@@ -287,6 +407,7 @@ public class ChatService {
 
   @Transactional(readOnly = true)
   public MessagePageResponse listMessages(UUID userId, UUID conversationId, String before, int limit) {
+    if (!properties.enabled()) throw new BusinessException(ErrorCode.NOT_FOUND);
     conversation(userId, conversationId);
     if (limit < 1 || limit > 100) throw new BusinessException(ErrorCode.INVALID_PARAMETER);
     List<ChatMessage> result;

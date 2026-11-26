@@ -4,38 +4,102 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-public record ChatAiRequest(UUID conversationId, String locale, ChatSystemContext systemContext,
-    List<ChatHistoryMessage> messages, ChatOptions options) {
+public record ChatAiRequest(
+    UUID userId,
+    UUID conversationId,
+    String locale,
+    String conversationSummary,
+    ChatSystemContext systemContext,
+    List<ChatHistoryMessage> messages,
+    ChatOptions options) {
+
   public ChatAiRequest(UUID conversationId, List<ChatHistoryMessage> messages) {
-    this(conversationId, "vi", ChatSystemContext.empty(), messages, new ChatOptions(512, false));
+    this(null, conversationId, "vi", null, ChatSystemContext.empty(), messages, new ChatOptions(512, false));
+  }
+
+  public ChatAiRequest(
+      UUID conversationId,
+      String locale,
+      ChatSystemContext systemContext,
+      List<ChatHistoryMessage> messages,
+      ChatOptions options) {
+    this(null, conversationId, locale, null, systemContext, messages, options);
   }
 
   public record ChatHistoryMessage(String role, String content) {}
 
-  public record ChatSystemContext(Map<String, Object> profile, Map<String, Object> today,
-      List<String> allergies) {
+  public record ChatSystemContext(
+      Map<String, Object> profile,
+      Map<String, Object> today,
+      List<String> allergies,
+      List<String> allergyCodes,
+      List<ChatContextData.ConditionInfo> chronicConditions,
+      Map<String, Object> recentWeight,
+      List<ChatContextData.TodayMealItem> todayMeals,
+      List<Double> preferenceVector) {
+
     public ChatSystemContext {
       profile = profile == null ? Map.of() : Map.copyOf(profile);
       today = today == null ? Map.of() : Map.copyOf(today);
       allergies = allergies == null ? List.of() : List.copyOf(allergies);
+      allergyCodes = allergyCodes == null ? List.of() : List.copyOf(allergyCodes);
+      chronicConditions = chronicConditions == null ? List.of() : List.copyOf(chronicConditions);
+      recentWeight = recentWeight == null ? Map.of() : Map.copyOf(recentWeight);
+      todayMeals = todayMeals == null ? List.of() : List.copyOf(todayMeals);
+      preferenceVector = preferenceVector == null ? List.of() : List.copyOf(preferenceVector);
+    }
+
+    public ChatSystemContext(Map<String, Object> profile, Map<String, Object> today, List<String> allergies) {
+      this(profile, today, allergies, List.of(), List.of(), Map.of(), List.of(), List.of());
     }
 
     public static ChatSystemContext empty() {
-      return new ChatSystemContext(Map.of(), Map.of(), List.of());
+      return new ChatSystemContext(Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), List.of(), List.of());
+    }
+
+    public List<String> allAllergyTerms() {
+      if (allergyCodes.isEmpty()) return allergies;
+      java.util.LinkedHashSet<String> combined = new java.util.LinkedHashSet<>(allergies);
+      combined.addAll(allergyCodes);
+      return List.copyOf(combined);
     }
   }
 
   public record ChatOptions(int maxTokens, boolean stream) {}
 
+  public ChatAiRequest withUserAndSummary(UUID targetUserId, String summary) {
+    return new ChatAiRequest(targetUserId, conversationId, locale, summary, systemContext, messages, options);
+  }
+
   public ChatAiRequest withContext(ChatContextData context) {
     Map<String, Object> profile = new java.util.LinkedHashMap<>(context.profile());
     if (!context.allergies().isEmpty()) profile.put("allergies", context.allergies());
-    return new ChatAiRequest(conversationId, locale,
-        new ChatSystemContext(profile, context.today(), context.allergies()), messages, options);
+    return new ChatAiRequest(
+        userId,
+        conversationId,
+        locale,
+        conversationSummary,
+        new ChatSystemContext(
+            profile,
+            context.today(),
+            context.allergies(),
+            context.allergyCodes(),
+            context.chronicConditions(),
+            context.recentWeight(),
+            context.todayMeals(),
+            context.preferenceVector()),
+        messages,
+        options);
   }
 
   public ChatAiRequest streaming() {
-    return new ChatAiRequest(conversationId, locale, systemContext, messages,
+    return new ChatAiRequest(
+        userId,
+        conversationId,
+        locale,
+        conversationSummary,
+        systemContext,
+        messages,
         new ChatOptions(options.maxTokens(), true));
   }
 
