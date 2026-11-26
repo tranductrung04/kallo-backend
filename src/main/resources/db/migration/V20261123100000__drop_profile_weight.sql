@@ -1,2 +1,0 @@
-ALTER TABLE users DROP CONSTRAINT IF EXISTS chk_users_weight_kg;
-ALTER TABLE users DROP COLUMN IF EXISTS weight_kg;
