@@ -5,6 +5,8 @@ import com.healthcare.kallo.model.profile.enums.Gender;
 import com.healthcare.kallo.model.profile.enums.GoalType;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Past;
 import java.math.BigDecimal;
@@ -40,5 +42,21 @@ public record ProfileRequestDto(
 
     @DecimalMin(value = "0.00", message = "weeklyRateKg must be at least 0.00")
     @DecimalMax(value = "1.50", message = "weeklyRateKg must be at most 1.50")
-    BigDecimal weeklyRateKg
-) {}
+    BigDecimal weeklyRateKg,
+
+    @Min(value = 1000, message = "stepGoal must be at least 1000")
+    @Max(value = 100000, message = "stepGoal must be at most 100000")
+    Integer stepGoal
+) {
+  public ProfileRequestDto(
+      Gender gender,
+      LocalDate dob,
+      BigDecimal heightCm,
+      BigDecimal weightKg,
+      ActivityLevel activityLevel,
+      GoalType goalType,
+      BigDecimal targetWeightKg,
+      BigDecimal weeklyRateKg) {
+    this(gender, dob, heightCm, weightKg, activityLevel, goalType, targetWeightKg, weeklyRateKg, null);
+  }
+}

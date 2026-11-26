@@ -78,6 +78,9 @@ public class UserHealthProfile implements Persistable<UUID> {
   @Column(name = "water_liters", nullable = false, precision = 4, scale = 2)
   private BigDecimal waterLiters;
 
+  @Column(name = "step_goal")
+  private Integer stepGoal;
+
   @Column(name = "recalculation_recommended", nullable = false)
   private boolean recalculationRecommended = false;
 

@@ -62,20 +62,10 @@ public class UserServiceImpl implements UserService {
   @Transactional
   public UserProfileResponse updateProfile(UUID userId, com.healthcare.kallo.dto.request.auth.ProfileUpdateRequest request) {
     User user = findUser(userId);
-    if (request.gender() != null) {
-      String gender = request.gender().trim().toLowerCase(java.util.Locale.ROOT);
-      if (!java.util.Set.of("male", "female", "other").contains(gender)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-      user.setGender(gender);
-    }
-    if (request.birthDate() != null && request.birthDate().isAfter(java.time.LocalDate.now())) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-    if (request.heightCm() != null) user.setHeightCm(request.heightCm());
-    if (request.birthDate() != null) user.setBirthDate(request.birthDate());
-    if (request.targetWeightKg() != null) user.setTargetWeightKg(request.targetWeightKg());
-    if (request.stepGoal() != null) user.setStepGoal(request.stepGoal());
     if (request.weightKg() != null && !weightLogs.existsByUserIdAndDeletedAtIsNull(userId)) {
       weightLogs.insertIfAbsent(userId, java.util.UUID.randomUUID(), request.weightKg(), java.time.Instant.now(), "onboarding");
     }
-    return response(users.saveAndFlush(user));
+    return response(user);
   }
 
   @Override
@@ -85,30 +75,7 @@ public class UserServiceImpl implements UserService {
       throw new BusinessException(ErrorCode.VALIDATION_ERROR);
     }
     String displayName = request.displayName().trim();
-    if (request.gender() != null) {
-      String normalizedGender = request.gender().trim().toLowerCase(java.util.Locale.ROOT);
-      if (!java.util.Set.of("male", "female", "other").contains(normalizedGender)) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-      request = new UpdateUserRequest(request.displayName(), request.timezone(), request.allergies(), request.heightCm(), normalizedGender,
-          request.birthDate(), request.targetWeightKg(), request.stepGoal());
-    }
-    if (request.birthDate() != null && request.birthDate().isAfter(java.time.LocalDate.now())) throw new BusinessException(ErrorCode.VALIDATION_ERROR);
-    int updated = request.allergies() == null
-        ? users.updateProfile(userId, displayName, request.timezone(), Instant.now())
-        : users.updateProfileWithAllergies(userId, displayName, request.timezone(), request.allergies(), Instant.now());
-    if (request.heightCm() != null || request.gender() != null || request.birthDate() != null
-        || request.targetWeightKg() != null || request.stepGoal() != null) {
-      User current = findUser(userId);
-      var heightCm = request.heightCm() == null ? current.getHeightCm() : request.heightCm();
-      var gender = request.gender() == null ? current.getGender() : request.gender();
-      var birthDate = request.birthDate() == null ? current.getBirthDate() : request.birthDate();
-      var targetWeightKg = request.targetWeightKg() == null ? current.getTargetWeightKg() : request.targetWeightKg();
-      var stepGoal = request.stepGoal() == null ? current.getStepGoal() : request.stepGoal();
-      updated = request.allergies() == null
-          ? users.updateProfileBody(userId, displayName, request.timezone(), heightCm, gender,
-              birthDate, targetWeightKg, stepGoal, Instant.now())
-          : users.updateProfileWithBodyAndAllergies(userId, displayName, request.timezone(), request.allergies(),
-              heightCm, gender, birthDate, targetWeightKg, stepGoal, Instant.now());
-    }
+    int updated = users.updateProfile(userId, displayName, request.timezone(), Instant.now());
     if (updated == 0) {
       throw new BusinessException(ErrorCode.UNAUTHORIZED);
     }
@@ -190,10 +157,8 @@ public class UserServiceImpl implements UserService {
         user.getTimezone(),
         avatarUrl,
         user.getRole().name(),
-        user.getAllergies() == null ? java.util.List.of() : user.getAllergies(),
         weightLogs.findTopByUserIdAndDeletedAtIsNullAndLoggedAtLessThanEqualOrderByLoggedAtDesc(user.getId(), Instant.now())
-            .map(com.healthcare.kallo.model.act.WeightLog::getWeightKg).orElse(null),
-        user.getHeightCm(), user.getGender(), user.getBirthDate(), user.getTargetWeightKg(), user.getStepGoal());
+            .map(com.healthcare.kallo.model.act.WeightLog::getWeightKg).orElse(null));
   }
 
   private String detectImageType(byte[] bytes) {

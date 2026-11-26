@@ -109,10 +109,13 @@ public class FoodLogController {
   @PostMapping(value = "/recognize", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   @Operation(summary = "Recognize Vietnamese food from a meal photo using AI")
   public ApiResponse<FoodRecognitionResponse> recognize(
-      @RequestParam("image") MultipartFile image, Authentication authentication) {
+      @RequestPart(value = "image", required = false) MultipartFile image,
+      @RequestPart(value = "file", required = false) MultipartFile file,
+      Authentication authentication) {
     UUID userId = CurrentUser.id(authentication);
     nutriRateLimiter.checkRecognize(userId);
-    return ApiResponse.success(foodRecognitionService.recognize(userId, image));
+    MultipartFile resolvedImage = (image != null && !image.isEmpty()) ? image : file;
+    return ApiResponse.success(foodRecognitionService.recognize(userId, resolvedImage));
   }
 
   @PostMapping("/{id}/feedback")

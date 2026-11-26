@@ -26,6 +26,8 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -35,6 +37,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
+  private static final Logger log = LoggerFactory.getLogger(FoodRecognitionServiceImpl.class);
   private static final String MODEL_VERSION = "modal-food-scanner";
   private static final String EXCLUDED_HUMAN_LABEL = "con nguoi";
   private static final Pattern COMBINING_MARKS = Pattern.compile("\\p{M}+");
@@ -230,6 +233,10 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
 
   private byte[] validateAndReadBytes(MultipartFile image) {
     if (image == null || image.isEmpty()) {
+      log.warn(
+          "Rejected food recognition upload: image part is null or empty (name={}, originalFilename={})",
+          image != null ? image.getName() : null,
+          image != null ? image.getOriginalFilename() : null);
       throw new BusinessException(ErrorCode.INVALID_FILE);
     }
     if (image.getSize() > nutriProperties.getMaxImageBytes()) {
@@ -238,6 +245,7 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
     try {
       byte[] bytes = image.getBytes();
       if (bytes.length == 0) {
+        log.warn("Rejected food recognition upload: image bytes length is 0");
         throw new BusinessException(ErrorCode.INVALID_FILE);
       }
       if (bytes.length > nutriProperties.getMaxImageBytes()) {
@@ -245,6 +253,7 @@ public class FoodRecognitionServiceImpl implements FoodRecognitionService {
       }
       return bytes;
     } catch (IOException e) {
+      log.warn("Failed to read uploaded food recognition image bytes", e);
       throw new BusinessException(ErrorCode.INVALID_FILE);
     }
   }

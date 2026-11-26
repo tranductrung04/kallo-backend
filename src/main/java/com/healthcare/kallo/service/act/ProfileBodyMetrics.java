@@ -8,4 +8,8 @@ public interface ProfileBodyMetrics {
   Optional<BigDecimal> weightKg(UUID userId);
 
   Optional<BigDecimal> heightCm(UUID userId);
+
+  default Optional<String> gender(UUID userId) {
+    return Optional.empty();
+  }
 }

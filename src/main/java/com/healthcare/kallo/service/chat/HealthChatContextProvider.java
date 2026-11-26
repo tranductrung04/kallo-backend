@@ -2,9 +2,12 @@ package com.healthcare.kallo.service.chat;
 
 import com.healthcare.kallo.model.auth.User;
 import com.healthcare.kallo.repository.auth.UserRepository;
+import com.healthcare.kallo.repository.profile.UserAllergyRepository;
 import com.healthcare.kallo.service.act.ProfileBodyMetrics;
 import com.healthcare.kallo.service.game.DailyProgress;
 import com.healthcare.kallo.service.game.DailyProgressProvider;
+import com.healthcare.kallo.service.profile.port.IngredientLookup;
+import com.healthcare.kallo.service.profile.port.IngredientSummary;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
@@ -12,7 +15,10 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 
@@ -21,13 +27,18 @@ public class HealthChatContextProvider implements ChatContextProvider {
   private final UserRepository users;
   private final ObjectProvider<ProfileBodyMetrics> bodyMetrics;
   private final ObjectProvider<DailyProgressProvider> dailyProgress;
+  private final ObjectProvider<UserAllergyRepository> userAllergies;
+  private final ObjectProvider<IngredientLookup> ingredientLookup;
   private final Clock clock;
 
   public HealthChatContextProvider(UserRepository users, ObjectProvider<ProfileBodyMetrics> bodyMetrics,
-      ObjectProvider<DailyProgressProvider> dailyProgress, Clock clock) {
+      ObjectProvider<DailyProgressProvider> dailyProgress, ObjectProvider<UserAllergyRepository> userAllergies,
+      ObjectProvider<IngredientLookup> ingredientLookup, Clock clock) {
     this.users = users;
     this.bodyMetrics = bodyMetrics;
     this.dailyProgress = dailyProgress;
+    this.userAllergies = userAllergies;
+    this.ingredientLookup = ingredientLookup;
     this.clock = clock;
   }
 
@@ -60,8 +71,28 @@ public class HealthChatContextProvider implements ChatContextProvider {
       todaySummary.put("steps", progress.steps());
       put(todaySummary, "caloriesBurned", progress.caloriesBurned());
     }
-    return new ChatContextData(profile, todaySummary,
-        user.getAllergies() == null ? List.of() : user.getAllergies());
+    return new ChatContextData(profile, todaySummary, resolveAllergies(userId));
+  }
+
+  private List<String> resolveAllergies(UUID userId) {
+    UserAllergyRepository allergyRepo = userAllergies.getIfAvailable();
+    IngredientLookup lookup = ingredientLookup.getIfAvailable();
+    if (allergyRepo == null || lookup == null) {
+      return List.of();
+    }
+    Set<UUID> ingredientIds = allergyRepo.findAllByIdUserId(userId).stream()
+        .map(allergy -> allergy.getId().getIngredientId())
+        .collect(Collectors.toSet());
+    if (ingredientIds.isEmpty()) {
+      return List.of();
+    }
+    Map<UUID, IngredientSummary> summaries = lookup.findSummariesByIds(ingredientIds);
+    return ingredientIds.stream()
+        .map(summaries::get)
+        .filter(Objects::nonNull)
+        .map(IngredientSummary::name)
+        .sorted()
+        .toList();
   }
 
   private ZoneId zoneOrDefault(String timezone) {

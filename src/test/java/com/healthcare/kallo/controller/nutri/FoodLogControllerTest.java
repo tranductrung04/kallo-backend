@@ -221,6 +221,22 @@ class FoodLogControllerTest {
   }
 
   @Test
+  void recognizeAlsoAcceptsFilePartNameFallback() throws Exception {
+    MockMultipartFile photo =
+        new MockMultipartFile(
+            "file", "meal.png", "image/png", new byte[] {(byte) 0x89, 0x50, 0x4E, 0x47});
+    when(foodRecognitionService.recognize(eq(userId), any()))
+        .thenReturn(
+            new FoodRecognitionResponse(
+                "temp/" + userId + "/x.png", "https://minio/x.png", "modal-food-scanner", List.of()));
+
+    mockMvc
+        .perform(multipart("/api/food-logs/recognize").file(photo).with(auth()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.data.modelVersion").value("modal-food-scanner"));
+  }
+
+  @Test
   void recognizeReturns429WhenRateLimited() throws Exception {
     doThrow(new BusinessException(ErrorCode.TOO_MANY_REQUESTS, 30L))
         .when(nutriRateLimiter)
