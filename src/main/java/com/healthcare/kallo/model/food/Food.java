@@ -99,6 +99,11 @@ public class Food {
   @Column(name = "suitable_meal_types", columnDefinition = "jsonb", nullable = false)
   private List<String> suitableMealTypes = new ArrayList<>();
 
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "feature_vector", columnDefinition = "jsonb")
+  private List<Double> featureVector =
+      new ArrayList<>(List.of(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0));
+
   @Column(name = "reference_price_vnd")
   private Integer referencePriceVnd;
 

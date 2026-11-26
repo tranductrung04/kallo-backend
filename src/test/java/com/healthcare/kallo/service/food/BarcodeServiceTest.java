@@ -8,6 +8,7 @@ import static org.mockito.Mockito.*;
 
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
+import com.healthcare.kallo.config.StorageProperties;
 import com.healthcare.kallo.dto.response.food.FoodResponse;
 import com.healthcare.kallo.model.food.BarcodeMiss;
 import com.healthcare.kallo.model.food.Food;
@@ -17,10 +18,12 @@ import com.healthcare.kallo.repository.food.BarcodeMissRepository;
 import com.healthcare.kallo.repository.food.FoodIngredientRepository;
 import com.healthcare.kallo.repository.food.FoodRepository;
 import com.healthcare.kallo.repository.food.IngredientRepository;
+import com.healthcare.kallo.service.auth.StorageService;
 import com.healthcare.kallo.service.food.client.OpenFoodFactsClient;
 import com.healthcare.kallo.service.food.impl.BarcodeServiceImpl;
 import com.healthcare.kallo.service.food.impl.FoodServiceImpl;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,7 +49,11 @@ class BarcodeServiceTest {
 
   @BeforeEach
   void setUp() {
-    FoodServiceImpl foodService = new FoodServiceImpl(foodRepository, ingredientRepository, foodIngredientRepository, nutritionCalculator);
+    FoodImageStorageService foodImageStorageService = new FoodImageStorageService(
+        mock(StorageService.class),
+        new StorageProperties("http://localhost:9000", "k", "s", "b", "http://localhost:9000", Duration.ofMinutes(15)));
+    FoodServiceImpl foodService = new FoodServiceImpl(
+        foodRepository, ingredientRepository, foodIngredientRepository, nutritionCalculator, foodImageStorageService);
     barcodeService = new BarcodeServiceImpl(foodRepository, barcodeMissRepository, openFoodFactsClient, foodService);
   }
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.*;
 
 import com.healthcare.kallo.common.BusinessException;
 import com.healthcare.kallo.common.ErrorCode;
+import com.healthcare.kallo.config.StorageProperties;
 import com.healthcare.kallo.dto.request.food.CustomIngredientRequest;
 import com.healthcare.kallo.dto.request.food.RecipeFoodRequest;
 import com.healthcare.kallo.dto.request.food.RecipeItemRequest;
@@ -19,9 +20,11 @@ import com.healthcare.kallo.model.food.enums.FoodSource;
 import com.healthcare.kallo.repository.food.FoodIngredientRepository;
 import com.healthcare.kallo.repository.food.FoodRepository;
 import com.healthcare.kallo.repository.food.IngredientRepository;
+import com.healthcare.kallo.service.auth.StorageService;
 import com.healthcare.kallo.service.food.impl.FoodServiceImpl;
 import com.healthcare.kallo.service.food.impl.IngredientServiceImpl;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -48,7 +51,11 @@ class FoodRecipeTest {
 
   @BeforeEach
   void setUp() {
-    foodService = new FoodServiceImpl(foodRepository, ingredientRepository, foodIngredientRepository, nutritionCalculator);
+    FoodImageStorageService foodImageStorageService = new FoodImageStorageService(
+        mock(StorageService.class),
+        new StorageProperties("http://localhost:9000", "k", "s", "b", "http://localhost:9000", Duration.ofMinutes(15)));
+    foodService = new FoodServiceImpl(
+        foodRepository, ingredientRepository, foodIngredientRepository, nutritionCalculator, foodImageStorageService);
     ingredientService = new IngredientServiceImpl(ingredientRepository, foodRepository, nutritionCalculator);
   }
 

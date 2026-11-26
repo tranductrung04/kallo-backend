@@ -14,9 +14,11 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/foods")
@@ -78,6 +80,26 @@ public class FoodController {
       Authentication authentication) {
     UUID currentUserId = CurrentUser.id(authentication);
     return ApiResponse.success(foodService.updateCustomFood(currentUserId, id, request));
+  }
+
+  @PostMapping(value = "/custom/{id}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  @Operation(summary = "Upload or replace image for a user-created custom or recipe food")
+  public ApiResponse<FoodResponse> uploadCustomImage(
+      @PathVariable UUID id,
+      @RequestPart("file") MultipartFile file,
+      Authentication authentication) {
+    UUID currentUserId = CurrentUser.id(authentication);
+    return ApiResponse.success(foodService.uploadFoodImage(currentUserId, id, file));
+  }
+
+  @DeleteMapping("/custom/{id}/image")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  @Operation(summary = "Delete uploaded image of a user-created custom or recipe food")
+  public void deleteCustomImage(
+      @PathVariable UUID id,
+      Authentication authentication) {
+    UUID currentUserId = CurrentUser.id(authentication);
+    foodService.deleteFoodImage(currentUserId, id);
   }
 
   @DeleteMapping("/custom/{id}")

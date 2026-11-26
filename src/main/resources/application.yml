@@ -150,6 +150,13 @@ app:
     retention-days: ${CHAT_RETENTION_DAYS:30}
     sse-timeout: ${CHAT_SSE_TIMEOUT_SECONDS:60}s
     sse-heartbeat-seconds: ${CHAT_SSE_HEARTBEAT_SECONDS:15}
+  nutri:
+    ai:
+      base-url: ${MODAL_AI_PREDICT_URL:http://localhost:8000}
+      connect-timeout: ${NUTRI_AI_CONNECT_TIMEOUT:10s}
+      read-timeout: ${NUTRI_AI_READ_TIMEOUT:35s}
+      confidence-threshold: ${NUTRI_AI_CONFIDENCE_THRESHOLD:0.45}
+      mock-enabled: ${NUTRI_AI_MOCK_ENABLED:false}
   game:
     daily-goal:
       min-meals: ${APP_GAME_DAILY_GOAL_MIN_MEALS:2}

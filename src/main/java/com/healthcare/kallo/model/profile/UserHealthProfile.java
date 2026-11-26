@@ -7,9 +7,13 @@ import jakarta.persistence.*;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import lombok.Getter;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.data.annotation.CreatedDate;
 import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.domain.Persistable;
@@ -88,6 +92,11 @@ public class UserHealthProfile implements Persistable<UUID> {
 
   @Column(name = "rate_clamped", nullable = false)
   private boolean rateClamped = false;
+
+  @JdbcTypeCode(SqlTypes.JSON)
+  @Column(name = "preference_vector", columnDefinition = "jsonb", nullable = false)
+  private List<Double> preferenceVector =
+      new ArrayList<>(List.of(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5));
 
   @Version
   @Column(name = "version", nullable = false)

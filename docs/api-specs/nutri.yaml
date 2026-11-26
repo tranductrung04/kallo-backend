@@ -1,0 +1,842 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - NUTRI API
+  version: 1.0.0
+  description: |
+    API Quản lý Nhật ký Bữa ăn, Nhật ký Nước uống, Tổng hợp Dinh dưỡng Hàng ngày & Nhận diện Món ăn AI VietFood68 (SRS Mục 4.3, 5.5).
+
+    ### Tính năng chính:
+    1. **Nhật ký Bữa ăn (`user_food_logs`):** Hỗ trợ idempotency qua `clientUuid` (`201 Created` / `200 OK` / `409 RECORD_DELETED`), khóa Nutrition Snapshot tại thời điểm ghi, cảnh báo dị ứng chuẩn hóa, sao chép bữa (`copy`), món gần đây (`recent`) và phản hồi gắn nhãn AI (`feedback`).
+    2. **Nhật ký Nước uống (`water_logs`):** Ghi nhận lượng nước `1..5000 ml`, hỗ trợ idempotency và tổng hợp ngày theo múi giờ người dùng.
+    3. **Tổng hợp Ngày (`daily_summaries`):** Tính tổng calo/macro nạp vào, nước uống, đồng bộ vận động từ `ACT` (`steps`, `caloriesBurned`, `weightKg`), đánh giá mục tiêu theo `DailyGoalPolicy`, cảnh báo vượt đường/đạm.
+    4. **Nhận diện Ảnh AI (`POST /api/food-logs/recognize`):** Upload ảnh `JPEG`/`PNG` (`<= 2 MB`), áp dụng rate limit theo user, lưu tạm MinIO `temp/`, gọi Modal AI Food Scanner (`file`), chuẩn hóa nhãn về chữ thường không dấu để khớp `foods.name_unaccented` và cảnh báo dị ứng.
+
+    Mọi endpoint đều yêu cầu xác thực JWT Bearer Token hợp lệ (`email_verified = true`).
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+security:
+  - bearerAuth: []
+tags:
+  - name: Food logs
+    description: Ghi nhận, cập nhật, xóa, sao chép bữa ăn và nhận diện ảnh AI
+  - name: Water logs
+    description: Quản lý nhật ký uống nước hàng ngày
+  - name: Daily summaries
+    description: Tổng hợp dinh dưỡng, nước và vận động theo ngày/chuỗi ngày
+
+paths:
+  /api/food-logs:
+    post:
+      tags: [Food logs]
+      summary: Ghi nhật ký bữa ăn (idempotent theo clientUuid)
+      description: |
+        Ghi nhận 1 món ăn vào bữa (`BREAKFAST`, `LUNCH`, `DINNER`, `SNACK`).
+        - Trả về `201 Created` nếu tạo mới; trả `200 OK` nếu `clientUuid` đã tồn tại và đang hoạt động; trả `409 RECORD_DELETED` nếu `clientUuid` đã bị xóa mềm trước đó.
+        - Nếu có `tempImageKey` hợp lệ (`temp/{userId}/...`), ảnh được chuyển sang `meals/{userId}/...`.
+        - Tự động kích hoạt tính lại `daily_summaries`, phát `MealLoggedEvent` và cập nhật vector sở thích (`PLAN`) nếu `source != MEAL_PLAN`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateFoodLogRequest'
+            example:
+              foodId: "10000000-0000-0000-0000-00000000002e"
+              mealType: "LUNCH"
+              servingGrams: 500.0
+              servingQuantity: 1.0
+              source: "AI_PHOTO"
+              loggedDate: "2026-11-25"
+              clientUuid: "9d5d0f20-41aa-45e0-9f57-6a40b2416f10"
+              tempImageKey: "temp/c0a80101-8c7a-1d2e-818c-7a1d2e000000/scan.jpg"
+              aiPredictedClassId: 46
+      responses:
+        '201':
+          description: Tạo log bữa ăn mới thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodLog'
+        '200':
+          description: Phản hồi idempotent cho clientUuid đang hoạt động
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/ForbiddenFoodAccess'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/RecordDeletedConflict'
+    get:
+      tags: [Food logs]
+      summary: Lấy nhật ký bữa ăn trong ngày gom theo 4 buổi
+      parameters:
+        - name: date
+          in: query
+          description: Ngày cần xem (`YYYY-MM-DD`, mặc định hôm nay theo `users.timezone`)
+          required: false
+          schema:
+            type: string
+            format: date
+          example: "2026-11-25"
+      responses:
+        '200':
+          description: Danh sách món ăn gom theo `MealType` và tổng hợp calo/macro trong ngày
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailyFoodLogs'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/food-logs/{id}:
+    get:
+      tags: [Food logs]
+      summary: Xem chi tiết 1 bản ghi log bữa ăn
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+      responses:
+        '200':
+          description: Chi tiết log bữa ăn kèm presigned `imageUrl` và cảnh báo dị ứng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodLog'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FoodLogNotFound'
+    put:
+      tags: [Food logs]
+      summary: Cập nhật buổi ăn hoặc khẩu phần của bản ghi log
+      description: Tính lại Nutrition Snapshot theo món trong DB, hỗ trợ kiểm tra xung đột `clientUpdatedAt` (LWW) và kích hoạt tính lại `daily_summaries`.
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFoodLogRequest'
+            example:
+              mealType: "DINNER"
+              servingGrams: 500.0
+              servingQuantity: 1.5
+      responses:
+        '200':
+          description: Cập nhật log thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FoodLogNotFound'
+        '409':
+          $ref: '#/components/responses/RecordDeletedConflict'
+    delete:
+      tags: [Food logs]
+      summary: Xóa mềm log bữa ăn (idempotent)
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+      responses:
+        '204':
+          description: Xóa mềm thành công (hoặc đã xóa trước đó)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FoodLogNotFound'
+
+  /api/food-logs/copy:
+    post:
+      tags: [Food logs]
+      summary: Sao chép bữa ăn từ ngày nguồn sang ngày đích
+      description: |
+        Sao chép toàn bộ bữa hoặc lọc theo `mealType` từ `sourceDate` sang `targetDate` (`targetDate <= today.plusDays(1)`).
+        Bỏ qua món đã bị xóa mềm (`deleted_at IS NOT NULL`) và trả danh sách chi tiết trong `skippedFoods`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyMealRequest'
+            example:
+              sourceDate: "2026-11-24"
+              targetDate: "2026-11-25"
+              mealType: "LUNCH"
+      responses:
+        '200':
+          description: Kết quả sao chép bữa ăn
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseCopyMeal'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/food-logs/recent:
+    get:
+      tags: [Food logs]
+      summary: Lấy danh sách món ăn gần đây nhất (DISTINCT)
+      parameters:
+        - name: limit
+          in: query
+          description: Số món tối đa cần trả về (`1..50`, mặc định `10`)
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 10
+      responses:
+        '200':
+          description: Danh sách món ăn được ghi nhận gần đây nhất
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseRecentFoods'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/food-logs/recognize:
+    post:
+      tags: [Food logs]
+      summary: Nhận diện món ăn Việt Nam qua ảnh bữa ăn
+      description: |
+        Nhận ảnh `JPEG`/`PNG` (`<= 2 MB`), kiểm tra magic bytes, áp dụng rate limit qua `NutriRateLimiter`, lưu tạm vào MinIO `temp/{userId}/...`,
+        gọi Modal AI Food Scanner (multipart field `file`), lọc bỏ `con nguoi` và kết quả dưới ngưỡng tin cậy, chuẩn hóa nhãn không dấu để đối chiếu hàng loạt với `foods.name_unaccented` và cảnh báo dị ứng.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: Ảnh món ăn JPEG hoặc PNG tối đa 2MB
+      responses:
+        '200':
+          description: Danh sách món ăn nhận diện được cùng `tempImageKey` để đính kèm khi log
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodRecognition'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        '503':
+          $ref: '#/components/responses/AiServiceUnavailable'
+        '504':
+          $ref: '#/components/responses/AiServiceTimeout'
+
+  /api/food-logs/{id}/feedback:
+    post:
+      tags: [Food logs]
+      summary: Gửi xác nhận đóng góp nhãn sửa sai cho mô hình AI
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FoodFeedbackRequest'
+            example:
+              consented: true
+      responses:
+        '200':
+          description: Ghi nhận phản hồi thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/FoodLogNotFound'
+        '409':
+          $ref: '#/components/responses/RecordDeletedConflict'
+
+  /api/water-logs:
+    post:
+      tags: [Water logs]
+      summary: Ghi nhật ký uống nước (idempotent theo clientUuid)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateWaterLogRequest'
+            example:
+              amountMl: 300
+              loggedDate: "2026-11-25"
+              clientUuid: "5c14d3d4-91a3-4a2b-84f7-29bc63522b01"
+              note: "Sau khi chạy bộ"
+      responses:
+        '201':
+          description: Tạo log uống nước mới thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWaterLog'
+        '200':
+          description: Phản hồi idempotent cho clientUuid đang hoạt động
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseWaterLog'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          $ref: '#/components/responses/RecordDeletedConflict'
+    get:
+      tags: [Water logs]
+      summary: Lấy lịch sử và tổng lượng nước uống trong ngày
+      parameters:
+        - name: date
+          in: query
+          description: Ngày cần xem (`YYYY-MM-DD`, mặc định hôm nay theo `users.timezone`)
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Tổng hợp nước uống và danh sách log trong ngày
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailyWaterLogs'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/water-logs/{id}:
+    delete:
+      tags: [Water logs]
+      summary: Xóa mềm log uống nước (idempotent)
+      parameters:
+        - $ref: '#/components/parameters/LogId'
+      responses:
+        '204':
+          description: Xóa mềm thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/WaterLogNotFound'
+
+  /api/daily-summaries/today:
+    get:
+      tags: [Daily summaries]
+      summary: Lấy tổng hợp dinh dưỡng, nước và vận động hôm nay
+      responses:
+        '200':
+          description: Tổng hợp ngày hôm nay theo `users.timezone`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailySummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/daily-summaries:
+    get:
+      tags: [Daily summaries]
+      summary: Lấy tổng hợp theo ngày chỉ định
+      parameters:
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-11-25"
+      responses:
+        '200':
+          description: Tổng hợp của ngày được yêu cầu
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailySummary'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/daily-summaries/range:
+    get:
+      tags: [Daily summaries]
+      summary: Lấy chuỗi tổng hợp tối đa 90 ngày phục vụ biểu đồ báo cáo
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-11-01"
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+          example: "2026-11-25"
+      responses:
+        '200':
+          description: Danh sách tổng hợp sắp xếp tăng dần theo ngày
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailySummaryList'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/daily-summaries/recalculate:
+    post:
+      tags: [Daily summaries]
+      summary: Tính toán lại thủ công tổng hợp ngày (mặc định hôm nay)
+      parameters:
+        - name: date
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Kết quả tổng hợp sau khi tính lại
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseDailySummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    LogId:
+      name: id
+      in: path
+      required: true
+      description: UUID bản ghi log
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Dữ liệu đầu vào không hợp lệ (`VALIDATION_ERROR`, `INVALID_SERVING_AMOUNT`, `INVALID_WATER_AMOUNT`, `FUTURE_DATE_NOT_ALLOWED`, `FOOD_ITEM_DELETED`, `UNSUPPORTED_IMAGE_TYPE`, `NON_FOOD_DETECTED`, `INVALID_TIME_RANGE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    Unauthorized:
+      description: Thiếu hoặc token JWT không hợp lệ
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    ForbiddenFoodAccess:
+      description: Không có quyền truy cập món ăn cá nhân của người dùng khác (`FORBIDDEN_FOOD_ACCESS`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    NotFound:
+      description: Không tìm thấy tài nguyên (`FOOD_NOT_FOUND`, `FOOD_LOG_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    FoodLogNotFound:
+      description: Không tìm thấy log bữa ăn (`FOOD_LOG_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    WaterLogNotFound:
+      description: Không tìm thấy log uống nước (`WATER_LOG_NOT_FOUND`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    RecordDeletedConflict:
+      description: Bản ghi ứng với ID hoặc `clientUuid` đã bị xóa mềm (`RECORD_DELETED`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    PayloadTooLarge:
+      description: Ảnh tải lên vượt giới hạn 2MB (`PAYLOAD_TOO_LARGE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    TooManyRequests:
+      description: Vượt giới hạn tần suất gọi API (`TOO_MANY_REQUESTS`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    AiServiceUnavailable:
+      description: Dịch vụ AI nhận diện tạm thời không khả dụng (`AI_SERVICE_UNAVAILABLE`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+    AiServiceTimeout:
+      description: Dịch vụ AI nhận diện phản hồi quá thời gian chờ (`AI_SERVICE_TIMEOUT`)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+
+  schemas:
+    MealType:
+      type: string
+      enum: [BREAKFAST, LUNCH, DINNER, SNACK]
+    LogSource:
+      type: string
+      enum: [SEARCH, AI_PHOTO, BARCODE, CUSTOM, MEAL_PLAN, COPY]
+    FoodCategory:
+      type: string
+      enum: [STAPLE, NOODLE, RICE, SOUP, MEAT, SEAFOOD, VEGETABLE, SNACK, BEVERAGE, OTHER]
+    FoodSource:
+      type: string
+      enum: [SYSTEM, OFF, USER_CUSTOM]
+
+    CreateFoodLogRequest:
+      type: object
+      required: [foodId, mealType, clientUuid]
+      properties:
+        foodId: { type: string, format: uuid }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servingGrams: { type: number, minimum: 0.1 }
+        servingQuantity: { type: number, minimum: 0.01, default: 1.0 }
+        source: { $ref: '#/components/schemas/LogSource' }
+        loggedDate: { type: string, format: date }
+        loggedAt: { type: string, format: date-time }
+        clientUuid: { type: string, format: uuid }
+        tempImageKey: { type: string, nullable: true }
+        aiPredictedClassId: { type: integer, minimum: 0, maximum: 67, nullable: true }
+
+    UpdateFoodLogRequest:
+      type: object
+      required: [mealType, servingQuantity]
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servingGrams: { type: number, minimum: 0.1 }
+        servingQuantity: { type: number, minimum: 0.01 }
+        clientUpdatedAt: { type: string, format: date-time, nullable: true }
+
+    CopyMealRequest:
+      type: object
+      required: [sourceDate, targetDate]
+      properties:
+        sourceDate: { type: string, format: date }
+        targetDate: { type: string, format: date }
+        mealType: { $ref: '#/components/schemas/MealType' }
+
+    FoodFeedbackRequest:
+      type: object
+      required: [consented]
+      properties:
+        consented: { type: boolean }
+
+    CreateWaterLogRequest:
+      type: object
+      required: [amountMl, clientUuid]
+      properties:
+        amountMl: { type: integer, minimum: 1, maximum: 5000 }
+        loggedDate: { type: string, format: date }
+        loggedAt: { type: string, format: date-time }
+        clientUuid: { type: string, format: uuid }
+        note: { type: string, maxLength: 255, nullable: true }
+
+    AllergicIngredientWarning:
+      type: object
+      properties:
+        ingredientId: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+
+    FoodLogResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        foodId: { type: string, format: uuid, nullable: true }
+        foodName: { type: string, nullable: true }
+        mealType: { $ref: '#/components/schemas/MealType' }
+        servingName: { type: string, nullable: true }
+        servingGrams: { type: number, nullable: true }
+        servingQuantity: { type: number }
+        source: { $ref: '#/components/schemas/LogSource' }
+        loggedDate: { type: string, format: date }
+        loggedAt: { type: string, format: date-time }
+        imageUrl: { type: string, nullable: true }
+        calories: { type: number }
+        proteinG: { type: number }
+        carbsG: { type: number }
+        fatG: { type: number }
+        sugarG: { type: number }
+        fiberG: { type: number }
+        aiPredictedClassId: { type: integer, nullable: true }
+        feedbackGiven: { type: boolean }
+        clientUuid: { type: string, format: uuid }
+        hasAllergyWarning: { type: boolean }
+        allergicIngredients:
+          type: array
+          items: { $ref: '#/components/schemas/AllergicIngredientWarning' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DailyFoodLogsResponse:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        meals:
+          type: object
+          additionalProperties:
+            type: array
+            items: { $ref: '#/components/schemas/FoodLogResponse' }
+        totalCalories: { type: integer }
+        targetCalories: { type: integer, nullable: true }
+        remainingCalories: { type: integer, nullable: true }
+        totalProteinG: { type: number }
+        totalCarbsG: { type: number }
+        totalFatG: { type: number }
+        totalSugarG: { type: number }
+        totalFiberG: { type: number }
+        mealsLoggedCount: { type: integer }
+
+    SkippedFoodItem:
+      type: object
+      properties:
+        foodId: { type: string, format: uuid, nullable: true }
+        reason: { type: string }
+
+    CopyMealResponse:
+      type: object
+      properties:
+        sourceDate: { type: string, format: date }
+        targetDate: { type: string, format: date }
+        copiedCount: { type: integer }
+        copiedLogs:
+          type: array
+          items: { $ref: '#/components/schemas/FoodLogResponse' }
+        skippedFoods:
+          type: array
+          items: { $ref: '#/components/schemas/SkippedFoodItem' }
+
+    FoodSearchItemResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        category: { $ref: '#/components/schemas/FoodCategory' }
+        defaultServingName: { type: string }
+        defaultServingGrams: { type: number }
+        caloriesPerServing: { type: integer }
+        proteinPerServing: { type: number }
+        carbsPerServing: { type: number }
+        fatPerServing: { type: number }
+        imageUrl: { type: string, nullable: true }
+        source: { $ref: '#/components/schemas/FoodSource' }
+        isVerified: { type: boolean }
+
+    BoundingBox:
+      type: object
+      properties:
+        x: { type: number }
+        y: { type: number }
+        w: { type: number }
+        h: { type: number }
+
+    RecognizedFoodItem:
+      type: object
+      properties:
+        classId: { type: integer, nullable: true }
+        className: { type: string }
+        confidence: { type: number }
+        bbox: { $ref: '#/components/schemas/BoundingBox', nullable: true }
+        foodId: { type: string, format: uuid, nullable: true }
+        foodName: { type: string, nullable: true }
+        defaultServingName: { type: string, nullable: true }
+        defaultServingGrams: { type: number, nullable: true }
+        estimatedServingGrams: { type: number, nullable: true }
+        sizeFactor: { type: number }
+        caloriesPerServing: { type: integer, nullable: true }
+        proteinPerServing: { type: number, nullable: true }
+        carbsPerServing: { type: number, nullable: true }
+        fatPerServing: { type: number, nullable: true }
+        hasAllergyWarning: { type: boolean }
+        allergicIngredients:
+          type: array
+          items: { $ref: '#/components/schemas/AllergicIngredientWarning' }
+
+    FoodRecognitionResponse:
+      type: object
+      properties:
+        tempImageKey: { type: string }
+        tempImageUrl: { type: string, nullable: true }
+        modelVersion: { type: string, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/RecognizedFoodItem' }
+
+    WaterLogResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amountMl: { type: integer }
+        loggedDate: { type: string, format: date }
+        loggedAt: { type: string, format: date-time }
+        note: { type: string, nullable: true }
+        clientUuid: { type: string, format: uuid }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DailyWaterLogsResponse:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        totalWaterMl: { type: integer }
+        targetWaterMl: { type: integer, nullable: true }
+        logs:
+          type: array
+          items: { $ref: '#/components/schemas/WaterLogResponse' }
+
+    DailySummaryResponse:
+      type: object
+      properties:
+        date: { type: string, format: date }
+        caloriesConsumed: { type: integer }
+        targetCalories: { type: integer, nullable: true }
+        remainingCalories: { type: integer, nullable: true }
+        proteinG: { type: number }
+        carbsG: { type: number }
+        fatG: { type: number }
+        sugarG: { type: number }
+        fiberG: { type: number }
+        waterMl: { type: integer }
+        targetWaterMl: { type: integer, nullable: true }
+        caloriesBurned: { type: integer }
+        steps: { type: integer }
+        weightKg: { type: number, nullable: true }
+        goalAchieved: { type: boolean }
+        sugarExceeded: { type: boolean }
+        proteinExceeded: { type: boolean }
+        mealsLoggedCount: { type: integer }
+
+    ErrorInfo:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, nullable: true }
+
+    ApiResponseError:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        data: { nullable: true, example: null }
+        error: { $ref: '#/components/schemas/ErrorInfo' }
+
+    ApiResponseFoodLog:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/FoodLogResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseDailyFoodLogs:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/DailyFoodLogsResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseCopyMeal:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/CopyMealResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseRecentFoods:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/FoodSearchItemResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseFoodRecognition:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/FoodRecognitionResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseWaterLog:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/WaterLogResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseDailyWaterLogs:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/DailyWaterLogsResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseDailySummary:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/DailySummaryResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponseDailySummaryList:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/DailySummaryResponse' }
+        error: { nullable: true, example: null }
