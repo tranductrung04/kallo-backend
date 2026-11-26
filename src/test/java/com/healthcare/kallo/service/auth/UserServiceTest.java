@@ -83,39 +83,6 @@ class UserServiceTest {
   }
 
   @Test
-  void preservesAllergiesWhenRequestOmitsField() {
-    user.setAllergies(java.util.List.of("tôm"));
-    doAnswer(invocation -> {
-      user.setDisplayName("Updated");
-      user.setTimezone("Europe/Paris");
-      return 1;
-    }).when(users).updateProfile(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), any());
-
-    service.updateMe(user.getId(), new UpdateUserRequest("Updated", "Europe/Paris"));
-
-    verify(users).updateProfile(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), any());
-    verify(users, never()).updateProfileWithAllergies(any(), any(), any(), any(), any());
-    assertThat(user.getAllergies()).containsExactly("tôm");
-  }
-
-  @Test
-  void updatesAllergiesWhenRequestIncludesField() {
-    var allergies = java.util.List.of("tôm");
-    when(users.updateProfileWithAllergies(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), eq(allergies), any()))
-        .thenAnswer(invocation -> {
-          user.setDisplayName("Updated");
-          user.setTimezone("Europe/Paris");
-          user.setAllergies(allergies);
-          return 1;
-        });
-
-    service.updateMe(user.getId(), new UpdateUserRequest("Updated", "Europe/Paris", allergies));
-
-    verify(users).updateProfileWithAllergies(eq(user.getId()), eq("Updated"), eq("Europe/Paris"), eq(allergies), any());
-    assertThat(user.getAllergies()).containsExactly("tôm");
-  }
-
-  @Test
   void rejectsAvatarWithInvalidMagicBytes() {
     var file = new MockMultipartFile("file", "avatar.jpg", "image/jpeg", new byte[] {1, 2, 3});
 

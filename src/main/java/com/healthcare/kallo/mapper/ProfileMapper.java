@@ -59,7 +59,8 @@ public class ProfileMapper {
         profile.getRecommendedDailyCalorieGoal(),
         profile.getLatestLoggedWeightKg(),
         goalAdvice,
-        profile.getVersion()
+        profile.getVersion(),
+        profile.getStepGoal()
     );
   }
 

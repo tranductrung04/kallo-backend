@@ -9,10 +9,12 @@ import com.healthcare.kallo.model.act.BodyMetric;
 import com.healthcare.kallo.repository.act.BodyMetricRepository;
 import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.service.act.BodyMetricService;
+import com.healthcare.kallo.service.act.ProfileBodyMetrics;
 import com.healthcare.kallo.service.act.UserTimeResolver;
 import java.math.BigDecimal;
 import java.time.*;
 import java.util.*;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +26,14 @@ public class BodyMetricServiceImpl implements BodyMetricService {
   private final UserTimeResolver time;
   private final BodyMetricMapper mapper;
   private final ActProperties properties;
+  private final ObjectProvider<ProfileBodyMetrics> profileBodyMetrics;
   private final Clock clock;
 
   public BodyMetricServiceImpl(BodyMetricRepository metrics, UserRepository users, UserTimeResolver time,
-      BodyMetricMapper mapper, ActProperties properties, Clock clock) {
+      BodyMetricMapper mapper, ActProperties properties,
+      ObjectProvider<ProfileBodyMetrics> profileBodyMetrics, Clock clock) {
     this.metrics = metrics; this.users = users; this.time = time; this.mapper = mapper;
-    this.properties = properties; this.clock = clock;
+    this.properties = properties; this.profileBodyMetrics = profileBodyMetrics; this.clock = clock;
   }
 
   @Override @Transactional
@@ -82,10 +86,12 @@ public class BodyMetricServiceImpl implements BodyMetricService {
 
   private BodyMetricResponse response(UUID userId, BodyMetric metric) {
     BodyMetricResponse mapped = mapper.toResponse(metric, time.zoneOf(userId));
+    ProfileBodyMetrics profileMetrics = profileBodyMetrics.getIfAvailable();
+    String gender = profileMetrics == null ? null : profileMetrics.gender(userId).orElse(null);
     var risk = com.healthcare.kallo.service.act.WhrRiskCalculator.calculate(
-        mapped.waistCm(), mapped.hipCm(), mapped.gender());
+        mapped.waistCm(), mapped.hipCm(), gender);
     return new BodyMetricResponse(mapped.id(), mapped.userId(), mapped.clientUuid(), mapped.waistCm(), mapped.hipCm(),
-        mapped.loggedAt(), mapped.localDate(), risk.whr(), risk.riskLevel(), mapped.gender(), mapped.note(),
+        mapped.loggedAt(), mapped.localDate(), risk.whr(), risk.riskLevel(), gender, mapped.note(),
         mapped.createdAt(), mapped.updatedAt(), mapped.deletedAt());
   }
   private void validate(BigDecimal waist, BigDecimal hip) { if (waist == null || hip == null || waist.signum() <= 0 || hip.signum() <= 0) throw new BusinessException(ErrorCode.VALIDATION_ERROR); }

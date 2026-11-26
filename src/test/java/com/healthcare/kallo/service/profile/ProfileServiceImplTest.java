@@ -111,7 +111,8 @@ class ProfileServiceImplTest {
         ActivityLevel.MODERATELY_ACTIVE,
         GoalType.LOSE_WEIGHT,
         new BigDecimal("53.0"),
-        new BigDecimal("0.50")
+        new BigDecimal("0.50"),
+        10000
     );
 
     ProfileResponseDto response = profileService.createProfile(userId, request);
@@ -121,6 +122,7 @@ class ProfileServiceImplTest {
     assertThat(response.weightKg()).isEqualByComparingTo("58.0");
     assertThat(response.gender()).isEqualTo(Gender.FEMALE);
     assertThat(response.goalType()).isEqualTo(GoalType.LOSE_WEIGHT);
+    assertThat(response.stepGoal()).isEqualTo(10000);
 
     verify(events).publishEvent(any(ProfileUpdatedEvent.class));
   }

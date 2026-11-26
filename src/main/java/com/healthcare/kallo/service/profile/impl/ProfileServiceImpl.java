@@ -99,6 +99,7 @@ public class ProfileServiceImpl implements ProfileService {
     profile.setProteinGrams(metrics.proteinGrams());
     profile.setFatGrams(metrics.fatGrams());
     profile.setWaterLiters(metrics.waterLiters());
+    profile.setStepGoal(request.stepGoal());
     profile.setRateClamped(metrics.rateClamped());
     profile.setRecalculationRecommended(false);
     profile.setRecommendedTdee(null);
@@ -149,6 +150,9 @@ public class ProfileServiceImpl implements ProfileService {
     profile.setProteinGrams(metrics.proteinGrams());
     profile.setFatGrams(metrics.fatGrams());
     profile.setWaterLiters(metrics.waterLiters());
+    if (request.stepGoal() != null) {
+      profile.setStepGoal(request.stepGoal());
+    }
     profile.setRateClamped(metrics.rateClamped());
     profile.setRecalculationRecommended(false);
     profile.setRecommendedTdee(null);
