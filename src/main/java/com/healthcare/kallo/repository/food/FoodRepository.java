@@ -1,6 +1,7 @@
 package com.healthcare.kallo.repository.food;
 
 import com.healthcare.kallo.model.food.Food;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,6 +18,38 @@ public interface FoodRepository extends JpaRepository<Food, UUID> {
   Optional<Food> findByBarcodeAndDeletedAtIsNull(String barcode);
 
   Optional<Food> findByVietfoodClassId(Integer vietfoodClassId);
+
+  @Query("""
+      SELECT f FROM Food f
+      WHERE f.deletedAt IS NULL
+        AND f.ownerUserId IS NULL
+        AND f.nameUnaccented IN :namesUnaccented
+      ORDER BY
+        CASE WHEN f.source = com.healthcare.kallo.model.food.enums.FoodSource.SYSTEM THEN 0 ELSE 1 END,
+        CASE WHEN f.vietfoodClassId IS NOT NULL THEN 0 ELSE 1 END,
+        f.name ASC
+      """)
+  List<Food> findActiveSystemFoodsByNameUnaccentedIn(
+      @Param("namesUnaccented") Collection<String> namesUnaccented);
+
+  @Query(value = """
+      SELECT f.* FROM foods f
+      WHERE f.deleted_at IS NULL
+        AND f.owner_user_id IS NULL
+        AND (
+          f.name_unaccented = :label
+          OR f.name_unaccented LIKE concat(:label, ' %')
+          OR :label LIKE concat(f.name_unaccented, ' %')
+          OR similarity(f.name_unaccented, :label) >= 0.45
+        )
+      ORDER BY
+        CASE WHEN f.name_unaccented = :label THEN 0 ELSE 1 END,
+        CASE WHEN f.vietfood_class_id IS NOT NULL THEN 0 ELSE 1 END,
+        similarity(f.name_unaccented, :label) DESC,
+        length(f.name_unaccented) ASC
+      LIMIT 1
+      """, nativeQuery = true)
+  Optional<Food> findBestSystemMatchByUnaccentedLabel(@Param("label") String label);
 
   @Query("""
       SELECT f FROM Food f
@@ -70,4 +103,34 @@ public interface FoodRepository extends JpaRepository<Food, UUID> {
   List<Food> findAllCustomRecipesByIngredientAndOwner(
       @Param("ingredientId") UUID ingredientId,
       @Param("ownerUserId") UUID ownerUserId);
+
+  @Query(value = """
+      SELECT f.*
+      FROM foods f
+      WHERE f.deleted_at IS NULL
+        AND (
+            f.source = 'SYSTEM'
+            OR (:includeCustomFoods = TRUE AND f.source = 'USER_CUSTOM' AND f.owner_user_id = :userId)
+        )
+        AND (:hasExcludedIds = FALSE OR f.id NOT IN (:excludedFoodIds))
+        AND (:hasBudgetLimit = FALSE OR f.reference_price_vnd IS NOT NULL)
+        AND NOT EXISTS (
+            SELECT 1
+            FROM food_ingredients fi
+            INNER JOIN ingredients i ON i.id = fi.ingredient_id
+            INNER JOIN user_allergies ua ON ua.ingredient_id = i.id
+            WHERE fi.food_id = f.id
+              AND ua.user_id = :userId
+              AND i.is_allergen = TRUE
+              AND i.owner_user_id IS NULL
+              AND i.is_active = TRUE
+        )
+      ORDER BY f.name ASC
+      """, nativeQuery = true)
+  List<Food> findEligibleFoodsForMealPlan(
+      @Param("userId") UUID userId,
+      @Param("includeCustomFoods") boolean includeCustomFoods,
+      @Param("hasExcludedIds") boolean hasExcludedIds,
+      @Param("excludedFoodIds") Collection<UUID> excludedFoodIds,
+      @Param("hasBudgetLimit") boolean hasBudgetLimit);
 }

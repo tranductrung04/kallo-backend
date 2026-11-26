@@ -1,0 +1,441 @@
+openapi: 3.1.0
+info:
+  title: Kallo Backend - MEAL_PLAN (PLAN) API
+  version: 1.0.0
+  description: |
+    API Sinh Thực đơn Cá nhân hóa 1-7 ngày, Đổi món Tương đương & Áp dụng vào Nhật ký `NUTRI` (`FR-PLAN-01` … `FR-PLAN-06`).
+
+    ### Tính năng chính:
+    1. **Sinh thực đơn 3 pha (`POST /api/meal-plans/generate`):** Hỗ trợ `DAILY` (`days=1`) hoặc `WEEKLY` (`days=2..7`), đảm bảo tổng calo mỗi ngày nằm trong `±5%` mục tiêu, lọc cứng dị ứng (`user_allergies` $\leftrightarrow$ `food_ingredients`), kiểm soát ngân sách (`maxBudgetVnd`, loại món giá `NULL`), và đa dạng món theo lịch sử 2 ngày gần nhất.
+    2. **Ưu tiên an toàn y tế & cá nhân hóa vector 12 chiều:** Áp dụng mặt nạ bệnh mạn tính (`DIABETES*`, `HYPERTENSION`, `GOUT`, `CHRONIC_KIDNEY_DISEASE`) từ `user_chronic_conditions` lên `preference_vector` kèm cảnh báo `medicalWarning`.
+    3. **Đổi món (`swap`):** Đổi 1 item cùng `mealType`, bảo toàn ràng buộc đường, ngân sách và dung sai calo ngày.
+    4. **Áp dụng vào `NUTRI` (`apply`):** Chuyển thực đơn `SAVED` thành nhật ký `user_food_logs` (`source = MEAL_PLAN`), đồng bộ `daily_summaries`, `GAME` streak và `SYS` alert.
+
+    Mọi endpoint đều yêu cầu JWT Bearer Token hợp lệ (`email_verified = true`).
+servers:
+  - url: http://localhost:8080
+    description: Local Development Server
+security:
+  - bearerAuth: []
+tags:
+  - name: Meal plans
+    description: Sinh thực đơn, lưu nháp, xem danh sách/chi tiết, đổi món, xóa và áp dụng vào nhật ký ăn uống
+
+paths:
+  /api/meal-plans/generate:
+    post:
+      tags: [Meal plans]
+      summary: Sinh thực đơn cá nhân hóa (1..7 ngày) ở trạng thái DRAFT
+      description: |
+        Sinh thực đơn theo hồ sơ `UserHealthProfile`, dị ứng `user_allergies`, bệnh nền `user_chronic_conditions` và `preference_vector`.
+        `calorieTargetOverride` bị chặn dưới ngưỡng an toàn (`1500 kcal` Nam / `1200 kcal` Nữ).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GenerateMealPlanRequest'
+            example:
+              planDate: "2026-11-25"
+              days: 1
+              maxBudgetVnd: 150000
+              includeCustomFoods: true
+      responses:
+        '201':
+          description: Sinh thực đơn DRAFT thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMealPlan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/ProfileNotFound'
+        '422':
+          $ref: '#/components/responses/InsufficientFoodData'
+
+  /api/meal-plans/{id}/save:
+    post:
+      tags: [Meal plans]
+      summary: Lưu thực đơn (DRAFT -> SAVED)
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '200':
+          description: Thực đơn đã chuyển sang trạng thái SAVED
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMealPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/MealPlanNotFound'
+        '409':
+          $ref: '#/components/responses/PlanAlreadyApplied'
+
+  /api/meal-plans:
+    get:
+      tags: [Meal plans]
+      summary: Lấy danh sách thực đơn của người dùng (phân trang)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+      responses:
+        '200':
+          description: Danh sách thực đơn phân trang
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponsePageMealPlanSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/meal-plans/{id}:
+    get:
+      tags: [Meal plans]
+      summary: Lấy chi tiết thực đơn theo từng ngày và từng buổi ăn
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '200':
+          description: Chi tiết thực đơn kèm ảnh món (`foodImageUrl`), `medicalWarning` và `preferenceMatchScore`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMealPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/MealPlanNotFound'
+    delete:
+      tags: [Meal plans]
+      summary: Xóa thực đơn
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+      responses:
+        '204':
+          description: Xóa thực đơn thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/MealPlanNotFound'
+
+  /api/meal-plans/{id}/items/{itemId}/swap:
+    post:
+      tags: [Meal plans]
+      summary: Đổi 1 món ăn trong thực đơn sang ứng viên tương đương hợp lệ
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - $ref: '#/components/parameters/ItemId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwapMealPlanItemRequest'
+            example:
+              excludedFoodIds: []
+      responses:
+        '200':
+          description: Thực đơn sau khi đổi món và tính lại tổng ngày
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMealPlan'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/MealPlanOrItemNotFound'
+        '409':
+          $ref: '#/components/responses/PlanAlreadyApplied'
+        '422':
+          $ref: '#/components/responses/NoSuitableSwapFood'
+
+  /api/meal-plans/{id}/apply:
+    post:
+      tags: [Meal plans]
+      summary: Áp dụng thực đơn SAVED vào nhật ký NUTRI (user_food_logs)
+      description: |
+        Áp dụng toàn bộ thực đơn (hoặc riêng 1 `dayIndex` với thực đơn `WEEKLY`) vào ngày đích (`date`, mặc định `planDate`).
+        Rà soát lại dị ứng và quy tắc tiểu đường trước khi ghi, từ chối nếu bữa đích đã có log (`409 MEAL_LOG_ALREADY_EXISTS`).
+      parameters:
+        - $ref: '#/components/parameters/PlanId'
+        - name: date
+          in: query
+          description: Ngày bắt đầu áp dụng (`YYYY-MM-DD`, mặc định `planDate`)
+          schema:
+            type: string
+            format: date
+        - name: dayIndex
+          in: query
+          description: Chỉ áp dụng một ngày cụ thể (`1..7`) trong thực đơn `WEEKLY`
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 7
+      responses:
+        '200':
+          description: Thực đơn đã được áp dụng (`status = APPLIED`) và đồng bộ nhật ký `NUTRI`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseMealPlan'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/MealPlanOrItemNotFound'
+        '409':
+          $ref: '#/components/responses/ApplyConflict'
+        '422':
+          $ref: '#/components/responses/InsufficientFoodData'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PlanId:
+      name: id
+      in: path
+      required: true
+      description: UUID thực đơn
+      schema:
+        type: string
+        format: uuid
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      description: UUID món ăn (`meal_plan_foods.id`)
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Dữ liệu đầu vào không hợp lệ (`VALIDATION_ERROR`, `INVALID_PARAMETER`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    Unauthorized:
+      description: Thiếu hoặc token JWT không hợp lệ
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    ProfileNotFound:
+      description: Người dùng chưa tạo hồ sơ sức khỏe (`PROFILE_NOT_FOUND`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    MealPlanNotFound:
+      description: Không tìm thấy thực đơn (`MEAL_PLAN_NOT_FOUND`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    MealPlanOrItemNotFound:
+      description: Không tìm thấy thực đơn hoặc món (`MEAL_PLAN_NOT_FOUND`, `MEAL_PLAN_ITEM_NOT_FOUND`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    PlanAlreadyApplied:
+      description: Thực đơn đã được áp dụng trước đó (`MEAL_PLAN_ALREADY_APPLIED`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    ApplyConflict:
+      description: Xung đột trạng thái hoặc dữ liệu nhật ký (`MEAL_PLAN_NOT_SAVED`, `MEAL_PLAN_ALREADY_APPLIED`, `MEAL_LOG_ALREADY_EXISTS`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    InsufficientFoodData:
+      description: Không đủ món thỏa mãn đồng thời ràng buộc dị ứng, bệnh nền, calo và ngân sách (`INSUFFICIENT_FOOD_DATA`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+    NoSuitableSwapFood:
+      description: Không tìm thấy món thay thế phù hợp (`NO_SUITABLE_SWAP_FOOD`)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiResponseError' }
+
+  schemas:
+    MealPlanType:
+      type: string
+      enum: [DAILY, WEEKLY]
+    MealPlanStatus:
+      type: string
+      enum: [DRAFT, SAVED, APPLIED]
+    MealType:
+      type: string
+      enum: [BREAKFAST, LUNCH, DINNER, SNACK]
+    FoodSource:
+      type: string
+      enum: [SYSTEM, OFF, USER_CUSTOM]
+
+    GenerateMealPlanRequest:
+      type: object
+      required: [planDate]
+      properties:
+        planDate: { type: string, format: date }
+        days: { type: integer, minimum: 1, maximum: 7, default: 1 }
+        calorieTargetOverride: { type: integer, minimum: 1, nullable: true }
+        maxBudgetVnd: { type: integer, minimum: 1, nullable: true }
+        excludedFoodIds:
+          type: array
+          items: { type: string, format: uuid }
+        includeCustomFoods: { type: boolean, default: true }
+        name: { type: string, maxLength: 150, nullable: true }
+
+    SwapMealPlanItemRequest:
+      type: object
+      properties:
+        maxBudgetVndOverride: { type: integer, minimum: 1, nullable: true }
+        excludedFoodIds:
+          type: array
+          items: { type: string, format: uuid }
+
+    MealPlanItemResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        foodId: { type: string, format: uuid }
+        foodName: { type: string, nullable: true }
+        foodImageUrl: { type: string, nullable: true }
+        foodSource: { $ref: '#/components/schemas/FoodSource', nullable: true }
+        servingName: { type: string }
+        servingGrams: { type: number }
+        servingMultiplier: { type: number }
+        calories: { type: integer }
+        proteinG: { type: number }
+        carbsG: { type: number }
+        fatG: { type: number }
+        sugarG: { type: number }
+        fiberG: { type: number }
+        estimatedPriceVnd: { type: integer }
+
+    MealPlanSlotResponse:
+      type: object
+      properties:
+        mealType: { $ref: '#/components/schemas/MealType' }
+        targetCalories: { type: integer }
+        totalCalories: { type: integer }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MealPlanItemResponse' }
+
+    MealPlanDayResponse:
+      type: object
+      properties:
+        dayIndex: { type: integer }
+        mealDate: { type: string, format: date }
+        targetCalories: { type: integer }
+        totalCalories: { type: integer }
+        calorieDifferencePct: { type: number }
+        estimatedCostVnd: { type: integer }
+        meals:
+          type: array
+          items: { $ref: '#/components/schemas/MealPlanSlotResponse' }
+
+    MealPlanResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        type: { $ref: '#/components/schemas/MealPlanType' }
+        planDate: { type: string, format: date }
+        daysCount: { type: integer }
+        status: { $ref: '#/components/schemas/MealPlanStatus' }
+        targetCalories: { type: integer }
+        totalCalories: { type: integer }
+        totalProteinG: { type: number }
+        totalCarbsG: { type: number }
+        totalFatG: { type: number }
+        totalSugarG: { type: number }
+        totalFiberG: { type: number }
+        estimatedCostVnd: { type: integer }
+        maxBudgetVnd: { type: integer, nullable: true }
+        preferenceMatchScore: { type: number }
+        medicalWarning: { type: string, nullable: true }
+        appliedAt: { type: string, format: date-time, nullable: true }
+        appliedDate: { type: string, format: date, nullable: true }
+        days:
+          type: array
+          items: { $ref: '#/components/schemas/MealPlanDayResponse' }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    MealPlanSummaryResponse:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/MealPlanType' }
+        planDate: { type: string, format: date }
+        daysCount: { type: integer }
+        status: { $ref: '#/components/schemas/MealPlanStatus' }
+        targetCalories: { type: integer }
+        totalCalories: { type: integer }
+        estimatedCostVnd: { type: integer }
+        maxBudgetVnd: { type: integer, nullable: true }
+        preferenceMatchScore: { type: number }
+        medicalWarning: { type: string, nullable: true }
+        createdAt: { type: string, format: date-time }
+
+    PageResponseMealPlanSummary:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MealPlanSummaryResponse' }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer, format: int64 }
+        totalPages: { type: integer }
+
+    ErrorInfo:
+      type: object
+      properties:
+        code: { type: string }
+        message: { type: string }
+        details: { type: object, nullable: true }
+
+    ApiResponseError:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        data: { nullable: true, example: null }
+        error: { $ref: '#/components/schemas/ErrorInfo' }
+
+    ApiResponseMealPlan:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/MealPlanResponse' }
+        error: { nullable: true, example: null }
+
+    ApiResponsePageMealPlanSummary:
+      type: object
+      properties:
+        success: { type: boolean, example: true }
+        data: { $ref: '#/components/schemas/PageResponseMealPlanSummary' }
+        error: { nullable: true, example: null }

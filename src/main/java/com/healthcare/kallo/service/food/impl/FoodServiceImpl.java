@@ -17,6 +17,7 @@ import com.healthcare.kallo.model.food.enums.FoodSource;
 import com.healthcare.kallo.repository.food.FoodIngredientRepository;
 import com.healthcare.kallo.repository.food.FoodRepository;
 import com.healthcare.kallo.repository.food.IngredientRepository;
+import com.healthcare.kallo.service.food.FoodImageStorageService;
 import com.healthcare.kallo.service.food.FoodNutritionCalculator;
 import com.healthcare.kallo.service.food.FoodService;
 import java.math.BigDecimal;
@@ -29,6 +30,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class FoodServiceImpl implements FoodService {
@@ -37,16 +39,19 @@ public class FoodServiceImpl implements FoodService {
   private final IngredientRepository ingredientRepository;
   private final FoodIngredientRepository foodIngredientRepository;
   private final FoodNutritionCalculator nutritionCalculator;
+  private final FoodImageStorageService foodImageStorageService;
 
   public FoodServiceImpl(
       FoodRepository foodRepository,
       IngredientRepository ingredientRepository,
       FoodIngredientRepository foodIngredientRepository,
-      FoodNutritionCalculator nutritionCalculator) {
+      FoodNutritionCalculator nutritionCalculator,
+      FoodImageStorageService foodImageStorageService) {
     this.foodRepository = foodRepository;
     this.ingredientRepository = ingredientRepository;
     this.foodIngredientRepository = foodIngredientRepository;
     this.nutritionCalculator = nutritionCalculator;
+    this.foodImageStorageService = foodImageStorageService;
   }
 
   @Override
@@ -70,7 +75,7 @@ public class FoodServiceImpl implements FoodService {
             f.getProteinPerServing(),
             f.getCarbsPerServing(),
             f.getFatPerServing(),
-            f.getImageUrl(),
+            foodImageStorageService.resolveImageUrl(f.getImageUrl()),
             f.getSource(),
             f.isVerified()
         ))
@@ -120,7 +125,7 @@ public class FoodServiceImpl implements FoodService {
     food.setSugarPerServing(request.sugarPer100g().multiply(factor).setScale(1, RoundingMode.HALF_UP));
     food.setFiberPerServing(request.fiberPer100g().multiply(factor).setScale(1, RoundingMode.HALF_UP));
 
-    food.setImageUrl(request.imageUrl());
+    food.setImageUrl(FoodImageStorageService.normalizeExternalImageUrl(request.imageUrl()));
     food.setSuitableMealTypes(request.suitableMealTypes());
     food.setSource(FoodSource.USER_CUSTOM);
     food.setOwnerUserId(currentUserId);
@@ -139,7 +144,7 @@ public class FoodServiceImpl implements FoodService {
     food.setName(request.name().trim());
     food.setCategory(request.category());
     food.setDefaultServingName(request.defaultServingName().trim());
-    food.setImageUrl(request.imageUrl());
+    food.setImageUrl(FoodImageStorageService.normalizeExternalImageUrl(request.imageUrl()));
     food.setSuitableMealTypes(request.suitableMealTypes());
     food.setSource(FoodSource.USER_CUSTOM);
     food.setOwnerUserId(currentUserId);
@@ -180,16 +185,7 @@ public class FoodServiceImpl implements FoodService {
   @Override
   @Transactional
   public FoodResponse updateCustomFood(UUID currentUserId, UUID foodId, CustomFoodRequest request) {
-    Food food = foodRepository.findByIdWithIngredients(foodId)
-        .orElseThrow(() -> new BusinessException(ErrorCode.FOOD_NOT_FOUND));
-
-    if (food.getSource() == FoodSource.SYSTEM) {
-      throw new BusinessException(ErrorCode.CANNOT_MODIFY_SYSTEM_FOOD);
-    }
-
-    if (!currentUserId.equals(food.getOwnerUserId())) {
-      throw new BusinessException(ErrorCode.FORBIDDEN_FOOD_ACCESS);
-    }
+    Food food = requireOwnedCustomFood(currentUserId, foodId, true);
 
     food.setName(request.name().trim());
     food.setCategory(request.category());
@@ -211,11 +207,88 @@ public class FoodServiceImpl implements FoodService {
     food.setSugarPerServing(request.sugarPer100g().multiply(factor).setScale(1, RoundingMode.HALF_UP));
     food.setFiberPerServing(request.fiberPer100g().multiply(factor).setScale(1, RoundingMode.HALF_UP));
 
-    food.setImageUrl(request.imageUrl());
+    String previousImageUrl = food.getImageUrl();
+    String keyToDelete = resolveUpdatedImageUrl(food, previousImageUrl, request.imageUrl());
     food.setSuitableMealTypes(request.suitableMealTypes());
 
     Food saved = foodRepository.save(food);
+    if (keyToDelete != null) {
+      foodImageStorageService.deleteIfManaged(keyToDelete);
+    }
     return mapToFoodResponse(saved);
+  }
+
+  @Override
+  public FoodResponse uploadFoodImage(UUID currentUserId, UUID foodId, MultipartFile file) {
+    Food food = requireOwnedCustomFood(currentUserId, foodId, true);
+    String previousImageUrl = food.getImageUrl();
+    String newObjectKey = foodImageStorageService.uploadFoodImage(currentUserId, foodId, file);
+    food.setImageUrl(newObjectKey);
+
+    Food saved;
+    try {
+      saved = foodRepository.save(food);
+    } catch (RuntimeException e) {
+      foodImageStorageService.deleteIfManaged(newObjectKey);
+      throw e;
+    }
+
+    if (!newObjectKey.equals(previousImageUrl)) {
+      foodImageStorageService.deleteIfManaged(previousImageUrl);
+    }
+    return mapToFoodResponse(saved);
+  }
+
+  @Override
+  @Transactional
+  public void deleteFoodImage(UUID currentUserId, UUID foodId) {
+    Food food = requireOwnedCustomFood(currentUserId, foodId, false);
+    String previousImageUrl = food.getImageUrl();
+    if (previousImageUrl == null) {
+      return;
+    }
+    food.setImageUrl(null);
+    foodRepository.save(food);
+    foodImageStorageService.deleteIfManaged(previousImageUrl);
+  }
+
+  private Food requireOwnedCustomFood(UUID currentUserId, UUID foodId, boolean withIngredients) {
+    Food food = (withIngredients
+            ? foodRepository.findByIdWithIngredients(foodId)
+            : foodRepository.findById(foodId))
+        .orElseThrow(() -> new BusinessException(ErrorCode.FOOD_NOT_FOUND));
+
+    if (food.getDeletedAt() != null) {
+      throw new BusinessException(ErrorCode.FOOD_NOT_FOUND);
+    }
+
+    if (food.getSource() == FoodSource.SYSTEM) {
+      throw new BusinessException(ErrorCode.CANNOT_MODIFY_SYSTEM_FOOD);
+    }
+
+    if (!currentUserId.equals(food.getOwnerUserId())) {
+      throw new BusinessException(ErrorCode.FORBIDDEN_FOOD_ACCESS);
+    }
+    return food;
+  }
+
+  private String resolveUpdatedImageUrl(Food food, String previousImageUrl, String requestedImageUrl) {
+    if (requestedImageUrl == null) {
+      if (foodImageStorageService.isManagedKey(previousImageUrl)) {
+        return null;
+      }
+      food.setImageUrl(null);
+      return null;
+    }
+    if (requestedImageUrl.isBlank()) {
+      food.setImageUrl(null);
+      return foodImageStorageService.isManagedKey(previousImageUrl) ? previousImageUrl : null;
+    }
+    if (foodImageStorageService.isPresignedUrlForKey(requestedImageUrl, previousImageUrl)) {
+      return null;
+    }
+    food.setImageUrl(FoodImageStorageService.normalizeExternalImageUrl(requestedImageUrl));
+    return foodImageStorageService.isManagedKey(previousImageUrl) ? previousImageUrl : null;
   }
 
   @Override
@@ -277,7 +350,7 @@ public class FoodServiceImpl implements FoodService {
         f.getFatPerServing(),
         f.getSugarPerServing(),
         f.getFiberPerServing(),
-        f.getImageUrl(),
+        foodImageStorageService.resolveImageUrl(f.getImageUrl()),
         f.getBarcode(),
         f.getSource(),
         f.getVietfoodClassId(),

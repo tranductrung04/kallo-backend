@@ -66,6 +66,25 @@ public enum ErrorCode {
   INVALID_BARCODE(HttpStatus.BAD_REQUEST, "Invalid barcode format"),
   BARCODE_NOT_FOUND(HttpStatus.NOT_FOUND, "Barcode not found in local database or Open Food Facts"),
   NON_FOOD_DETECTED(HttpStatus.BAD_REQUEST, "No valid food items detected in the uploaded image"),
+  // NUTRI
+  FOOD_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Food log entry not found"),
+  WATER_LOG_NOT_FOUND(HttpStatus.NOT_FOUND, "Water log entry not found"),
+  INVALID_SERVING_AMOUNT(HttpStatus.BAD_REQUEST, "Serving grams and quantity must be greater than zero"),
+  INVALID_WATER_AMOUNT(HttpStatus.BAD_REQUEST, "Water amount must be between 1ml and 5000ml"),
+  FUTURE_DATE_NOT_ALLOWED(HttpStatus.BAD_REQUEST, "Cannot log meals or water for future dates"),
+  FOOD_ITEM_DELETED(HttpStatus.BAD_REQUEST, "This food item has been deleted and cannot be logged"),
+  UNSUPPORTED_IMAGE_TYPE(HttpStatus.BAD_REQUEST, "Only JPEG and PNG image formats are supported"),
+  AI_SERVICE_TIMEOUT(HttpStatus.GATEWAY_TIMEOUT, "AI Recognition Service timed out, please try again"),
+  AI_SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "AI Recognition Service is temporarily unavailable"),
+  DAILY_SUMMARY_NOT_FOUND(HttpStatus.NOT_FOUND, "Daily summary data not found for the requested date"),
+  // MEAL_PLAN
+  MEAL_PLAN_NOT_FOUND(HttpStatus.NOT_FOUND, "Meal plan not found"),
+  MEAL_PLAN_ITEM_NOT_FOUND(HttpStatus.NOT_FOUND, "Meal plan item not found"),
+  INSUFFICIENT_FOOD_DATA(HttpStatus.UNPROCESSABLE_ENTITY, "Insufficient eligible foods to generate meal plan under current constraints"),
+  NO_SUITABLE_SWAP_FOOD(HttpStatus.UNPROCESSABLE_ENTITY, "No suitable food candidate found for swap under current constraints"),
+  MEAL_PLAN_NOT_SAVED(HttpStatus.CONFLICT, "Meal plan must be in SAVED status before applying"),
+  MEAL_PLAN_ALREADY_APPLIED(HttpStatus.CONFLICT, "Meal plan has already been applied"),
+  MEAL_LOG_ALREADY_EXISTS(HttpStatus.CONFLICT, "Target meal already has logged items"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error");
 
   private final HttpStatus status;

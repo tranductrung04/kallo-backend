@@ -311,6 +311,76 @@ paths:
         '404':
           $ref: '#/components/responses/FoodNotFound'
 
+  /api/foods/custom/{id}/image:
+    post:
+      tags: [foods]
+      summary: Tải lên hoặc thay thế ảnh món ăn tùy chỉnh / recipe
+      description: |
+        Tải lên file ảnh (JPEG hoặc PNG, tối đa 2MB) cho món ăn do người dùng tạo (`USER_CUSTOM`, bao gồm cả món nhập tay và món Recipe).
+        Ảnh được lưu trên MinIO và `FoodResponse.imageUrl` sẽ trả về Presigned URL.
+        Nếu món ăn đã có ảnh trên MinIO trước đó, ảnh cũ sẽ tự động được dọn dẹp.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn tùy chỉnh hoặc recipe
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: File ảnh JPEG hoặc PNG (tối đa 2MB)
+      responses:
+        '200':
+          description: Tải ảnh lên thành công
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponseFoodDetail'
+        '400':
+          $ref: '#/components/responses/InvalidImageFile'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemFood'
+        '404':
+          $ref: '#/components/responses/FoodNotFound'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
+
+    delete:
+      tags: [foods]
+      summary: Xóa ảnh món ăn tùy chỉnh / recipe
+      description: |
+        Xóa ảnh hiện tại của món ăn tùy chỉnh hoặc recipe (đồng thời xóa object tương ứng trên MinIO nếu là ảnh đã upload).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: UUID của món ăn tùy chỉnh hoặc recipe
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Xóa ảnh thành công
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/CannotModifySystemFood'
+        '404':
+          $ref: '#/components/responses/FoodNotFound'
+
   # =========================================================================
   # INGREDIENTS ENDPOINTS
   # =========================================================================
@@ -679,7 +749,7 @@ components:
         defaultServingName:
           type: string
           maxLength: 100
-          description: Tên đơn vị khẩu phần thường dùng (VD: "1 đĩa", "1 tô", "1 phần")
+          description: 'Tên đơn vị khẩu phần thường dùng (VD: "1 đĩa", "1 tô", "1 phần")'
           example: "1 đĩa vừa"
         defaultServingGrams:
           type: number
@@ -794,7 +864,7 @@ components:
         code:
           type: string
           nullable: true
-          description: Mã định danh chuẩn cho nguyên liệu hệ thống (VD: PEANUT, GLUTEN)
+          description: 'Mã định danh chuẩn cho nguyên liệu hệ thống (VD: PEANUT, GLUTEN)'
         name:
           type: string
         caloriesPer100g:
@@ -918,7 +988,7 @@ components:
           type: array
           items:
             type: string
-          description: Tên các nguyên liệu dị ứng có trong món ăn (VD: ["Đậu phụng (Lạc)", "Trứng các loại"])
+          description: 'Tên các nguyên liệu dị ứng có trong món ăn (VD: ["Đậu phụng (Lạc)", "Trứng các loại"])'
         createdAt:
           type: string
           format: date-time
@@ -1178,4 +1248,32 @@ components:
             error:
               code: "TOO_MANY_REQUESTS"
               message: "Too many requests"
+              details: null
+
+    InvalidImageFile:
+      description: File rỗng, lỗi đọc file hoặc không đúng định dạng JPEG/PNG
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "UNSUPPORTED_IMAGE_TYPE"
+              message: "Only JPEG and PNG image formats are supported"
+              details: null
+
+    PayloadTooLarge:
+      description: Kích thước ảnh vượt quá giới hạn 2MB
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponseError'
+          example:
+            success: false
+            data: null
+            error:
+              code: "PAYLOAD_TOO_LARGE"
+              message: "Payload is too large"
               details: null

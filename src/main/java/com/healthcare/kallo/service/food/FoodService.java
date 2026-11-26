@@ -7,6 +7,7 @@ import com.healthcare.kallo.dto.response.food.FoodResponse;
 import com.healthcare.kallo.dto.response.food.FoodSearchItemResponse;
 import com.healthcare.kallo.model.food.enums.FoodCategory;
 import java.util.UUID;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface FoodService {
 
@@ -19,6 +20,10 @@ public interface FoodService {
   FoodResponse createRecipeFood(UUID currentUserId, RecipeFoodRequest request);
 
   FoodResponse updateCustomFood(UUID currentUserId, UUID foodId, CustomFoodRequest request);
+
+  FoodResponse uploadFoodImage(UUID currentUserId, UUID foodId, MultipartFile file);
+
+  void deleteFoodImage(UUID currentUserId, UUID foodId);
 
   void deleteCustomFood(UUID currentUserId, UUID foodId);
 }
