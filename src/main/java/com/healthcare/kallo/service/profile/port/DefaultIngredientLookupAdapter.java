@@ -27,15 +27,15 @@ public class DefaultIngredientLookupAdapter implements IngredientLookup {
   public static final UUID SESAME_ID = UUID.fromString("00000000-0000-0000-0000-000000000009");
 
   public DefaultIngredientLookupAdapter() {
-    register(new IngredientSummary(PEANUT_ID, "Peanuts (Lạc / Đậu phộng)", true));
-    register(new IngredientSummary(MILK_ID, "Cow's Milk (Sữa bò)", true));
-    register(new IngredientSummary(EGG_ID, "Eggs (Trứng)", true));
-    register(new IngredientSummary(TREE_NUT_ID, "Tree Nuts (Hạt cây)", true));
-    register(new IngredientSummary(SOY_ID, "Soybeans (Đậu nành)", true));
-    register(new IngredientSummary(WHEAT_ID, "Wheat (Lúa mì / Gluten)", true));
-    register(new IngredientSummary(FISH_ID, "Fish (Cá)", true));
-    register(new IngredientSummary(SHELLFISH_ID, "Crustacean Shellfish (Hải sản có vỏ)", true));
-    register(new IngredientSummary(SESAME_ID, "Sesame (Vừng / Mè)", true));
+    register(new IngredientSummary(PEANUT_ID, "PEANUT", "Peanuts (Lạc / Đậu phộng)", true));
+    register(new IngredientSummary(MILK_ID, "DAIRY", "Cow's Milk (Sữa bò)", true));
+    register(new IngredientSummary(EGG_ID, "EGG", "Eggs (Trứng)", true));
+    register(new IngredientSummary(TREE_NUT_ID, "TREE_NUTS", "Tree Nuts (Hạt cây)", true));
+    register(new IngredientSummary(SOY_ID, "SOY", "Soybeans (Đậu nành)", true));
+    register(new IngredientSummary(WHEAT_ID, "GLUTEN", "Wheat (Lúa mì / Gluten)", true));
+    register(new IngredientSummary(FISH_ID, "FISH", "Fish (Cá)", true));
+    register(new IngredientSummary(SHELLFISH_ID, "CRUSTACEANS", "Crustacean Shellfish (Hải sản có vỏ)", true));
+    register(new IngredientSummary(SESAME_ID, "SESAME", "Sesame (Vừng / Mè)", true));
   }
 
   public void register(IngredientSummary summary) {

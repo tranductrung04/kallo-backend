@@ -66,12 +66,13 @@ class ChatControllerTest {
     doThrow(new com.healthcare.kallo.service.chat.ChatSseException(
         "CHAT_STREAM_CAPACITY", "Too many active chat streams")).when(sse).execute(any());
 
-    assertThatThrownBy(() -> mockMvc.perform(post("/api/chat/messages/stream")
+    mockMvc.perform(post("/api/chat/messages/stream")
             .with(jwt().jwt(Jwt.withTokenValue("token").subject(userId.toString()).header("alg", "none").build()))
             .contentType(MediaType.APPLICATION_JSON)
-            .accept(MediaType.TEXT_EVENT_STREAM)
-            .content("{\"content\":\"hello\",\"clientMessageId\":\"" + UUID.randomUUID() + "\"}")))
-        .hasRootCauseInstanceOf(com.healthcare.kallo.service.chat.ChatSseException.class);
+            .accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
+            .content("{\"content\":\"hello\",\"clientMessageId\":\"" + UUID.randomUUID() + "\"}"))
+        .andExpect(status().isServiceUnavailable())
+        .andExpect(jsonPath("$.error.code").value("CHAT_STREAM_CAPACITY"));
 
     org.mockito.Mockito.verify(sse).openConnection();
     org.mockito.Mockito.verify(sse).closeConnection();

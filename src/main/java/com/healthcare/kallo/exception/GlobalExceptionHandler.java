@@ -40,6 +40,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
         e.getErrorCode().name(), e.getErrorCode().message(), e.getDetails()));
   }
 
+  @ExceptionHandler(com.healthcare.kallo.service.chat.ChatSseException.class)
+  public ResponseEntity<ApiResponse<?>> chatSse(com.healthcare.kallo.service.chat.ChatSseException e) {
+    return ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
+        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+        .body(ApiResponse.error(e.code(), e.getMessage() == null ? "Chat stream unavailable" : e.getMessage()));
+  }
+
   @ExceptionHandler(com.healthcare.kallo.service.profile.ProfileException.class)
   public ResponseEntity<ApiResponse<?>> profileException(com.healthcare.kallo.service.profile.ProfileException e) {
     org.springframework.http.HttpStatus status = org.springframework.http.HttpStatus.BAD_REQUEST;

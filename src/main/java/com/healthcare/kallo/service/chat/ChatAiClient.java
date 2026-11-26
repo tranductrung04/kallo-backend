@@ -1,5 +1,7 @@
 package com.healthcare.kallo.service.chat;
 
+import java.util.List;
+
 public interface ChatAiClient {
   ChatAiReply generate(ChatAiRequest request);
 
@@ -8,5 +10,9 @@ public interface ChatAiClient {
     handler.onDelta(reply.content());
     handler.onComplete(new ChatAiStreamResult(reply.suggestedFoods(), reply.promptTokens(),
         reply.completionTokens(), reply.modelVersion()));
+  }
+
+  default String summarize(String existingSummary, List<ChatAiRequest.ChatHistoryMessage> olderMessages) {
+    return null;
   }
 }

@@ -50,8 +50,9 @@ class ChatServiceTest {
   @BeforeEach
   void setUp() {
     ChatProperties properties = new ChatProperties(true,
-        new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), true),
-        12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30,
+        new ChatProperties.Llm("http://localhost:11434/v1", "", "qwen2.5:7b",
+            Duration.ofSeconds(5), Duration.ofSeconds(60), 0.4, 1024),
+        12, 12000, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofSeconds(120), 30,
         Duration.ofSeconds(60), 15);
     service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx, metrics,
         notifications);
@@ -82,10 +83,10 @@ class ChatServiceTest {
     assistant.setConversation(conversation);
     var saved = new ChatTxService.SavedMessage(conversation, user, assistant, false);
     when(tx.saveUserMessage(eq(userId), any(), eq("hello"))).thenReturn(saved);
-    when(context.build(any(), any(), any(), eq(12))).thenReturn(new ChatAiRequest(conversationId,
+    when(context.build(any(), any(), any(), eq(12), eq(12000))).thenReturn(new ChatAiRequest(conversationId,
         List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
     when(ai.generate(any())).thenReturn(new ChatAiReply("reply", List.of(), null, null, "mock"));
-    when(tx.completeAssistant(any(), any(), any(), anyLong())).thenAnswer(invocation -> {
+    when(tx.completeAssistant(any(), any(), any(), anyLong(), eq(false))).thenAnswer(invocation -> {
       assistant.setContent(invocation.getArgument(1));
       return true;
     });
@@ -131,7 +132,7 @@ class ChatServiceTest {
     assistant.setConversation(conversation);
     when(tx.saveUserMessage(eq(userId), any(), eq("hello")))
         .thenReturn(new ChatTxService.SavedMessage(conversation, user, assistant, false));
-    when(context.build(any(), any(), any(), eq(12))).thenReturn(new ChatAiRequest(conversationId,
+    when(context.build(any(), any(), any(), eq(12), eq(12000))).thenReturn(new ChatAiRequest(conversationId,
         List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
     when(ai.generate(any())).thenReturn(new ChatAiReply("", List.of(), null, null, "mock"));
 
@@ -140,6 +141,26 @@ class ChatServiceTest {
         .extracting("errorCode")
         .isEqualTo(ErrorCode.CHAT_AI_INVALID_RESPONSE);
     verify(tx).markFailed(assistant, ErrorCode.CHAT_AI_INVALID_RESPONSE.name());
+  }
+
+  @Test
+  void blockedSelfHarmInputSkipsLlmAndSavesSafeResponse() {
+    Conversation conversation = conversation();
+    ChatMessage user = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "Tôi muốn nhịn ăn hoàn toàn 5 ngày");
+    ChatMessage assistant = message(ChatRole.ASSISTANT, ChatMessageStatus.PENDING, null);
+    user.setConversation(conversation);
+    assistant.setConversation(conversation);
+    when(tx.saveUserMessage(eq(userId), any(), any()))
+        .thenReturn(new ChatTxService.SavedMessage(conversation, user, assistant, false));
+    when(tx.completeAssistant(any(), any(), any(), anyLong(), eq(false))).thenAnswer(invocation -> {
+      assistant.setContent(invocation.getArgument(1));
+      return true;
+    });
+
+    var result = service.sendMessage(userId, new SendMessageRequest(conversationId, "Tôi muốn nhịn ăn hoàn toàn 5 ngày", clientMessageId));
+
+    verify(ai, never()).generate(any());
+    assertThat(result.assistantMessage().content()).contains("an toàn");
   }
 
   private Conversation conversation() {

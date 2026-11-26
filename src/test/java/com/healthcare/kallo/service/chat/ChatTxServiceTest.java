@@ -42,8 +42,9 @@ class ChatTxServiceTest {
   void setUp() {
     MockitoAnnotations.openMocks(this);
     ChatProperties properties = new ChatProperties(true,
-        new ChatProperties.Ai("http://ai", "key", Duration.ofSeconds(2), Duration.ofSeconds(30), true),
-        12, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofMinutes(2), 30,
+        new ChatProperties.Llm("http://localhost:11434/v1", "", "qwen2.5:7b",
+            Duration.ofSeconds(5), Duration.ofSeconds(60), 0.4, 1024),
+        12, 12000, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofSeconds(120), 30,
         Duration.ofSeconds(60), 15);
     tx = new ChatTxService(conversations, messages, users, properties);
   }

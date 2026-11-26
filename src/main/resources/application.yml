@@ -135,13 +135,16 @@ app:
     fao-infoods-attribution: ${APP_ATTRIBUTION_FAO_INFOODS_TEXT:Dữ liệu từ FAO/INFOODS / Data from FAO/INFOODS.}
   chat:
     enabled: ${CHAT_ENABLED:false}
-    ai:
-      base-url: ${AI_SERVICE_URL:http://localhost:8000}
-      api-key: ${AI_SERVICE_API_KEY:}
-      connect-timeout: ${CHAT_AI_CONNECT_TIMEOUT_MS:2000}ms
-      read-timeout: ${CHAT_AI_READ_TIMEOUT_MS:30000}ms
-      mock-enabled: ${CHAT_AI_MOCK_ENABLED:false}
+    llm:
+      base-url: ${LLM_BASE_URL:${CHAT_LLM_BASE_URL:http://localhost:11434/v1}}
+      api-key: ${LLM_API_KEY:${CHAT_LLM_API_KEY:}}
+      model: ${LLM_MODEL:${CHAT_LLM_MODEL:qwen2.5:7b}}
+      connect-timeout: ${CHAT_LLM_CONNECT_TIMEOUT_MS:5000}ms
+      read-timeout: ${CHAT_LLM_READ_TIMEOUT_MS:60000}ms
+      temperature: ${CHAT_LLM_TEMPERATURE:0.4}
+      max-tokens: ${CHAT_LLM_MAX_TOKENS:1024}
     history-window: ${CHAT_HISTORY_WINDOW:12}
+    max-context-chars: ${CHAT_MAX_CONTEXT_CHARS:12000}
     max-message-length: ${CHAT_MAX_MESSAGE_LENGTH:2000}
     rate-limit:
       per-minute: ${CHAT_RATE_LIMIT_PER_MINUTE:10}

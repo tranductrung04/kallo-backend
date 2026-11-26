@@ -78,6 +78,27 @@ public class AsyncConfig {
     return executor;
   }
 
+  @Bean(name = "chatTaskExecutor")
+  ThreadPoolTaskExecutor chatTaskExecutor() {
+    ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+    executor.setCorePoolSize(2);
+    executor.setMaxPoolSize(4);
+    executor.setQueueCapacity(100);
+    executor.setThreadNamePrefix("kallo-chat-");
+    executor.setTaskDecorator(mdcTaskDecorator());
+    executor.setRejectedExecutionHandler(
+        new ThreadPoolExecutor.DiscardPolicy() {
+          @Override
+          public void rejectedExecution(Runnable task, ThreadPoolExecutor executor) {
+            log.warn("CHAT async task rejected because executor queue is full");
+          }
+        });
+    executor.setWaitForTasksToCompleteOnShutdown(true);
+    executor.setAwaitTerminationSeconds(15);
+    executor.initialize();
+    return executor;
+  }
+
   @Bean
   TaskDecorator mdcTaskDecorator() {
     return runnable -> {

@@ -30,7 +30,7 @@ public class FoodDataIngredientLookupAdapter implements IngredientLookup {
     return ingredients.stream()
         .collect(Collectors.toMap(
             Ingredient::getId,
-            ing -> new IngredientSummary(ing.getId(), ing.getName(), ing.isActive())
+            ing -> new IngredientSummary(ing.getId(), ing.getCode(), ing.getName(), ing.isActive())
         ));
   }
 
@@ -38,7 +38,7 @@ public class FoodDataIngredientLookupAdapter implements IngredientLookup {
   public List<IngredientSummary> findCommonAllergens() {
     List<Ingredient> allergens = ingredientRepository.findAllCommonAllergens();
     return allergens.stream()
-        .map(ing -> new IngredientSummary(ing.getId(), ing.getName(), ing.isActive()))
+        .map(ing -> new IngredientSummary(ing.getId(), ing.getCode(), ing.getName(), ing.isActive()))
         .toList();
   }
 }

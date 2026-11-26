@@ -47,6 +47,25 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
   int touchLastMessageAt(@Param("id") UUID id, @Param("lastMessageAt") java.time.Instant lastMessageAt);
 
   @Modifying
+  @Query("""
+      update Conversation c
+      set c.lastMessageAt = :lastMessageAt,
+          c.summary = case when :summary is not null then :summary else c.summary end,
+          c.title = case when :suggestedTitle is not null and c.messageCount <= 2 then :suggestedTitle else c.title end,
+          c.updatedAt = CURRENT_TIMESTAMP
+      where c.id = :id and c.deletedAt is null
+      """)
+  int updateAfterAssistantReply(
+      @Param("id") UUID id,
+      @Param("lastMessageAt") java.time.Instant lastMessageAt,
+      @Param("summary") String summary,
+      @Param("suggestedTitle") String suggestedTitle);
+
+  @Modifying
+  @Query("update Conversation c set c.summary = :summary, c.updatedAt = CURRENT_TIMESTAMP where c.id = :id and c.deletedAt is null")
+  int updateSummary(@Param("id") UUID id, @Param("summary") String summary);
+
+  @Modifying
   @Query("delete from Conversation c where c.deletedAt is not null and c.deletedAt < :cutoff")
   int deleteSoftDeletedBefore(@Param("cutoff") java.time.Instant cutoff);
 }

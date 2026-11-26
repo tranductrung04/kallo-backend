@@ -118,10 +118,28 @@ public class ChatTxService {
 
   @Transactional
   public boolean completeAssistant(ChatMessage assistant, String content, ChatAiReply generated, long latencyMs) {
+    return completeAssistant(assistant, content, generated, latencyMs, false);
+  }
+
+  @Transactional
+  public boolean completeAssistant(
+      ChatMessage assistant,
+      String content,
+      ChatAiReply generated,
+      long latencyMs,
+      boolean allergenWarning) {
+    Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+    metadata.put("suggestedFoods", generated.suggestedFoods());
+    metadata.put("allergenWarning", allergenWarning);
+    metadata.put("disclaimerAdded", generated.disclaimerAdded());
+    if (generated.intent() != null) {
+      metadata.put("intent", generated.intent());
+    }
+
     int updated = messages.completePending(assistant.getId(), content, generated.promptTokens(),
         generated.completionTokens(), generated.modelVersion(),
         Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)),
-        Map.of("suggestedFoods", generated.suggestedFoods()));
+        metadata);
     if (updated == 0) return false;
     assistant.setContent(content);
     assistant.setStatus(ChatMessageStatus.COMPLETED);
@@ -130,9 +148,16 @@ public class ChatTxService {
     assistant.setCompletionTokens(generated.completionTokens());
     assistant.setModelVersion(generated.modelVersion());
     assistant.setLatencyMs(Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)));
-    assistant.setMetadata(Map.of("suggestedFoods", generated.suggestedFoods()));
+    assistant.setMetadata(metadata);
     conversations.incrementMessageCount(assistant.getConversation().getId());
-    conversations.touchLastMessageAt(assistant.getConversation().getId(), assistant.getCreatedAt());
+    conversations.updateAfterAssistantReply(
+        assistant.getConversation().getId(),
+        assistant.getCreatedAt(),
+        generated.updatedSummary(),
+        generated.suggestedTitle());
+    if (generated.updatedSummary() != null) {
+      assistant.getConversation().setSummary(generated.updatedSummary());
+    }
     return true;
   }
 
