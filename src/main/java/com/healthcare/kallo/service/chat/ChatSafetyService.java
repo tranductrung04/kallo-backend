@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
@@ -27,25 +28,112 @@ public class ChatSafetyService {
           + "Nếu bạn đang cảm thấy quá áp lực về cân nặng, ăn uống hoặc tâm lý, hãy chia sẻ với người thân, "
           + "bác sĩ hoặc chuyên gia tâm lý/dinh dưỡng để được hỗ trợ an toàn nhé.";
 
+  private static final String EMERGENCY_SAFE_REPLY =
+      "Các triệu chứng bạn mô tả (như đau ngực, khó thở, sốt cao, ngất hoặc co giật) có thể là dấu hiệu y khoa khẩn cấp. "
+          + "Trợ lý dinh dưỡng Kallo không thể xử lý tình huống cấp cứu.\n\n"
+          + "Vui lòng đến ngay cơ sở y tế gần nhất hoặc gọi cấp cứu (115) để được bác sĩ thăm khám kịp thời.";
+
   private static final String OUT_OF_SCOPE_SAFE_REPLY =
       "Mình là trợ lý dinh dưỡng và theo dõi sức khoẻ của Kallo, nên không thể chẩn đoán bệnh, "
           + "kê đơn thuốc hoặc giải đáp các chủ đề ngoài phạm vi sức khoẻ – dinh dưỡng.\n\n"
           + "Bạn có thể hỏi mình về lượng calo hôm nay, gợi ý bữa ăn hợp mục tiêu, tra cứu dinh dưỡng món ăn "
           + "hoặc theo dõi nước uống và cân nặng nhé.";
 
+  private static final Pattern PROMPT_INJECTION_PATTERN = Pattern.compile(
+      "(?i)(?:ignore\\s+(?:all\\s+)?previous\\s+instructions|<\\|im_start\\|>|<\\|im_end\\|>|\\[INST\\]|^\\s*(?:system|assistant)\\s*:)");
+
+  private static final Pattern SELF_HARM_ACCENTED_PATTERN = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:tự\\s*tử|tự\\s*sát|tự\\s*làm\\s*hại|tự\\s*hại)(?![\\p{L}\\p{N}])");
+
+  private static final Pattern SELF_HARM_ED_UNACCENTED_PATTERN = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:nhin an|nhin doi|khong an gi|moc hong|ep can cap toc|bo an han)(?![\\p{L}\\p{N}])");
+
   private static final Pattern KCAL_MENTION = Pattern.compile("(\\d{2,4})\\s*(?:kcal|calo|calories)");
 
-  private static final Pattern SELF_HARM_ED_PATTERN = Pattern.compile(
-      "(?<![\\p{L}\\p{N}])(?:nhin an|nhin doi|khong an gi|moc hong|tu lam hai|tu tu|ep can cap toc|bo an han)(?![\\p{L}\\p{N}])");
+  private static final Pattern EMERGENCY_SYMPTOMS_PATTERN = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:dau nguc|kho tho|sot cao|ngat xiu|co giat|non ra mau|dau bung du doi)(?![\\p{L}\\p{N}])");
 
   private static final Pattern MEDICAL_PRESCRIPTION_PATTERN = Pattern.compile(
-      "(?<![\\p{L}\\p{N}])(?:chan doan|ke don|don thuoc|uong thuoc gi|lieu thuoc|kham benh|xet nghiem|dau nguc|kho tho|sot cao)(?![\\p{L}\\p{N}])");
+      "(?<![\\p{L}\\p{N}])(?:chan doan|ke don|don thuoc|uong thuoc gi|lieu thuoc|kham benh|xet nghiem)(?![\\p{L}\\p{N}])");
 
   private static final Pattern OFF_TOPIC_PATTERN = Pattern.compile(
       "(?<![\\p{L}\\p{N}])(?:lap trinh|viet code|chung khoan|gia vang|thoi tiet|bong da|xo so|giai toan)(?![\\p{L}\\p{N}])");
 
   private static final Pattern NUTRITION_ANCHOR_PATTERN = Pattern.compile(
       "(?<![\\p{L}\\p{N}])(?:an|uong|mon|thuc don|bua|calo|kcal|protein|carb|fat|duong|chat xo|dinh duong|can nang|bmi|tdee|nuoc|buoc chan|van dong)(?![\\p{L}\\p{N}])");
+
+  private static final Pattern MEDICAL_CONTENT_PATTERN = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:tieu duong|dai thao duong|tang huyet ap|benh gut|benh than|thuoc|insulin|mang thai|thai ky|cho con bu|bac si|chan doan)(?![\\p{L}\\p{N}])");
+
+  private static final Pattern CONTRASTIVE_CONJUNCTION_PATTERN = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:nhung|ma|tuy nhien|song|but|however|except)(?![\\p{L}\\p{N}])");
+
+  private static final Pattern NEGATED_OR_AVOIDANCE_CLAUSE = Pattern.compile(
+      "(?<![\\p{L}\\p{N}])(?:khong|without|no|free of|tranh|kieng|khong nen(?: an| dung)?|di ung(?: voi)?|loai bo|bo qua)(?:\\s+[\\p{L}\\p{N}]+){0,2}\\s*$");
+
+  private static final ConcurrentHashMap<String, Pattern> TERM_PATTERN_CACHE = new ConcurrentHashMap<>();
+
+  private static final Set<String> GENERIC_ALLERGY_TOKENS = Set.of(
+      "cac loai", "san pham tu", "va", "hat cay", "giap xac", "than mem", "food", "allergy");
+
+  private static final Map<String, Set<String>> ALLERGEN_GROUPS = Map.ofEntries(
+      Map.entry("PEANUT", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
+      Map.entry("lac", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
+      Map.entry("dau phong", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
+      Map.entry("dau phung", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
+      Map.entry("peanut", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
+
+      Map.entry("DAIRY", Set.of("sua", "pho mai", "kem sua", "yogurt", "sua chua", "whey", "casein", "milk", "dairy", "cheese", "butter")),
+      Map.entry("sua", Set.of("sua", "pho mai", "kem sua", "yogurt", "sua chua", "milk", "dairy", "cheese")),
+      Map.entry("milk", Set.of("sua", "pho mai", "yogurt", "sua chua", "milk", "dairy", "cheese")),
+      Map.entry("dairy", Set.of("sua", "pho mai", "yogurt", "sua chua", "milk", "dairy", "cheese")),
+
+      Map.entry("EGG", Set.of("trung", "egg", "mayonnaise")),
+      Map.entry("trung", Set.of("trung", "egg", "mayonnaise")),
+      Map.entry("egg", Set.of("trung", "egg", "mayonnaise")),
+
+      Map.entry("TREE_NUTS", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "ho dao", "almond", "walnut", "cashew", "pistachio", "hazelnut", "tree nut")),
+      Map.entry("hanh nhan", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
+      Map.entry("oc cho", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
+      Map.entry("hat dieu", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
+
+      Map.entry("SOY", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "chao", "soy", "soya", "tofu", "edamame")),
+      Map.entry("dau nanh", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "soy", "soya", "tofu")),
+      Map.entry("soy", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "soy", "soya", "tofu")),
+
+      Map.entry("GLUTEN", Set.of("gluten", "lua mi", "bot mi", "banh mi", "mi y", "mi ong", "lua mach", "wheat", "barley", "rye", "pasta")),
+      Map.entry("gluten", Set.of("gluten", "lua mi", "bot mi", "banh mi", "mi y", "mi ong", "wheat", "pasta")),
+      Map.entry("lua mi", Set.of("gluten", "lua mi", "bot mi", "banh mi", "wheat")),
+
+      Map.entry("FISH", Set.of("ca", "nuoc mam", "ca hoi", "ca thu", "ca ngu", "ca loc", "ca basa", "fish", "salmon", "tuna")),
+      Map.entry("ca", Set.of("ca", "ca hoi", "ca thu", "ca ngu", "ca loc", "ca basa", "fish", "salmon", "tuna")),
+      Map.entry("fish", Set.of("ca", "ca hoi", "ca thu", "ca ngu", "fish", "salmon", "tuna")),
+
+      Map.entry("CRUSTACEANS", Set.of("tom", "tep", "cua", "ghe", "tom hum", "shrimp", "prawn", "crab", "lobster")),
+      Map.entry("tom", Set.of("tom", "tep", "shrimp", "prawn")),
+      Map.entry("tep", Set.of("tom", "tep", "shrimp", "prawn")),
+      Map.entry("cua", Set.of("cua", "ghe", "crab")),
+      Map.entry("ghe", Set.of("cua", "ghe", "crab")),
+      Map.entry("hai san", Set.of("hai san", "tom", "tep", "cua", "ghe", "muc", "oc", "ngheu", "so", "hau", "oyster", "shrimp", "prawn", "crab", "seafood")),
+
+      Map.entry("SESAME", Set.of("me", "vung", "dau me", "sesame", "tahini")),
+      Map.entry("me", Set.of("me", "vung", "dau me", "sesame")),
+      Map.entry("vung", Set.of("me", "vung", "dau me", "sesame")),
+      Map.entry("sesame", Set.of("me", "vung", "dau me", "sesame")),
+
+      Map.entry("MOLLUSCS", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "ngao", "oyster", "squid", "octopus", "clam", "mussel", "scallop", "snail")),
+      Map.entry("oc", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "ngao", "squid", "clam", "snail")),
+      Map.entry("muc", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "squid", "octopus")));
+
+  private static final Map<String, Set<String>> SHORT_TERM_VARIANTS = Map.of(
+      "ca", Set.of("cá"),
+      "me", Set.of("mè"),
+      "trung", Set.of("trứng"),
+      "lac", Set.of("lạc"),
+      "cua", Set.of("cua"),
+      "oc", Set.of("ốc"),
+      "so", Set.of("sò"),
+      "sua", Set.of("sữa"));
 
   private final ChatMetrics metrics;
 
@@ -73,10 +161,18 @@ public class ChatSafetyService {
   }
 
   public InputPolicyDecision checkInputPolicy(String content) {
+    String accentedLower = content == null ? "" : content.toLowerCase(Locale.ROOT);
     String norm = normalizeVietnamese(content);
-    if (SELF_HARM_ED_PATTERN.matcher(norm).find() || isExtremeLowCalorieRequest(norm)) {
+
+    if (SELF_HARM_ACCENTED_PATTERN.matcher(accentedLower).find()
+        || SELF_HARM_ED_UNACCENTED_PATTERN.matcher(norm).find()
+        || isExtremeLowCalorieRequest(norm)) {
       metrics.recordSafetyBlocked("self_harm_or_ed");
       return new InputPolicyDecision(true, SELF_HARM_SAFE_REPLY, "self_harm_or_ed");
+    }
+    if (EMERGENCY_SYMPTOMS_PATTERN.matcher(norm).find()) {
+      metrics.recordSafetyBlocked("emergency_symptoms");
+      return new InputPolicyDecision(true, EMERGENCY_SAFE_REPLY, "emergency_symptoms");
     }
     boolean hasNutritionAnchor = NUTRITION_ANCHOR_PATTERN.matcher(norm).find();
     if (MEDICAL_PRESCRIPTION_PATTERN.matcher(norm).find()
@@ -88,9 +184,21 @@ public class ChatSafetyService {
   }
 
   private boolean isExtremeLowCalorieRequest(String norm) {
-    if (!norm.contains("an duoi") && !norm.contains("chi an") && !norm.contains("giam xuong") && !norm.contains("che do")) {
-      return false;
-    }
+    boolean hasRestrictionVerb = norm.contains("an duoi") || norm.contains("chi an")
+        || norm.contains("giam xuong") || norm.contains("che do");
+    if (!hasRestrictionVerb) return false;
+
+    boolean hasDailyScope = norm.contains("ca ngay") || norm.contains("moi ngay")
+        || norm.contains("1 ngay") || norm.contains("mot ngay")
+        || norm.contains("trong ngay") || norm.contains("hang ngay")
+        || norm.contains("daily") || norm.contains("per day");
+    if (!hasDailyScope) return false;
+
+    boolean hasSingleMealScope = norm.contains("bua sang") || norm.contains("bua trua")
+        || norm.contains("bua toi") || norm.contains("bua phu")
+        || norm.contains("1 bua") || norm.contains("mot bua");
+    if (hasSingleMealScope) return false;
+
     Matcher m = KCAL_MENTION.matcher(norm);
     while (m.find()) {
       int val = Integer.parseInt(m.group(1));
@@ -166,77 +274,6 @@ public class ChatSafetyService {
         .trim();
   }
 
-  private static final Pattern PROMPT_INJECTION_PATTERN = Pattern.compile(
-      "(?i)(?:ignore\\s+(?:all\\s+)?previous\\s+instructions|<\\|im_start\\|>|<\\|im_end\\|>|\\[INST\\]|^\\s*(?:system|assistant)\\s*:)");
-
-  private static final Pattern MEDICAL_CONTENT_PATTERN = Pattern.compile(
-      "(?<![\\p{L}\\p{N}])(?:tieu duong|dai thao duong|tang huyet ap|benh gut|benh than|thuoc|insulin|mang thai|thai ky|cho con bu|bac si|chan doan)(?![\\p{L}\\p{N}])");
-
-  private static final Set<String> GENERIC_ALLERGY_TOKENS = Set.of(
-      "cac loai", "san pham tu", "va", "hat cay", "giap xac", "than mem", "food", "allergy");
-
-  private static final Map<String, Set<String>> ALLERGEN_GROUPS = Map.ofEntries(
-      Map.entry("PEANUT", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
-      Map.entry("lac", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
-      Map.entry("dau phong", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
-      Map.entry("dau phung", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
-      Map.entry("peanut", Set.of("lac", "dau phong", "dau phung", "peanut", "groundnut")),
-
-      Map.entry("DAIRY", Set.of("sua", "pho mai", "kem sua", "yogurt", "sua chua", "whey", "casein", "milk", "dairy", "cheese", "butter")),
-      Map.entry("sua", Set.of("sua", "pho mai", "kem sua", "yogurt", "sua chua", "milk", "dairy", "cheese")),
-      Map.entry("milk", Set.of("sua", "pho mai", "yogurt", "sua chua", "milk", "dairy", "cheese")),
-      Map.entry("dairy", Set.of("sua", "pho mai", "yogurt", "sua chua", "milk", "dairy", "cheese")),
-
-      Map.entry("EGG", Set.of("trung", "egg", "mayonnaise")),
-      Map.entry("trung", Set.of("trung", "egg", "mayonnaise")),
-      Map.entry("egg", Set.of("trung", "egg", "mayonnaise")),
-
-      Map.entry("TREE_NUTS", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "ho dao", "almond", "walnut", "cashew", "pistachio", "hazelnut", "tree nut")),
-      Map.entry("hanh nhan", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
-      Map.entry("oc cho", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
-      Map.entry("hat dieu", Set.of("hanh nhan", "oc cho", "hat dieu", "hat de", "macca", "almond", "walnut", "cashew")),
-
-      Map.entry("SOY", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "chao", "soy", "soya", "tofu", "edamame")),
-      Map.entry("dau nanh", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "soy", "soya", "tofu")),
-      Map.entry("soy", Set.of("dau nanh", "dau hu", "tau hu", "xi dau", "nuoc tuong", "soy", "soya", "tofu")),
-
-      Map.entry("GLUTEN", Set.of("gluten", "lua mi", "bot mi", "banh mi", "mi y", "mi ong", "lua mach", "wheat", "barley", "rye", "pasta")),
-      Map.entry("gluten", Set.of("gluten", "lua mi", "bot mi", "banh mi", "mi y", "mi ong", "wheat", "pasta")),
-      Map.entry("lua mi", Set.of("gluten", "lua mi", "bot mi", "banh mi", "wheat")),
-
-      Map.entry("FISH", Set.of("ca", "nuoc mam", "ca hoi", "ca thu", "ca ngu", "ca loc", "ca basa", "fish", "salmon", "tuna")),
-      Map.entry("ca", Set.of("ca", "ca hoi", "ca thu", "ca ngu", "ca loc", "ca basa", "fish", "salmon", "tuna")),
-      Map.entry("fish", Set.of("ca", "ca hoi", "ca thu", "ca ngu", "fish", "salmon", "tuna")),
-
-      Map.entry("CRUSTACEANS", Set.of("tom", "tep", "cua", "ghe", "tom hum", "shrimp", "prawn", "crab", "lobster")),
-      Map.entry("tom", Set.of("tom", "tep", "shrimp", "prawn")),
-      Map.entry("tep", Set.of("tom", "tep", "shrimp", "prawn")),
-      Map.entry("cua", Set.of("cua", "ghe", "crab")),
-      Map.entry("ghe", Set.of("cua", "ghe", "crab")),
-      Map.entry("hai san", Set.of("hai san", "tom", "tep", "cua", "ghe", "muc", "oc", "ngheu", "so", "hau", "oyster", "shrimp", "prawn", "crab", "seafood")),
-
-      Map.entry("SESAME", Set.of("me", "vung", "dau me", "sesame", "tahini")),
-      Map.entry("me", Set.of("me", "vung", "dau me", "sesame")),
-      Map.entry("vung", Set.of("me", "vung", "dau me", "sesame")),
-      Map.entry("sesame", Set.of("me", "vung", "dau me", "sesame")),
-
-      Map.entry("MOLLUSCS", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "ngao", "oyster", "squid", "octopus", "clam", "mussel", "scallop", "snail")),
-      Map.entry("oc", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "ngao", "squid", "clam", "snail")),
-      Map.entry("muc", Set.of("oc", "muc", "ngheu", "so", "hau", "bach tuoc", "squid", "octopus")));
-
-  private static final Pattern NEGATED_OR_AVOIDANCE_CLAUSE = Pattern.compile(
-      "(?<![\\p{L}\\p{N}])(?:khong|without|no|free of|tranh|kieng|khong nen(?: an| dung)?|di ung(?: voi)?|loai bo|bo qua)(?:\\s+[\\p{L}\\p{N}]+){0,4}\\s*$");
-
-  private static final Map<String, Set<String>> SHORT_TERM_VARIANTS = Map.of(
-      "ca", Set.of("cá"),
-      "me", Set.of("mè"),
-      "trung", Set.of("trứng"),
-      "lac", Set.of("lạc"),
-      "cua", Set.of("cua"),
-      "oc", Set.of("ốc"),
-      "so", Set.of("sò"),
-      "sua", Set.of("sữa"));
-
   private boolean containsIngredient(String content, String allergy) {
     Set<String> ingredients = resolveAllergenTerms(allergy);
     if (ingredients.isEmpty()) return false;
@@ -245,8 +282,8 @@ public class ChatSafetyService {
     return ingredients.stream().anyMatch(ingredient -> {
       Set<String> variants = SHORT_TERM_VARIANTS.get(ingredient);
       return variants == null
-          ? containsTerm(normalizedContent, ingredient)
-          : variants.stream().anyMatch(term -> containsTerm(originalContent, term));
+          ? containsTerm(normalizedContent, ingredient, false)
+          : variants.stream().anyMatch(term -> containsTerm(originalContent, term, true));
     });
   }
 
@@ -287,20 +324,41 @@ public class ChatSafetyService {
     return resolved;
   }
 
-  private boolean containsTerm(String content, String term) {
-    String expression = Pattern.quote(term).replace("\\Q \\E", "\\\\s+");
-    Matcher matcher = Pattern.compile(
-        "(?<![\\p{L}\\p{N}])" + expression + "(?![\\p{L}\\p{N}])",
-        Pattern.UNICODE_CASE).matcher(content);
+  private boolean containsTerm(String content, String term, boolean originalLowerCase) {
+    Pattern pattern = compiledTermPattern(term, originalLowerCase);
+    Matcher matcher = pattern.matcher(content);
     while (matcher.find()) {
       String before = content.substring(0, matcher.start());
       int clauseStart = lastClauseBreak(before);
       String clausePrefix = normalizeVietnamese(before.substring(clauseStart));
+      clausePrefix = sliceAfterLastContrastiveConjunction(clausePrefix);
       if (!NEGATED_OR_AVOIDANCE_CLAUSE.matcher(clausePrefix).find()) {
         return true;
       }
     }
     return false;
+  }
+
+  private String sliceAfterLastContrastiveConjunction(String clausePrefix) {
+    Matcher conjMatcher = CONTRASTIVE_CONJUNCTION_PATTERN.matcher(clausePrefix);
+    int lastEnd = -1;
+    while (conjMatcher.find()) {
+      lastEnd = conjMatcher.end();
+    }
+    return lastEnd >= 0 ? clausePrefix.substring(lastEnd).trim() : clausePrefix;
+  }
+
+  private static Pattern compiledTermPattern(String term, boolean originalLowerCase) {
+    String key = (originalLowerCase ? "O:" : "N:") + term;
+    return TERM_PATTERN_CACHE.computeIfAbsent(key, ignored -> {
+      String[] words = term.trim().split("\\s+");
+      StringBuilder expr = new StringBuilder();
+      for (int i = 0; i < words.length; i++) {
+        if (i > 0) expr.append("\\s+");
+        expr.append(Pattern.quote(words[i]));
+      }
+      return Pattern.compile("(?<![\\p{L}\\p{N}])" + expr + "(?![\\p{L}\\p{N}])", Pattern.UNICODE_CASE);
+    });
   }
 
   private int lastClauseBreak(String text) {

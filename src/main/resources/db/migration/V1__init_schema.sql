@@ -791,16 +791,17 @@ CREATE INDEX idx_point_transactions_user_time ON point_transactions (user_id, oc
 -- CHAT module: conversations, chat_messages
 -- ============================================================
 CREATE TABLE conversations (
-    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                   UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    title                     VARCHAR(120),
-    summary                   TEXT,
-    message_count             INTEGER NOT NULL DEFAULT 0 CHECK (message_count >= 0),
-    last_message_at           TIMESTAMPTZ,
-    deleted_at                TIMESTAMPTZ,
-    initial_client_message_id UUID,
-    created_at                TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at                TIMESTAMPTZ NOT NULL DEFAULT now()
+    id                           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                      UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    title                        VARCHAR(120),
+    summary                      TEXT,
+    summarized_through_message_id UUID,
+    message_count                INTEGER NOT NULL DEFAULT 0 CHECK (message_count >= 0),
+    last_message_at              TIMESTAMPTZ,
+    deleted_at                   TIMESTAMPTZ,
+    initial_client_message_id    UUID,
+    created_at                   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at                   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_conversations_user_recent
@@ -856,3 +857,7 @@ CREATE INDEX idx_chat_messages_parent
 CREATE UNIQUE INDEX uq_chat_messages_pending_assistant
     ON chat_messages (conversation_id)
     WHERE role = 'ASSISTANT' AND status = 'PENDING';
+
+ALTER TABLE conversations
+    ADD CONSTRAINT fk_conversations_summarized_through_message
+        FOREIGN KEY (summarized_through_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL;

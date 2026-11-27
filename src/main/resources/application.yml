@@ -144,7 +144,7 @@ app:
       temperature: ${CHAT_LLM_TEMPERATURE:0.4}
       max-tokens: ${CHAT_LLM_MAX_TOKENS:1024}
     history-window: ${CHAT_HISTORY_WINDOW:12}
-    max-context-chars: ${CHAT_MAX_CONTEXT_CHARS:12000}
+    max-context-chars: ${CHAT_MAX_CONTEXT_CHARS:4500}
     max-message-length: ${CHAT_MAX_MESSAGE_LENGTH:2000}
     rate-limit:
       per-minute: ${CHAT_RATE_LIMIT_PER_MINUTE:10}

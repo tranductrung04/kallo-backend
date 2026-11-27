@@ -67,6 +67,15 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, UUID> 
 
   List<ChatMessage> findByConversationIdOrderByCreatedAtAscIdAsc(UUID conversationId);
 
+  @Query("""
+      select m from ChatMessage m
+      where m.conversation.id = :conversationId
+        and m.status = 'COMPLETED'
+        and m.content is not null
+      order by m.createdAt asc, m.id asc
+      """)
+  List<ChatMessage> findCompletedOrdered(@Param("conversationId") UUID conversationId);
+
   @Modifying
   @Query("delete from ChatMessage m where m.conversation.id in (select c.id from Conversation c where c.deletedAt is not null and c.deletedAt < :cutoff)")
   int deleteSoftDeletedBefore(@Param("cutoff") Instant cutoff);

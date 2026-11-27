@@ -52,19 +52,21 @@ public class ChatService {
   private final ChatMetrics metrics;
   private final NotificationService notifications;
   private final ObjectProvider<ChatSummaryService> summaryService;
+  private final ObjectProvider<FoodSuggestionExtractor> foodSuggestionExtractor;
 
   public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
       ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
       ChatProperties properties, ChatTxService tx, ChatMetrics metrics, NotificationService notifications) {
     this(conversations, messages, aiClient, contextBuilder, safety, rateLimiter, properties, tx, metrics,
-        notifications, null);
+        notifications, null, null);
   }
 
   @Autowired
   public ChatService(ConversationRepository conversations, ChatMessageRepository messages, ChatAiClient aiClient,
       ChatContextBuilder contextBuilder, ChatSafetyService safety, ChatRateLimiter rateLimiter,
       ChatProperties properties, ChatTxService tx, ChatMetrics metrics, NotificationService notifications,
-      ObjectProvider<ChatSummaryService> summaryService) {
+      ObjectProvider<ChatSummaryService> summaryService,
+      ObjectProvider<FoodSuggestionExtractor> foodSuggestionExtractor) {
     this.conversations = conversations;
     this.messages = messages;
     this.aiClient = aiClient;
@@ -76,6 +78,7 @@ public class ChatService {
     this.metrics = metrics;
     this.notifications = notifications;
     this.summaryService = summaryService;
+    this.foodSuggestionExtractor = foodSuggestionExtractor;
   }
 
   public ChatReplyResponse retryMessage(UUID userId, UUID assistantMessageId) {
@@ -100,7 +103,7 @@ public class ChatService {
     ChatSafetyService.InputPolicyDecision policy = safety.checkInputPolicy(saved.userMessage().getContent());
     if (policy.blocked()) {
       ChatAiReply safeReply = new ChatAiReply(
-          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true, null, null);
+          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true);
       if (!tx.completeAssistant(saved.assistantMessage(), policy.safeResponse(), safeReply, 0L, false)) {
         throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
       }
@@ -119,20 +122,19 @@ public class ChatService {
           userId, saved.conversation().getId(), saved.userMessage(), properties.historyWindow(),
           properties.maxContextChars());
       generated = aiClient.generate(aiRequest);
+      List<ChatAiReply.SuggestedFood> rawSuggested = resolveSuggestedFoods(userId, generated.content(), generated.suggestedFoods());
       boolean hasMedical = !aiRequest.systemContext().chronicConditions().isEmpty() || generated.disclaimerAdded();
       var validation = safety.validateOutputWithGuardrails(
           generated.content(),
           aiRequest.systemContext().allAllergyTerms(),
-          generated.suggestedFoods(),
+          rawSuggested,
           hasMedical);
       checked = validation.content();
-      allergenWarning = validation.replaced() || validation.suggestedFoods().size() != generated.suggestedFoods().size();
+      allergenWarning = validation.replaced() || validation.suggestedFoods().size() != rawSuggested.size();
       if (allergenWarning) {
         metrics.recordAllergenHit();
       }
-      if (allergenWarning || validation.disclaimerAdded()) {
-        generated = generated.withContentAndFoods(checked, validation.suggestedFoods(), validation.disclaimerAdded());
-      }
+      generated = generated.withContentAndFoods(checked, validation.suggestedFoods(), validation.disclaimerAdded());
       latencyMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started);
       metrics.recordAiLatency(aiTimer);
     } catch (BusinessException exception) {
@@ -222,7 +224,7 @@ public class ChatService {
     ChatSafetyService.InputPolicyDecision policy = safety.checkInputPolicy(saved.userMessage().getContent());
     if (policy.blocked()) {
       ChatAiReply safeReply = new ChatAiReply(
-          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true, null, null);
+          policy.safeResponse(), List.of(), 0, 0, "kallo-guardrail", policy.reason(), true);
       if (!tx.completeAssistant(saved.assistantMessage(), policy.safeResponse(), safeReply, 0L, false)) {
         throw new ChatAiException(ErrorCode.CHAT_CONVERSATION_BUSY, saved.userMessage().getId());
       }
@@ -291,24 +293,23 @@ public class ChatService {
             }
           }
           String raw = contentBuilder.toString();
+          List<ChatAiReply.SuggestedFood> rawSuggested = resolveSuggestedFoods(userId, raw, result.suggestedFoods());
           var validation = safety.validateOutputWithGuardrails(
               raw,
               allAllergies,
-              result.suggestedFoods(),
-              hasMedicalContext || result.disclaimerAdded());
+              rawSuggested,
+              hasMedicalContext);
           String checked = validation.content();
           boolean allergenWarning = validation.replaced()
-              || validation.suggestedFoods().size() != result.suggestedFoods().size();
+              || validation.suggestedFoods().size() != rawSuggested.size();
           ChatAiReply reply = new ChatAiReply(
               checked,
               validation.suggestedFoods(),
               result.promptTokens(),
               result.completionTokens(),
               result.modelVersion(),
-              result.intent(),
-              result.disclaimerAdded() || validation.disclaimerAdded(),
-              result.updatedSummary(),
-              result.suggestedTitle());
+              null,
+              validation.disclaimerAdded());
           if (allergenWarning) {
             metrics.recordAllergenHit();
           }
@@ -357,6 +358,13 @@ public class ChatService {
       tx.markFailed(active.assistantMessage(), ErrorCode.CHAT_AI_UNAVAILABLE.name());
       throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE, active.userMessage().getId());
     }
+  }
+
+  private List<ChatAiReply.SuggestedFood> resolveSuggestedFoods(
+      UUID userId, String content, List<ChatAiReply.SuggestedFood> existing) {
+    if (existing != null && !existing.isEmpty()) return existing;
+    FoodSuggestionExtractor extractor = foodSuggestionExtractor == null ? null : foodSuggestionExtractor.getIfAvailable();
+    return extractor == null ? List.of() : extractor.extract(userId, content);
   }
 
   private void triggerAsyncSummary(UUID conversationId) {

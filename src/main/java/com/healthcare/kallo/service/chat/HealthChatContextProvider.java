@@ -49,10 +49,10 @@ public class HealthChatContextProvider implements ChatContextProvider {
   private static final int MAX_TODAY_MEALS = 20;
 
   private final UserRepository users;
+  private final UserAllergyRepository userAllergies;
+  private final IngredientLookup ingredientLookup;
   private final ObjectProvider<ProfileBodyMetrics> bodyMetrics;
   private final ObjectProvider<DailyProgressProvider> dailyProgress;
-  private final ObjectProvider<UserAllergyRepository> userAllergies;
-  private final ObjectProvider<IngredientLookup> ingredientLookup;
   private final ObjectProvider<UserHealthProfileRepository> healthProfiles;
   private final ObjectProvider<ProfileDomainService> profileDomainService;
   private final ObjectProvider<UserChronicConditionRepository> chronicConditions;
@@ -64,22 +64,22 @@ public class HealthChatContextProvider implements ChatContextProvider {
 
   public HealthChatContextProvider(
       UserRepository users,
+      UserAllergyRepository userAllergies,
+      IngredientLookup ingredientLookup,
       ObjectProvider<ProfileBodyMetrics> bodyMetrics,
       ObjectProvider<DailyProgressProvider> dailyProgress,
-      ObjectProvider<UserAllergyRepository> userAllergies,
-      ObjectProvider<IngredientLookup> ingredientLookup,
       Clock clock) {
-    this(users, bodyMetrics, dailyProgress, userAllergies, ingredientLookup,
+    this(users, userAllergies, ingredientLookup, bodyMetrics, dailyProgress,
         null, null, null, null, null, null, null, clock);
   }
 
   @Autowired
   public HealthChatContextProvider(
       UserRepository users,
+      UserAllergyRepository userAllergies,
+      IngredientLookup ingredientLookup,
       ObjectProvider<ProfileBodyMetrics> bodyMetrics,
       ObjectProvider<DailyProgressProvider> dailyProgress,
-      ObjectProvider<UserAllergyRepository> userAllergies,
-      ObjectProvider<IngredientLookup> ingredientLookup,
       ObjectProvider<UserHealthProfileRepository> healthProfiles,
       ObjectProvider<ProfileDomainService> profileDomainService,
       ObjectProvider<UserChronicConditionRepository> chronicConditions,
@@ -88,11 +88,11 @@ public class HealthChatContextProvider implements ChatContextProvider {
       ObjectProvider<FoodRepository> foods,
       ObjectProvider<WeightLogRepository> weightLogs,
       Clock clock) {
-    this.users = users;
+    this.users = Objects.requireNonNull(users, "users must not be null");
+    this.userAllergies = Objects.requireNonNull(userAllergies, "userAllergies must not be null");
+    this.ingredientLookup = Objects.requireNonNull(ingredientLookup, "ingredientLookup must not be null");
     this.bodyMetrics = bodyMetrics;
     this.dailyProgress = dailyProgress;
-    this.userAllergies = userAllergies;
-    this.ingredientLookup = ingredientLookup;
     this.healthProfiles = healthProfiles;
     this.profileDomainService = profileDomainService;
     this.chronicConditions = chronicConditions;
@@ -100,7 +100,7 @@ public class HealthChatContextProvider implements ChatContextProvider {
     this.foodLogs = foodLogs;
     this.foods = foods;
     this.weightLogs = weightLogs;
-    this.clock = clock;
+    this.clock = Objects.requireNonNull(clock, "clock must not be null");
   }
 
   @Override
@@ -119,9 +119,6 @@ public class HealthChatContextProvider implements ChatContextProvider {
     List<ChatContextData.ConditionInfo> conditions = resolveChronicConditions(userId);
     Map<String, Object> recentWeight = resolveRecentWeight(userId, now);
     List<ChatContextData.TodayMealItem> todayMeals = resolveTodayMeals(userId, today);
-    List<Double> preferenceVector = healthProfile != null && healthProfile.getPreferenceVector() != null
-        ? healthProfile.getPreferenceVector()
-        : List.of();
 
     return new ChatContextData(
         profile,
@@ -130,8 +127,7 @@ public class HealthChatContextProvider implements ChatContextProvider {
         allergyResolution.codes(),
         conditions,
         recentWeight,
-        todayMeals,
-        preferenceVector);
+        todayMeals);
   }
 
   private UserHealthProfile findHealthProfile(UUID userId) {
@@ -142,7 +138,6 @@ public class HealthChatContextProvider implements ChatContextProvider {
   private Map<String, Object> buildProfile(
       UUID userId, User user, UserHealthProfile healthProfile, LocalDate today) {
     Map<String, Object> profile = new LinkedHashMap<>();
-    profile.put("displayName", user.getDisplayName());
     profile.put("timezone", user.getTimezone());
 
     if (healthProfile != null) {
@@ -258,18 +253,13 @@ public class HealthChatContextProvider implements ChatContextProvider {
   }
 
   private AllergyResolution resolveAllergies(UUID userId) {
-    UserAllergyRepository allergyRepo = available(userAllergies);
-    IngredientLookup lookup = available(ingredientLookup);
-    if (allergyRepo == null || lookup == null) {
-      return new AllergyResolution(List.of(), List.of());
-    }
-    Set<UUID> ingredientIds = allergyRepo.findAllByIdUserId(userId).stream()
+    Set<UUID> ingredientIds = userAllergies.findAllByIdUserId(userId).stream()
         .map(allergy -> allergy.getId().getIngredientId())
         .collect(Collectors.toSet());
     if (ingredientIds.isEmpty()) {
       return new AllergyResolution(List.of(), List.of());
     }
-    Map<UUID, IngredientSummary> summaries = lookup.findSummariesByIds(ingredientIds);
+    Map<UUID, IngredientSummary> summaries = ingredientLookup.findSummariesByIds(ingredientIds);
     List<String> names = ingredientIds.stream()
         .map(summaries::get)
         .filter(Objects::nonNull)

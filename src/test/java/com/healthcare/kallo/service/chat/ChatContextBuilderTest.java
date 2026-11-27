@@ -21,6 +21,7 @@ import org.springframework.beans.factory.ObjectProvider;
 
 class ChatContextBuilderTest {
   private final ChatMessageRepository messages = Mockito.mock(ChatMessageRepository.class);
+  private final ChatPromptBuilder promptBuilder = new ChatPromptBuilder();
   private final ChatContextBuilder builder = new ChatContextBuilder(messages, userId -> ChatContextData.empty());
 
   @Test
@@ -42,28 +43,33 @@ class ChatContextBuilderTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void includesConversationSummaryAndTrimsOldMessagesWithinCharBudget() {
+  void includesConversationSummaryAndAccountsForRealSystemPromptInCharBudget() {
     UUID userId = UUID.randomUUID();
     UUID conversationId = UUID.randomUUID();
     Conversation conversation = new Conversation();
     conversation.setId(conversationId);
-    conversation.setSummary("{\"lastIntent\":\"MEAL_SUGGESTION\"}");
+    conversation.setSummary("Người dùng thích món luộc.");
 
     ConversationRepository convRepo = mock(ConversationRepository.class);
     when(convRepo.findById(conversationId)).thenReturn(Optional.of(conversation));
     ObjectProvider<ConversationRepository> convProvider = mock(ObjectProvider.class);
     when(convProvider.getIfAvailable()).thenReturn(convRepo);
 
-    ChatContextBuilder budgetedBuilder = new ChatContextBuilder(messages, id -> ChatContextData.empty(), convProvider);
+    ChatContextBuilder budgetedBuilder = new ChatContextBuilder(
+        messages, id -> ChatContextData.empty(), convProvider, promptBuilder);
     ChatMessage m1 = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "x".repeat(300));
     ChatMessage m2 = message(ChatRole.ASSISTANT, ChatMessageStatus.COMPLETED, "y".repeat(250));
     ChatMessage current = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "z".repeat(200));
     when(messages.findByConversationIdAndStatusOrderByCreatedAtDescIdDesc(any(), any(), any()))
         .thenReturn(List.of(m2, m1));
 
-    ChatAiRequest request = budgetedBuilder.build(userId, conversationId, current, 10, 520);
+    int basePromptLen = promptBuilder.buildSystemPrompt(
+        new ChatAiRequest(conversationId, List.of()).withUserAndSummary(userId, conversation.getSummary())).length();
+    int budget = basePromptLen + 200 + 260;
 
-    assertThat(request.conversationSummary()).contains("MEAL_SUGGESTION");
+    ChatAiRequest request = budgetedBuilder.build(userId, conversationId, current, 10, budget);
+
+    assertThat(request.conversationSummary()).isEqualTo("Người dùng thích món luộc.");
     assertThat(request.userId()).isEqualTo(userId);
     assertThat(request.messages()).extracting(ChatAiRequest.ChatHistoryMessage::content)
         .containsExactly("y".repeat(250), "z".repeat(200));

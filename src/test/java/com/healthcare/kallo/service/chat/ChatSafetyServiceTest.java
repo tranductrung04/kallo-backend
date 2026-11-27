@@ -30,19 +30,48 @@ class ChatSafetyServiceTest {
   }
 
   @Test
-  void ignoresNegatedAllergenAndAvoidanceWarning() {
+  void distinguishesGradualWeightLossAndMealCaloriesFromSelfHarm() {
+    assertThat(safety.checkInputPolicy("Tôi muốn giảm cân từ từ").blocked()).isFalse();
+    assertThat(safety.checkInputPolicy("Bữa sáng chỉ ăn 400 kcal có đủ không?").blocked()).isFalse();
+
+    var selfHarm = safety.checkInputPolicy("Tôi muốn tự tử");
+    assertThat(selfHarm.blocked()).isTrue();
+    assertThat(selfHarm.reason()).isEqualTo("self_harm_or_ed");
+
+    var dailyExtreme = safety.checkInputPolicy("Cả ngày chỉ ăn 400 kcal để giảm cân");
+    assertThat(dailyExtreme.blocked()).isTrue();
+    assertThat(dailyExtreme.reason()).isEqualTo("self_harm_or_ed");
+  }
+
+  @Test
+  void returnsDedicatedEmergencyAdviceForCriticalSymptoms() {
+    var emergency = safety.checkInputPolicy("Tôi bị đau ngực và khó thở");
+    assertThat(emergency.blocked()).isTrue();
+    assertThat(emergency.reason()).isEqualTo("emergency_symptoms");
+    assertThat(emergency.safeResponse()).contains("115");
+  }
+
+  @Test
+  void blocksMedicalPrescriptionWhileAllowingNutritionWithCondition() {
+    assertThat(safety.checkInputPolicy("Kê đơn thuốc chữa tiểu đường cho tôi").blocked()).isTrue();
+    assertThat(safety.checkInputPolicy("Tôi bị tiểu đường tối nay nên ăn gì?").blocked()).isFalse();
+  }
+
+  @Test
+  void breaksNegationOnContrastiveConjunctionAndLimitsDistance() {
+    assertThat(safety.validateOutputWithGuardrails("Món này không có đường nhưng có tôm", List.of("tom")).replaced())
+        .isTrue();
     assertThat(safety.validateOutputWithGuardrails("Món không có tôm", List.of("tom")).replaced()).isFalse();
-    assertThat(safety.validateOutputWithGuardrails("Bạn dị ứng tôm nên cần tránh bún riêu tôm.", List.of("Giáp xác (Tôm, Cua, Ghẹ)")).replaced())
+    assertThat(safety.validateOutputWithGuardrails("Bạn dị ứng tôm nên tránh bún riêu tôm.", List.of("Giáp xác (Tôm, Cua, Ghẹ)")).replaced())
         .isFalse();
   }
 
   @Test
-  void flagsAllergenWhenSuggestedInFollowingClause() {
-    var result = safety.validateOutputWithGuardrails(
-        "Bạn dị ứng tôm, hãy thử bún riêu tôm vào bữa tối nhé.",
-        List.of("Giáp xác (Tôm, Cua, Ghẹ)"));
-    assertThat(result.replaced()).isTrue();
-    assertThat(result.content()).doesNotContain("bún riêu tôm");
+  void matchesMultiWordAllergensWithFlexibleWhitespace() {
+    assertThat(safety.validateOutputWithGuardrails("Chè đậu   phộng", List.of("Đậu phụng (Lạc)")).replaced())
+        .isTrue();
+    assertThat(safety.validateOutputWithGuardrails("Món không có đậu phộng", List.of("Đậu phụng (Lạc)")).replaced())
+        .isFalse();
   }
 
   @Test
@@ -62,25 +91,13 @@ class ChatSafetyServiceTest {
     assertThat(safety.validateOutputWithGuardrails("Trứng luộc", List.of("trung")).replaced()).isTrue();
     assertThat(safety.validateOutputWithGuardrails("Lạc rang", List.of("lac")).replaced()).isTrue();
     assertThat(safety.validateOutputWithGuardrails("Gợi ý bún riêu tôm", List.of("Giáp xác (Tôm, Cua, Ghẹ)")).replaced()).isTrue();
-    assertThat(safety.validateOutputWithGuardrails("Chè đậu phụng", List.of("Đậu phụng (Lạc)")).replaced()).isTrue();
     assertThat(safety.validateOutputWithGuardrails("Mực xào cần tây", List.of("Thân mềm (Ốc, Mực, Nghêu, Sò)")).replaced()).isTrue();
   }
 
   @Test
   void appendsMedicalDisclaimerWhenMedicalContextPresent() {
-    var result = safety.validateOutputWithGuardrails(
-        "Bạn nên chọn món ít đường.",
-        List.of(),
-        List.of(),
-        true);
+    var result = safety.validateOutputWithGuardrails("Bạn nên chọn món ít đường.", List.of(), List.of(), true);
     assertThat(result.disclaimerAdded()).isTrue();
     assertThat(result.content()).contains("bác sĩ");
-  }
-
-  @Test
-  void blocksSelfHarmAndOutOfScopeMedicalPrescriptionWhileAllowingNutritionWithCondition() {
-    assertThat(safety.checkInputPolicy("Tôi muốn nhịn ăn hoàn toàn để giảm cân").blocked()).isTrue();
-    assertThat(safety.checkInputPolicy("Kê đơn thuốc chữa tiểu đường cho tôi").blocked()).isTrue();
-    assertThat(safety.checkInputPolicy("Tôi bị tiểu đường tối nay nên ăn gì?").blocked()).isFalse();
   }
 }

@@ -15,6 +15,21 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface FoodRepository extends JpaRepository<Food, UUID> {
 
+  interface FoodSuggestionCandidate {
+    UUID getId();
+    String getName();
+    String getNameUnaccented();
+    Integer getCaloriesPerServing();
+  }
+
+  @Query("""
+      SELECT f.id AS id, f.name AS name, f.nameUnaccented AS nameUnaccented, f.caloriesPerServing AS caloriesPerServing
+      FROM Food f
+      WHERE f.deletedAt IS NULL
+        AND (f.ownerUserId IS NULL OR f.ownerUserId = :userId)
+      """)
+  List<FoodSuggestionCandidate> findActiveSuggestionCandidates(@Param("userId") UUID userId);
+
   Optional<Food> findByBarcodeAndDeletedAtIsNull(String barcode);
 
   Optional<Food> findByVietfoodClassId(Integer vietfoodClassId);

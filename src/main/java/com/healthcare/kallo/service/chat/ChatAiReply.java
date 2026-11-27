@@ -11,9 +11,7 @@ public record ChatAiReply(
     Integer completionTokens,
     String modelVersion,
     String intent,
-    boolean disclaimerAdded,
-    String updatedSummary,
-    String suggestedTitle) {
+    boolean disclaimerAdded) {
 
   public ChatAiReply {
     suggestedFoods = suggestedFoods == null ? List.of() : List.copyOf(suggestedFoods);
@@ -25,7 +23,7 @@ public record ChatAiReply(
       Integer promptTokens,
       Integer completionTokens,
       String modelVersion) {
-    this(content, suggestedFoods, promptTokens, completionTokens, modelVersion, null, false, null, null);
+    this(content, suggestedFoods, promptTokens, completionTokens, modelVersion, null, false);
   }
 
   public ChatAiReply withContentAndFoods(String newContent, List<SuggestedFood> newFoods, boolean newDisclaimerAdded) {
@@ -36,9 +34,7 @@ public record ChatAiReply(
         completionTokens,
         modelVersion,
         intent,
-        disclaimerAdded || newDisclaimerAdded,
-        updatedSummary,
-        suggestedTitle);
+        disclaimerAdded || newDisclaimerAdded);
   }
 
   @JsonInclude(JsonInclude.Include.NON_NULL)

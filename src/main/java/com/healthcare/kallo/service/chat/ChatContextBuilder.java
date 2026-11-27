@@ -15,24 +15,34 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class ChatContextBuilder {
-  private static final int DEFAULT_MAX_CONTEXT_CHARS = 12_000;
+  private static final int DEFAULT_MAX_CONTEXT_CHARS = 4_500;
 
   private final ChatMessageRepository messages;
   private final ChatContextProvider contextProvider;
   private final ObjectProvider<ConversationRepository> conversations;
+  private final ChatPromptBuilder promptBuilder;
 
   public ChatContextBuilder(ChatMessageRepository messages, ChatContextProvider contextProvider) {
-    this(messages, contextProvider, null);
+    this(messages, contextProvider, null, new ChatPromptBuilder());
+  }
+
+  public ChatContextBuilder(
+      ChatMessageRepository messages,
+      ChatContextProvider contextProvider,
+      ObjectProvider<ConversationRepository> conversations) {
+    this(messages, contextProvider, conversations, new ChatPromptBuilder());
   }
 
   @Autowired
   public ChatContextBuilder(
       ChatMessageRepository messages,
       ChatContextProvider contextProvider,
-      ObjectProvider<ConversationRepository> conversations) {
+      ObjectProvider<ConversationRepository> conversations,
+      ChatPromptBuilder promptBuilder) {
     this.messages = messages;
     this.contextProvider = contextProvider;
     this.conversations = conversations;
+    this.promptBuilder = promptBuilder != null ? promptBuilder : new ChatPromptBuilder();
   }
 
   public ChatAiRequest build(UUID userId, UUID conversationId, ChatMessage currentUserMessage, int historyWindow) {
@@ -62,8 +72,12 @@ public class ChatContextBuilder {
     ChatContextData context = contextProvider.get(userId);
     if (context == null) context = ChatContextData.empty();
 
+    ChatAiRequest probeRequest = new ChatAiRequest(conversationId, List.of())
+        .withUserAndSummary(userId, summary)
+        .withContext(context);
+    int systemPromptChars = promptBuilder.buildSystemPrompt(probeRequest).length();
     int budget = Math.max(500, maxContextChars);
-    int fixedChars = estimateContextChars(context, summary) + safeLength(currentUserMessage.getContent());
+    int fixedChars = systemPromptChars + safeLength(currentUserMessage.getContent());
     int remainingBudget = Math.max(0, budget - fixedChars);
     List<ChatMessage> trimmedHistory = trimHistoryToBudget(ordered, remainingBudget);
 
@@ -98,16 +112,6 @@ public class ChatContextBuilder {
     return repo.findById(conversationId)
         .map(Conversation::getSummary)
         .orElse(null);
-  }
-
-  private int estimateContextChars(ChatContextData context, String summary) {
-    int size = safeLength(summary);
-    size += context.profile().toString().length();
-    size += context.today().toString().length();
-    size += context.allergies().toString().length();
-    size += context.chronicConditions().toString().length();
-    size += context.todayMeals().size() * 60;
-    return size;
   }
 
   private int safeLength(String value) {

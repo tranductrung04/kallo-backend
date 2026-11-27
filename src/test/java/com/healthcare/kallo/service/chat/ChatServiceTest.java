@@ -52,7 +52,7 @@ class ChatServiceTest {
     ChatProperties properties = new ChatProperties(true,
         new ChatProperties.Llm("http://localhost:11434/v1", "", "qwen2.5:7b",
             Duration.ofSeconds(5), Duration.ofSeconds(60), 0.4, 1024),
-        12, 12000, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofSeconds(120), 30,
+        12, 4500, 2000, new ChatProperties.RateLimit(10, 200), Duration.ofSeconds(120), 30,
         Duration.ofSeconds(60), 15);
     service = new ChatService(conversations, messages, ai, context, safety, rateLimiter, properties, tx, metrics,
         notifications);
@@ -83,7 +83,7 @@ class ChatServiceTest {
     assistant.setConversation(conversation);
     var saved = new ChatTxService.SavedMessage(conversation, user, assistant, false);
     when(tx.saveUserMessage(eq(userId), any(), eq("hello"))).thenReturn(saved);
-    when(context.build(any(), any(), any(), eq(12), eq(12000))).thenReturn(new ChatAiRequest(conversationId,
+    when(context.build(any(), any(), any(), eq(12), eq(4500))).thenReturn(new ChatAiRequest(conversationId,
         List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
     when(ai.generate(any())).thenReturn(new ChatAiReply("reply", List.of(), null, null, "mock"));
     when(tx.completeAssistant(any(), any(), any(), anyLong(), eq(false))).thenAnswer(invocation -> {
@@ -132,7 +132,7 @@ class ChatServiceTest {
     assistant.setConversation(conversation);
     when(tx.saveUserMessage(eq(userId), any(), eq("hello")))
         .thenReturn(new ChatTxService.SavedMessage(conversation, user, assistant, false));
-    when(context.build(any(), any(), any(), eq(12), eq(12000))).thenReturn(new ChatAiRequest(conversationId,
+    when(context.build(any(), any(), any(), eq(12), eq(4500))).thenReturn(new ChatAiRequest(conversationId,
         List.of(new ChatAiRequest.ChatHistoryMessage("user", "hello"))));
     when(ai.generate(any())).thenReturn(new ChatAiReply("", List.of(), null, null, "mock"));
 
@@ -146,7 +146,7 @@ class ChatServiceTest {
   @Test
   void blockedSelfHarmInputSkipsLlmAndSavesSafeResponse() {
     Conversation conversation = conversation();
-    ChatMessage user = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "Tôi muốn nhịn ăn hoàn toàn 5 ngày");
+    ChatMessage user = message(ChatRole.USER, ChatMessageStatus.COMPLETED, "Tôi muốn tự tử");
     ChatMessage assistant = message(ChatRole.ASSISTANT, ChatMessageStatus.PENDING, null);
     user.setConversation(conversation);
     assistant.setConversation(conversation);
@@ -157,7 +157,7 @@ class ChatServiceTest {
       return true;
     });
 
-    var result = service.sendMessage(userId, new SendMessageRequest(conversationId, "Tôi muốn nhịn ăn hoàn toàn 5 ngày", clientMessageId));
+    var result = service.sendMessage(userId, new SendMessageRequest(conversationId, "Tôi muốn tự tử", clientMessageId));
 
     verify(ai, never()).generate(any());
     assertThat(result.assistantMessage().content()).contains("an toàn");

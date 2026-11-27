@@ -99,7 +99,12 @@ public class OpenAiCompatibleChatClient implements ChatAiClient {
         last = exception;
         if (attempt == 0 && !state.emittedAnyDelta && exception.getStatusCode().is5xxServerError()) continue;
         throw mapHttpFailure(exception);
+      } catch (ChatAiException exception) {
+        throw exception;
       } catch (ChatSseException exception) {
+        if (isTimeout(exception)) {
+          throw new ChatAiException(ErrorCode.CHAT_AI_TIMEOUT);
+        }
         throw exception;
       } catch (RestClientException exception) {
         throw new ChatAiException(ErrorCode.CHAT_AI_UNAVAILABLE);
@@ -222,6 +227,9 @@ public class OpenAiCompatibleChatClient implements ChatAiClient {
       }
       throw new ChatSseException(new IllegalStateException("LLM stream ended before [DONE]"));
     } catch (IOException exception) {
+      if (isTimeout(exception)) {
+        throw new ChatAiException(ErrorCode.CHAT_AI_TIMEOUT);
+      }
       throw new ChatSseException(exception);
     }
   }
