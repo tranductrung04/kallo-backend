@@ -9,7 +9,7 @@
 | Trạng thái | Đã chuyển sang gọi LLM tương thích OpenAI trực tiếp từ backend (`OpenAiCompatibleChatClient`) |
 
 > [!NOTE]
-> **Cập nhật 27/11/2026:** Module `chat` đã gỡ bỏ AI service trung gian (`AI_SERVICE_URL`), chuyển sang gọi trực tiếp **OpenAI-compatible LLM** (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` qua `OpenAiCompatibleChatClient` + `ChatPromptBuilder`) kết hợp `HealthChatContextProvider`, `ChatSafetyService`, `ChatContextBuilder` và `ChatSummaryService` (`@Async` rolling summary). Tài liệu thiết kế ban đầu bên dưới được giữ lại làm tham khảo lịch sử.
+> **Cập nhật 27/11/2026:** Module `chat` gọi trực tiếp **OpenAI-compatible LLM** (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL` qua `OpenAiCompatibleChatClient` + `ChatPromptBuilder`) kết hợp `HealthChatContextProvider` (không gửi `displayName`/PII), `FoodSuggestionExtractor`, `ChatSafetyService`, `ChatContextBuilder` và `ChatSummaryService` (`@Async` + watermark `summarized_through_message_id` trong `V1__init_schema.sql`). Nếu cấu hình `LLM_BASE_URL` trỏ tới provider bên thứ ba, cần cập nhật chính sách quyền riêng tư/đồng ý xử lý dữ liệu sức khoẻ theo Nghị định 13/2023/NĐ-CP.
 
 ---
 

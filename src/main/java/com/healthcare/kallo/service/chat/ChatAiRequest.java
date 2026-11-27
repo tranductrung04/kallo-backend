@@ -1,5 +1,6 @@
 package com.healthcare.kallo.service.chat;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -35,8 +36,7 @@ public record ChatAiRequest(
       List<String> allergyCodes,
       List<ChatContextData.ConditionInfo> chronicConditions,
       Map<String, Object> recentWeight,
-      List<ChatContextData.TodayMealItem> todayMeals,
-      List<Double> preferenceVector) {
+      List<ChatContextData.TodayMealItem> todayMeals) {
 
     public ChatSystemContext {
       profile = profile == null ? Map.of() : Map.copyOf(profile);
@@ -46,20 +46,19 @@ public record ChatAiRequest(
       chronicConditions = chronicConditions == null ? List.of() : List.copyOf(chronicConditions);
       recentWeight = recentWeight == null ? Map.of() : Map.copyOf(recentWeight);
       todayMeals = todayMeals == null ? List.of() : List.copyOf(todayMeals);
-      preferenceVector = preferenceVector == null ? List.of() : List.copyOf(preferenceVector);
     }
 
     public ChatSystemContext(Map<String, Object> profile, Map<String, Object> today, List<String> allergies) {
-      this(profile, today, allergies, List.of(), List.of(), Map.of(), List.of(), List.of());
+      this(profile, today, allergies, List.of(), List.of(), Map.of(), List.of());
     }
 
     public static ChatSystemContext empty() {
-      return new ChatSystemContext(Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), List.of(), List.of());
+      return new ChatSystemContext(Map.of(), Map.of(), List.of(), List.of(), List.of(), Map.of(), List.of());
     }
 
     public List<String> allAllergyTerms() {
       if (allergyCodes.isEmpty()) return allergies;
-      java.util.LinkedHashSet<String> combined = new java.util.LinkedHashSet<>(allergies);
+      LinkedHashSet<String> combined = new LinkedHashSet<>(allergies);
       combined.addAll(allergyCodes);
       return List.copyOf(combined);
     }
@@ -86,8 +85,7 @@ public record ChatAiRequest(
             context.allergyCodes(),
             context.chronicConditions(),
             context.recentWeight(),
-            context.todayMeals(),
-            context.preferenceVector()),
+            context.todayMeals()),
         messages,
         options);
   }

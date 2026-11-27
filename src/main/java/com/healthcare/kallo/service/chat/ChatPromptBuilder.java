@@ -77,7 +77,7 @@ public class ChatPromptBuilder {
     if (existingSummary != null && !existingSummary.isBlank()) {
       sb.append("\nTóm tắt trước đó:\n").append(existingSummary.trim()).append("\n");
     }
-    sb.append("\nCác tin nhắn cần gộp vào tóm tắt:");
+    sb.append("\nCác tin nhắn mới cần gộp vào tóm tắt:");
     for (ChatAiRequest.ChatHistoryMessage m : olderMessages) {
       sb.append("\n- ").append(m.role()).append(": ").append(m.content());
     }
@@ -85,7 +85,6 @@ public class ChatPromptBuilder {
   }
 
   private void appendProfile(StringBuilder sb, Map<String, Object> profile) {
-    appendKeyVal(sb, "Tên hiển thị", profile.get("displayName"));
     appendKeyVal(sb, "Giới tính", profile.get("gender"));
     appendKeyVal(sb, "Tuổi", profile.get("age"));
     appendKeyVal(sb, "Chiều cao (cm)", profile.get("heightCm"));

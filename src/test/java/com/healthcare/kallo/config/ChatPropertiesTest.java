@@ -20,7 +20,7 @@ class ChatPropertiesTest {
               "app.chat.llm.temperature=0.4",
               "app.chat.llm.max-tokens=1024",
               "app.chat.history-window=12",
-              "app.chat.max-context-chars=12000",
+              "app.chat.max-context-chars=4500",
               "app.chat.max-message-length=2000",
               "app.chat.rate-limit.per-minute=10",
               "app.chat.rate-limit.per-day=200",
@@ -36,7 +36,7 @@ class ChatPropertiesTest {
       ChatProperties props = context.getBean(ChatProperties.class);
       assertThat(props.enabled()).isTrue();
       assertThat(props.llm().model()).isEqualTo("qwen2.5:7b");
-      assertThat(props.maxContextChars()).isEqualTo(12000);
+      assertThat(props.maxContextChars()).isEqualTo(4500);
     });
   }
 

@@ -45,6 +45,9 @@ public class Conversation {
   @Column(columnDefinition = "TEXT")
   private String summary;
 
+  @Column(name = "summarized_through_message_id")
+  private UUID summarizedThroughMessageId;
+
   @Column(name = "message_count", nullable = false)
   private int messageCount;
 

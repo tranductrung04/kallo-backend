@@ -13,6 +13,8 @@ import com.healthcare.kallo.repository.auth.UserRepository;
 import com.healthcare.kallo.repository.chat.ChatMessageRepository;
 import com.healthcare.kallo.repository.chat.ConversationRepository;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
@@ -128,7 +130,7 @@ public class ChatTxService {
       ChatAiReply generated,
       long latencyMs,
       boolean allergenWarning) {
-    Map<String, Object> metadata = new java.util.LinkedHashMap<>();
+    Map<String, Object> metadata = new LinkedHashMap<>();
     metadata.put("suggestedFoods", generated.suggestedFoods());
     metadata.put("allergenWarning", allergenWarning);
     metadata.put("disclaimerAdded", generated.disclaimerAdded());
@@ -150,15 +152,57 @@ public class ChatTxService {
     assistant.setLatencyMs(Math.toIntExact(Math.min(Integer.MAX_VALUE, latencyMs)));
     assistant.setMetadata(metadata);
     conversations.incrementMessageCount(assistant.getConversation().getId());
-    conversations.updateAfterAssistantReply(
+    conversations.touchLastMessageAt(
         assistant.getConversation().getId(),
-        assistant.getCreatedAt(),
-        generated.updatedSummary(),
-        generated.suggestedTitle());
-    if (generated.updatedSummary() != null) {
-      assistant.getConversation().setSummary(generated.updatedSummary());
-    }
+        assistant.getCreatedAt());
     return true;
+  }
+
+  @Transactional(readOnly = true)
+  public SummarySnapshot loadSummarySnapshot(UUID conversationId, int historyWindow, int minBatchSize) {
+    Conversation conversation = conversations.findById(conversationId).orElse(null);
+    if (conversation == null || conversation.getDeletedAt() != null) return null;
+
+    List<ChatMessage> completed = messages.findCompletedOrdered(conversationId);
+    int endExclusive = completed.size() - historyWindow;
+    if (endExclusive <= 0) return null;
+
+    UUID watermark = conversation.getSummarizedThroughMessageId();
+    int startInclusive = 0;
+    if (watermark != null) {
+      int watermarkIdx = -1;
+      for (int i = 0; i < completed.size(); i++) {
+        if (watermark.equals(completed.get(i).getId())) {
+          watermarkIdx = i;
+          break;
+        }
+      }
+      if (watermarkIdx >= 0) {
+        startInclusive = watermarkIdx + 1;
+      } else {
+        startInclusive = Math.max(0, endExclusive - minBatchSize);
+      }
+    }
+
+    if (endExclusive - startInclusive < minBatchSize) {
+      return null;
+    }
+
+    List<ChatMessage> slice = completed.subList(startInclusive, endExclusive);
+    List<ChatAiRequest.ChatHistoryMessage> history = slice.stream()
+        .map(m -> new ChatAiRequest.ChatHistoryMessage(m.getRole().name().toLowerCase(), m.getContent()))
+        .toList();
+    return new SummarySnapshot(
+        conversation.getSummary(),
+        watermark,
+        slice.getLast().getId(),
+        history);
+  }
+
+  @Transactional
+  public boolean saveSummaryWithWatermark(
+      UUID conversationId, UUID expectedWatermarkId, UUID newWatermarkId, String summary) {
+    return conversations.updateSummaryWithWatermark(conversationId, expectedWatermarkId, newWatermarkId, summary) > 0;
   }
 
   @Transactional(readOnly = true)
@@ -248,10 +292,21 @@ public class ChatTxService {
   }
 
   private String title(String content) {
-    return content.replaceAll("[\\r\\n\\t]+", " ").trim().codePoints().limit(120)
-        .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append).toString();
+    String clean = content.replaceAll("[\\r\\n\\t]+", " ").replaceAll("\\s+", " ").trim();
+    if (clean.codePointCount(0, clean.length()) <= 80) return clean;
+    String clipped = clean.codePoints().limit(80)
+        .collect(StringBuilder::new, StringBuilder::appendCodePoint, StringBuilder::append)
+        .toString();
+    int lastSpace = clipped.lastIndexOf(' ');
+    return lastSpace >= 30 ? clipped.substring(0, lastSpace) : clipped;
   }
 
   public record SavedMessage(Conversation conversation, ChatMessage userMessage,
       ChatMessage assistantMessage, boolean alreadyAnswered) {}
+
+  public record SummarySnapshot(
+      String existingSummary,
+      UUID expectedWatermarkId,
+      UUID newWatermarkId,
+      List<ChatAiRequest.ChatHistoryMessage> unsummarizedMessages) {}
 }

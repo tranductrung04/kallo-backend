@@ -1,62 +1,53 @@
 package com.healthcare.kallo.service.chat;
 
-import com.healthcare.kallo.model.chat.ChatMessage;
-import com.healthcare.kallo.model.chat.Conversation;
-import com.healthcare.kallo.model.chat.enums.ChatMessageStatus;
-import com.healthcare.kallo.repository.chat.ChatMessageRepository;
-import com.healthcare.kallo.repository.chat.ConversationRepository;
-import java.util.List;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class ChatSummaryService {
   private static final Logger log = LoggerFactory.getLogger(ChatSummaryService.class);
-  private static final int MIN_MESSAGES_FOR_SUMMARY = 20;
+  static final int SUMMARY_BATCH_SIZE = 10;
+  private static final int MAX_SUMMARY_CHARS = 1_200;
 
-  private final ConversationRepository conversations;
-  private final ChatMessageRepository messages;
+  private final ChatTxService tx;
   private final ChatAiClient aiClient;
+  private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
 
-  public ChatSummaryService(
-      ConversationRepository conversations,
-      ChatMessageRepository messages,
-      ChatAiClient aiClient) {
-    this.conversations = conversations;
-    this.messages = messages;
+  public ChatSummaryService(ChatTxService tx, ChatAiClient aiClient) {
+    this.tx = tx;
     this.aiClient = aiClient;
   }
 
   @Async("chatTaskExecutor")
-  @Transactional
   public void summarizeIfNeeded(UUID conversationId, int historyWindow) {
-    if (conversationId == null) return;
+    if (conversationId == null || !inFlight.add(conversationId)) return;
     try {
-      Conversation conversation = conversations.findById(conversationId).orElse(null);
-      if (conversation == null || conversation.getDeletedAt() != null) return;
-      int triggerThreshold = Math.max(MIN_MESSAGES_FOR_SUMMARY, historyWindow * 2);
-      if (conversation.getMessageCount() < triggerThreshold) return;
+      ChatTxService.SummarySnapshot snapshot = tx.loadSummarySnapshot(conversationId, historyWindow, SUMMARY_BATCH_SIZE);
+      if (snapshot == null || snapshot.unsummarizedMessages().isEmpty()) return;
 
-      List<ChatMessage> completed = messages.findByConversationIdOrderByCreatedAtAscIdAsc(conversationId).stream()
-          .filter(m -> m.getStatus() == ChatMessageStatus.COMPLETED && m.getContent() != null)
-          .toList();
-      if (completed.size() <= historyWindow) return;
+      String updated = aiClient.summarize(snapshot.existingSummary(), snapshot.unsummarizedMessages());
+      if (updated == null || updated.isBlank()) return;
 
-      int cutoff = completed.size() - historyWindow;
-      List<ChatAiRequest.ChatHistoryMessage> older = completed.subList(0, cutoff).stream()
-          .map(m -> new ChatAiRequest.ChatHistoryMessage(m.getRole().name().toLowerCase(), m.getContent()))
-          .toList();
-
-      String updated = aiClient.summarize(conversation.getSummary(), older);
-      if (updated != null && !updated.isBlank()) {
-        conversations.updateSummary(conversationId, updated.trim());
-      }
+      String bounded = boundSummary(updated.trim());
+      tx.saveSummaryWithWatermark(
+          conversationId,
+          snapshot.expectedWatermarkId(),
+          snapshot.newWatermarkId(),
+          bounded);
     } catch (RuntimeException exception) {
       log.warn("Failed to refresh rolling chat summary conversationId={}", conversationId, exception);
+    } finally {
+      inFlight.remove(conversationId);
     }
+  }
+
+  private String boundSummary(String text) {
+    if (text.length() <= MAX_SUMMARY_CHARS) return text;
+    return text.substring(0, MAX_SUMMARY_CHARS).trim();
   }
 }

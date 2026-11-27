@@ -71,30 +71,23 @@ class HealthChatContextProviderTest {
     when(lookup.findSummariesByIds(Set.of(peanutId)))
         .thenReturn(Map.of(peanutId, new IngredientSummary(peanutId, "PEANUT", "Peanuts", true)));
 
-    ObjectProvider<ProfileBodyMetrics> bodyMetrics = mock(ObjectProvider.class);
-    ObjectProvider<DailyProgressProvider> dailyProgress = mock(ObjectProvider.class);
-    ObjectProvider<UserAllergyRepository> allergyProvider = mock(ObjectProvider.class);
-    when(allergyProvider.getIfAvailable()).thenReturn(allergyRepo);
-    ObjectProvider<IngredientLookup> lookupProvider = mock(ObjectProvider.class);
-    when(lookupProvider.getIfAvailable()).thenReturn(lookup);
-
     HealthChatContextProvider provider = new HealthChatContextProvider(
         users,
-        bodyMetrics,
-        dailyProgress,
-        allergyProvider,
-        lookupProvider,
+        allergyRepo,
+        lookup,
+        mock(ObjectProvider.class),
+        mock(ObjectProvider.class),
         Clock.fixed(Instant.parse("2026-11-26T00:00:00Z"), ZoneOffset.UTC));
 
     ChatContextData data = provider.get(userId);
 
     assertThat(data.allergies()).containsExactly("Peanuts");
     assertThat(data.allergyCodes()).containsExactly("PEANUT");
+    assertThat(data.profile()).doesNotContainKey("displayName");
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  void resolvesFullProfileConditionsMacrosMealsAndWeightTrend() {
+  void resolvesFullProfileConditionsMacrosMealsAndWeightTrendWithoutPii() {
     UUID userId = UUID.randomUUID();
     UUID foodId = UUID.randomUUID();
     LocalDate today = LocalDate.of(2026, 11, 26);
@@ -105,6 +98,10 @@ class HealthChatContextProviderTest {
     user.setTimezone("Asia/Ho_Chi_Minh");
     UserRepository users = mock(UserRepository.class);
     when(users.findById(userId)).thenReturn(Optional.of(user));
+
+    UserAllergyRepository allergyRepo = mock(UserAllergyRepository.class);
+    when(allergyRepo.findAllByIdUserId(userId)).thenReturn(List.of());
+    IngredientLookup lookup = mock(IngredientLookup.class);
 
     UserHealthProfile healthProfile = new UserHealthProfile();
     healthProfile.setUserId(userId);
@@ -180,8 +177,8 @@ class HealthChatContextProviderTest {
 
     HealthChatContextProvider provider = new HealthChatContextProvider(
         users,
-        providerOf(null),
-        providerOf(null),
+        allergyRepo,
+        lookup,
         providerOf(null),
         providerOf(null),
         providerOf(profileRepo),
@@ -201,7 +198,7 @@ class HealthChatContextProviderTest {
         .containsKey("bmi")
         .containsKey("tdee")
         .containsKey("proteinGoalG");
-    assertThat(data.profile()).doesNotContainKey("dob");
+    assertThat(data.profile()).doesNotContainKeys("dob", "displayName");
     assertThat(data.today()).containsEntry("consumedKcal", 480)
         .containsEntry("proteinG", 28);
     assertThat(data.chronicConditions()).extracting(ChatContextData.ConditionInfo::code)

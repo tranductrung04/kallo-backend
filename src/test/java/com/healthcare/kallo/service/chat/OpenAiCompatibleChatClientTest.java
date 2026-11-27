@@ -6,11 +6,13 @@ import static org.springframework.test.web.client.match.MockRestRequestMatchers.
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withException;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 import com.healthcare.kallo.common.ErrorCode;
 import com.healthcare.kallo.config.ChatProperties;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -112,6 +114,27 @@ class OpenAiCompatibleChatClientTest {
   }
 
   @Test
+  void mapsStreamSocketTimeoutToChatAiTimeout() {
+    RestClient.Builder builder = RestClient.builder().baseUrl("https://api.example.com/v1");
+    MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+    OpenAiCompatibleChatClient llm = new OpenAiCompatibleChatClient(
+        builder.build(), properties("https://api.example.com/v1", "k"), promptBuilder, objectMapper);
+
+    server.expect(requestTo("https://api.example.com/v1/chat/completions"))
+        .andRespond(withException(new SocketTimeoutException("Read timed out")));
+
+    assertThatThrownBy(() -> llm.stream(
+        new ChatAiRequest(UUID.randomUUID(), List.of(new ChatAiRequest.ChatHistoryMessage("user", "Hello"))),
+        new ChatAiStreamHandler() {
+          @Override public void onDelta(String text) {}
+          @Override public void onComplete(ChatAiStreamResult result) {}
+        }))
+        .isInstanceOf(ChatAiException.class)
+        .extracting("errorCode")
+        .isEqualTo(ErrorCode.CHAT_AI_TIMEOUT);
+  }
+
+  @Test
   void mapsUnauthorizedToUnavailable() {
     RestClient.Builder builder = RestClient.builder().baseUrl("https://api.example.com/v1");
     MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
@@ -133,7 +156,7 @@ class OpenAiCompatibleChatClientTest {
         true,
         new ChatProperties.Llm(baseUrl, apiKey, "qwen2.5:7b", Duration.ofSeconds(5), Duration.ofSeconds(60), 0.4, 1024),
         12,
-        12000,
+        4500,
         2000,
         new ChatProperties.RateLimit(10, 200),
         Duration.ofSeconds(120),

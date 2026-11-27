@@ -62,8 +62,21 @@ public interface ConversationRepository extends JpaRepository<Conversation, UUID
       @Param("suggestedTitle") String suggestedTitle);
 
   @Modifying
-  @Query("update Conversation c set c.summary = :summary, c.updatedAt = CURRENT_TIMESTAMP where c.id = :id and c.deletedAt is null")
-  int updateSummary(@Param("id") UUID id, @Param("summary") String summary);
+  @Query("""
+      update Conversation c
+      set c.summary = :summary,
+          c.summarizedThroughMessageId = :newWatermarkId,
+          c.updatedAt = CURRENT_TIMESTAMP
+      where c.id = :id
+        and c.deletedAt is null
+        and ((:expectedWatermarkId is null and c.summarizedThroughMessageId is null)
+             or c.summarizedThroughMessageId = :expectedWatermarkId)
+      """)
+  int updateSummaryWithWatermark(
+      @Param("id") UUID id,
+      @Param("expectedWatermarkId") UUID expectedWatermarkId,
+      @Param("newWatermarkId") UUID newWatermarkId,
+      @Param("summary") String summary);
 
   @Modifying
   @Query("delete from Conversation c where c.deletedAt is not null and c.deletedAt < :cutoff")
